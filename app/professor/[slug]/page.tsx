@@ -1,0 +1,995 @@
+'use client'
+
+import { Suspense, use, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import GradeChart from '@/components/GradeChart'
+import ReviewCard from '@/components/ReviewCard'
+import NativeReviewCard, { type NativeReview } from '@/components/NativeReviewCard'
+import WriteReviewForm from '@/components/WriteReviewForm'
+import { supabase } from '@/lib/supabase'
+import type { ProfessorCache, AIAnalysis, Rating } from '@/lib/supabase'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function StatBar({ label, value, max = 5 }: { label: string; value: number; max?: number }) {
+  const pct = Math.min((value / max) * 100, 100)
+  const color = label === 'Difficulty'
+    ? (value >= 4 ? '#ef4444' : value >= 3 ? '#f59e0b' : '#22c55e')
+    : (value >= 4 ? '#22c55e' : value >= 3 ? '#f59e0b' : '#ef4444')
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-sm">
+        <span className="text-zinc-400">{label}</span>
+        <span className="font-semibold" style={{ color }}>{value.toFixed(1)}<span className="text-zinc-600 font-normal">/{max}</span></span>
+      </div>
+      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  )
+}
+
+function VerdictBox({ analysis }: { analysis: AIAnalysis }) {
+  const config = {
+    take: { bg: 'bg-green-950/60', border: 'border-green-800', badge: 'bg-green-900 text-green-300', label: '✓ TAKE THIS PROF', headerColor: '#22c55e' },
+    avoid: { bg: 'bg-red-950/60', border: 'border-red-900', badge: 'bg-red-900 text-red-300', label: '✗ AVOID', headerColor: '#ef4444' },
+    depends: { bg: 'bg-amber-950/60', border: 'border-amber-800', badge: 'bg-amber-900 text-amber-300', label: '~ IT DEPENDS', headerColor: '#f59e0b' },
+  }
+  const c = config[analysis.verdict]
+
+  return (
+    <div className={`rounded-2xl border p-6 space-y-4 ${c.bg} ${c.border}`}>
+      <div className="flex items-center gap-3">
+        <span className={`text-xs font-black tracking-widest px-3 py-1.5 rounded-lg ${c.badge}`}>
+          {c.label}
+        </span>
+      </div>
+      <p className="text-lg font-semibold text-white leading-snug">{analysis.verdict_reason}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Best For</h4>
+          <p className="text-sm text-zinc-300">{analysis.best_for}</p>
+        </div>
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Worst For</h4>
+          <p className="text-sm text-zinc-300">{analysis.worst_for}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TipsList({ tips }: { tips: string[] }) {
+  return (
+    <div className="space-y-2">
+      {tips.map((tip, i) => (
+        <div key={i} className="flex gap-3 items-start">
+          <div className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ backgroundColor: '#CC0033', color: 'white' }}>
+            {i + 1}
+          </div>
+          <p className="text-sm text-zinc-300">{tip}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TagCloud({ ratings }: { ratings: Rating[] }) {
+  const tagCounts: Record<string, number> = {}
+  for (const r of ratings) {
+    for (const tag of r.tags ?? []) {
+      if (tag && tag.trim()) tagCounts[tag.trim()] = (tagCounts[tag.trim()] ?? 0) + 1
+    }
+  }
+  const sorted = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 15)
+  if (sorted.length === 0) return null
+  const max = sorted[0][1]
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sorted.map(([tag, count]) => {
+        const intensity = count / max
+        const alpha = Math.round(0.15 + intensity * 0.25 * 255).toString(16).padStart(2, '0')
+        return (
+          <span
+            key={tag}
+            className="text-xs px-3 py-1.5 rounded-full border border-zinc-700 text-zinc-300"
+            style={{ backgroundColor: `#CC0033${alpha}`, borderColor: intensity > 0.5 ? '#CC003360' : '#3f3f46' }}
+          >
+            {tag}
+            <span className="ml-1.5 text-zinc-500">{count}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function RatingCircle({ value, label, pct }: { value: number | string; label: string; pct?: boolean }) {
+  const num = typeof value === 'number' ? value : parseFloat(value as string)
+  const maxVal = pct ? 100 : 5
+  const percent = Math.min((num / maxVal) * 100, 100)
+  const color = label === 'Difficulty'
+    ? (num >= 4 ? '#ef4444' : num >= 3 ? '#f59e0b' : '#22c55e')
+    : pct
+      ? (num >= 70 ? '#22c55e' : num >= 50 ? '#f59e0b' : '#ef4444')
+      : (num >= 4 ? '#22c55e' : num >= 3 ? '#f59e0b' : '#ef4444')
+
+  const r = 36
+  const circumference = 2 * Math.PI * r
+  const offset = circumference - (percent / 100) * circumference
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative w-24 h-24">
+        <svg className="w-24 h-24 -rotate-90" viewBox="0 0 88 88">
+          <circle cx="44" cy="44" r={r} fill="none" stroke="#27272a" strokeWidth="6" />
+          <circle cx="44" cy="44" r={r} fill="none" stroke={color} strokeWidth="6"
+            strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-xl font-black text-white">
+            {pct ? `${Math.round(num)}%` : num.toFixed(1)}
+          </span>
+        </div>
+      </div>
+      <span className="text-xs text-zinc-500 font-medium">{label}</span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Related professor card
+// ---------------------------------------------------------------------------
+
+interface RelatedProfessor {
+  rmp_id: string
+  slug: string
+  first_name: string
+  last_name: string
+  avg_rating: number | null
+  avg_difficulty: number | null
+  department: string | null
+}
+
+function ratingColor(r: number) {
+  if (r >= 4) return '#22c55e'
+  if (r >= 3) return '#f59e0b'
+  return '#ef4444'
+}
+
+function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
+  return (
+    <Link
+      href={`/professor/${prof.slug}?rmpId=${prof.rmp_id}`}
+      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white truncate">
+            {prof.first_name} {prof.last_name}
+          </p>
+          {prof.department && (
+            <p className="text-xs text-zinc-500 truncate mt-0.5">{prof.department}</p>
+          )}
+        </div>
+        {prof.avg_rating != null && (
+          <div className="shrink-0 text-center">
+            <div className="text-lg font-black" style={{ color: ratingColor(prof.avg_rating) }}>
+              {prof.avg_rating.toFixed(1)}
+            </div>
+            <div className="text-xs text-zinc-600">Quality</div>
+          </div>
+        )}
+      </div>
+    </Link>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Native reviews section
+// ---------------------------------------------------------------------------
+
+function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: string; professorId?: string }) {
+  const [professorId, setProfessorId] = useState<string | null>(initProfId ?? null)
+  const [reviews, setReviews] = useState<NativeReview[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return }
+
+    async function load() {
+      setLoading(true)
+      try {
+        let pid = initProfId ?? null
+        if (!pid && rmpId) {
+          const { data: prof } = await supabase!
+            .from('professors')
+            .select('id')
+            .eq('rmp_id', rmpId)
+            .single()
+
+          if (!prof) { setLoading(false); return }
+          pid = prof.id
+          setProfessorId(prof.id)
+        }
+        if (!pid) { setLoading(false); return }
+
+        const res = await fetch(`/api/reviews?professor_id=${pid}`)
+        if (res.ok) {
+          const data = await res.json()
+          setReviews(data)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [rmpId, initProfId])
+
+  function handleReviewSubmitted(review: NativeReview) {
+    setReviews((prev) => [review, ...prev])
+    setShowForm(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+          Student Reviews on RU Rate
+          {!loading && (
+            <span className="ml-1 text-xs font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500">
+              {reviews.length}
+            </span>
+          )}
+        </h3>
+        {rmpId && !showForm && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-opacity hover:opacity-80"
+            style={{ backgroundColor: '#CC0033' }}
+          >
+            Write a Review
+          </button>
+        )}
+      </div>
+
+      {showForm && rmpId && professorId && (
+        <WriteReviewForm
+          rmpId={rmpId}
+          onSubmitted={handleReviewSubmitted}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
+
+      {loading ? (
+        <div className="text-sm text-zinc-600 py-4">Loading reviews...</div>
+      ) : reviews.length === 0 ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center space-y-3">
+          <div className="text-2xl">📝</div>
+          <p className="text-sm font-semibold text-white">Be the first to review on RU Rate!</p>
+          <p className="text-xs text-zinc-500">Share your experience to help fellow Rutgers students.</p>
+          {rmpId && !showForm && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-80"
+              style={{ backgroundColor: '#CC0033' }}
+            >
+              Write a Review
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reviews.map((r) => (
+            <NativeReviewCard key={r.id} review={r} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Related professors section
+// ---------------------------------------------------------------------------
+
+function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
+  const [related, setRelated] = useState<RelatedProfessor[]>([])
+  const [deptName, setDeptName] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return }
+
+    async function load() {
+      setLoading(true)
+      try {
+        // 1. Get this professor's id from professors table
+        const { data: prof } = await supabase!
+          .from('professors')
+          .select('id')
+          .eq('rmp_id', rmpId)
+          .single()
+
+        if (!prof) { setLoading(false); return }
+
+        // 2. Get their primary department
+        const { data: deptRow } = await supabase!
+          .from('professor_departments')
+          .select('department_id, departments(id, name)')
+          .eq('professor_id', prof.id)
+          .eq('is_primary', true)
+          .single()
+
+        if (!deptRow) { setLoading(false); return }
+
+        const dept = deptRow.departments as unknown as { id: string; name: string } | null
+        if (!dept) { setLoading(false); return }
+        setDeptName(dept.name)
+
+        // 3. Find other professors in same department
+        const { data: otherDeptRows } = await supabase!
+          .from('professor_departments')
+          .select('professor_id')
+          .eq('department_id', dept.id)
+          .neq('professor_id', prof.id)
+          .limit(20)
+
+        if (!otherDeptRows || otherDeptRows.length === 0) { setLoading(false); return }
+
+        const otherIds = otherDeptRows.map((r: { professor_id: string }) => r.professor_id)
+
+        // 4. Get their data from professors + professor_cache
+        const { data: profs } = await supabase!
+          .from('professors')
+          .select('id, rmp_id, slug, first_name, last_name')
+          .in('id', otherIds)
+          .limit(8)
+
+        if (!profs || profs.length === 0) { setLoading(false); return }
+
+        const rmpIds = profs.map((p: { rmp_id: string }) => p.rmp_id)
+
+        const { data: caches } = await supabase!
+          .from('professor_cache')
+          .select('rmp_id, avg_rating, avg_difficulty, department')
+          .in('rmp_id', rmpIds)
+
+        const cacheMap: Record<string, { avg_rating: number; avg_difficulty: number; department: string }> = {}
+        for (const c of caches ?? []) {
+          cacheMap[c.rmp_id] = c
+        }
+
+        const result: RelatedProfessor[] = profs
+          .map((p: { id: string; rmp_id: string; slug: string; first_name: string; last_name: string }) => ({
+            rmp_id: p.rmp_id,
+            slug: p.slug,
+            first_name: p.first_name,
+            last_name: p.last_name,
+            avg_rating: cacheMap[p.rmp_id]?.avg_rating ?? null,
+            avg_difficulty: cacheMap[p.rmp_id]?.avg_difficulty ?? null,
+            department: cacheMap[p.rmp_id]?.department ?? null,
+          }))
+          .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+          .slice(0, 4)
+
+        setRelated(result)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [rmpId])
+
+  if (loading || related.length === 0) return null
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-zinc-300">
+        Other professors in {deptName ?? 'this department'}
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {related.map((p) => (
+          <RelatedProfessorCard key={p.rmp_id} prof={p} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Teaching history (3A)
+// ---------------------------------------------------------------------------
+
+interface TeachingRow {
+  section_number: string
+  campus: string | null
+  courses: { id: string; course_number: string; name: string } | null
+  semesters: { id: string; name: string; is_current: boolean } | null
+}
+
+interface SemesterCourse {
+  course_id: string
+  course_number: string
+  course_name: string
+}
+
+interface SemesterGroup {
+  semester_id: string
+  semester_name: string
+  is_current: boolean
+  courses: SemesterCourse[]
+}
+
+function TeachingHistorySection({ professorId }: { professorId: string }) {
+  const [semesters, setSemesters] = useState<SemesterGroup[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return }
+
+    async function load() {
+      const { data } = await supabase!
+        .from('teaching_assignments')
+        .select('section_number, campus, courses(id, course_number, name), semesters(id, name, is_current)')
+        .eq('professor_id', professorId)
+        .eq('status', 'active')
+
+      if (!data) { setLoading(false); return }
+
+      const semMap = new Map<string, SemesterGroup>()
+      for (const r of data as unknown as TeachingRow[]) {
+        const sem = r.semesters
+        const course = r.courses
+        if (!sem || !course) continue
+
+        if (!semMap.has(sem.id)) {
+          semMap.set(sem.id, { semester_id: sem.id, semester_name: sem.name, is_current: sem.is_current, courses: [] })
+        }
+        const sg = semMap.get(sem.id)!
+        if (!sg.courses.find(c => c.course_id === course.id)) {
+          sg.courses.push({ course_id: course.id, course_number: course.course_number, course_name: course.name })
+        }
+      }
+
+      setSemesters(Array.from(semMap.values()).sort((a, b) => b.semester_name.localeCompare(a.semester_name)))
+      setLoading(false)
+    }
+    load()
+  }, [professorId])
+
+  if (loading) return <div className="text-sm text-zinc-600 py-2">Loading teaching history...</div>
+  if (semesters.length === 0) return null
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Teaching History</h3>
+      {semesters.map(sem => (
+        <div key={sem.semester_id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-white text-sm">{sem.semester_name}</span>
+            {sem.is_current && (
+              <span className="text-[10px] font-black px-1.5 py-0.5 rounded border bg-green-950 border-green-800 text-green-400">
+                CURRENT
+              </span>
+            )}
+          </div>
+          <div className="divide-y divide-zinc-800/60">
+            {sem.courses.map(course => (
+              <div key={course.course_id} className="py-2 first:pt-0 last:pb-0">
+                <p className="text-sm text-zinc-300">
+                  <span className="font-mono text-xs text-zinc-500 mr-2">{course.course_number}</span>
+                  {course.course_name}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Related professors — SOC-aware (3B helper)
+// ---------------------------------------------------------------------------
+
+interface SocRelatedProf {
+  id: string
+  rmp_id: string | null
+  slug: string
+  first_name: string
+  last_name: string
+  avg_rating: number | null
+}
+
+function SocRelatedSection({ professorId }: { professorId: string }) {
+  const [related, setRelated] = useState<SocRelatedProf[]>([])
+  const [deptName, setDeptName] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return }
+
+    async function load() {
+      const { data: deptRows } = await supabase!
+        .from('professor_departments')
+        .select('department_id, departments(id, name)')
+        .eq('professor_id', professorId)
+        .order('is_primary', { ascending: false })
+        .limit(1)
+
+      if (!deptRows?.length) { setLoading(false); return }
+      const dept = deptRows[0].departments as unknown as { id: string; name: string } | null
+      if (!dept) { setLoading(false); return }
+      setDeptName(dept.name)
+
+      const { data: others } = await supabase!
+        .from('professor_departments')
+        .select('professor_id')
+        .eq('department_id', dept.id)
+        .neq('professor_id', professorId)
+        .limit(20)
+
+      if (!others?.length) { setLoading(false); return }
+
+      const { data: profs } = await supabase!
+        .from('professors')
+        .select('id, rmp_id, slug, first_name, last_name, cache_id')
+        .in('id', others.map((r: { professor_id: string }) => r.professor_id))
+        .limit(8)
+
+      if (!profs?.length) { setLoading(false); return }
+
+      const cacheIds = profs
+        .filter((p: { cache_id: string | null }) => p.cache_id)
+        .map((p: { cache_id: string | null }) => p.cache_id as string)
+
+      const cacheMap: Record<string, number> = {}
+      if (cacheIds.length > 0) {
+        const { data: caches } = await supabase!
+          .from('professor_cache')
+          .select('id, avg_rating')
+          .in('id', cacheIds)
+        for (const c of caches ?? []) cacheMap[c.id] = c.avg_rating
+      }
+
+      setRelated(
+        (profs as { id: string; rmp_id: string | null; slug: string; first_name: string; last_name: string; cache_id: string | null }[])
+          .map(p => ({
+            id: p.id,
+            rmp_id: p.rmp_id,
+            slug: p.slug,
+            first_name: p.first_name,
+            last_name: p.last_name,
+            avg_rating: p.cache_id ? (cacheMap[p.cache_id] ?? null) : null,
+          }))
+          .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+          .slice(0, 4)
+      )
+      setLoading(false)
+    }
+    load()
+  }, [professorId])
+
+  if (loading || related.length === 0) return null
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-zinc-300">
+        Other professors in {deptName ?? 'this department'}
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {related.map(p => (
+          <Link
+            key={p.id}
+            href={p.rmp_id ? `/professor/${p.slug}?rmpId=${p.rmp_id}` : `/professor/${p.slug}?socId=${p.id}`}
+            className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-semibold text-white truncate min-w-0">{p.first_name} {p.last_name}</p>
+              {p.avg_rating != null && (
+                <div className="shrink-0 text-center">
+                  <div className="text-lg font-black" style={{ color: ratingColor(p.avg_rating) }}>{p.avg_rating.toFixed(1)}</div>
+                  <div className="text-xs text-zinc-600">Quality</div>
+                </div>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SOC professor profile (3B)
+// ---------------------------------------------------------------------------
+
+function SocProfessorContent({ socId }: { socId: string }) {
+  const [prof, setProf] = useState<{ first_name: string; last_name: string; department: string | null; teaching_count: number } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!supabase) { setError('Database unavailable'); setLoading(false); return }
+
+    async function load() {
+      setLoading(true)
+      try {
+        const { data: profRow, error: profErr } = await supabase!
+          .from('professors')
+          .select('first_name, last_name, professor_departments(is_primary, departments(name))')
+          .eq('id', socId)
+          .single()
+
+        if (profErr || !profRow) { setError('Professor not found'); return }
+
+        const depts = profRow.professor_departments as unknown as { is_primary: boolean; departments: { name: string }[] | null }[]
+        const primary = depts?.find(d => d.is_primary) ?? depts?.[0]
+        const deptName = primary?.departments?.[0]?.name ?? null
+
+        const { count } = await supabase!
+          .from('teaching_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('professor_id', socId)
+
+        setProf({ first_name: profRow.first_name, last_name: profRow.last_name, department: deptName, teaching_count: count ?? 0 })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Something went wrong')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [socId])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+          <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
+        </div>
+        <div className="text-center">
+          <p className="text-white font-semibold">Loading professor...</p>
+          <p className="text-zinc-500 text-sm mt-1">Fetching professor data</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !prof) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6">
+        <div className="text-5xl">😬</div>
+        <h1 className="text-xl font-bold text-white">Something went wrong</h1>
+        <p className="text-zinc-500 text-sm">{error ?? 'Professor not found'}</p>
+        <Link href="/" className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#CC0033' }}>
+          ← Back to Search
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a]">
+      <header className="border-b border-zinc-900 px-6 py-4 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/90">
+        <div className="max-w-5xl mx-auto flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </Link>
+          <div className="h-4 w-px bg-zinc-800" />
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded flex items-center justify-center font-black text-white text-xs" style={{ backgroundColor: '#CC0033' }}>RU</div>
+            <span className="font-bold text-white text-sm">RU Rate</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
+          {prof.department && (
+            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{prof.department}</div>
+          )}
+          <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">
+            {prof.first_name} {prof.last_name}
+          </h1>
+          <p className="text-zinc-400 mt-2">Rutgers University - New Brunswick</p>
+          {prof.teaching_count > 0 && (
+            <p className="text-sm text-zinc-600 mt-1">{prof.teaching_count} course sections on record</p>
+          )}
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">📋</span>
+            <div>
+              <p className="font-semibold text-white text-sm">No RMP data yet</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                This professor was found in Rutgers course listings but hasn&apos;t been linked to RateMyProfessors.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <TeachingHistorySection professorId={socId} />
+
+        <NativeReviewsSection professorId={socId} />
+
+        <SocRelatedSection professorId={socId} />
+      </main>
+
+      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
+          <span>RU Rate — Rutgers University Professor Reviews</span>
+          <span>Data sourced from RateMyProfessors · Powered by Claude AI</span>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+function ProfessorContent() {
+  const searchParams = useSearchParams()
+  const rmpId = searchParams.get('rmpId')
+  const [data, setData] = useState<ProfessorCache | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showAllReviews, setShowAllReviews] = useState(false)
+
+  useEffect(() => {
+    if (!rmpId) { setError('No professor ID provided.'); setLoading(false); return }
+
+    async function load() {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rmpId }),
+        })
+        if (!res.ok) throw new Error('Failed to load professor data')
+        const json = await res.json()
+        setData(json)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Something went wrong')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [rmpId])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+          <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
+        </div>
+        <div className="text-center">
+          <p className="text-white font-semibold">Analyzing professor...</p>
+          <p className="text-zinc-500 text-sm mt-1">Fetching reviews & running AI analysis</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6">
+        <div className="text-5xl">😬</div>
+        <h1 className="text-xl font-bold text-white">Something went wrong</h1>
+        <p className="text-zinc-500 text-sm">{error ?? 'Professor not found'}</p>
+        <Link href="/" className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#CC0033' }}>
+          ← Back to Search
+        </Link>
+      </div>
+    )
+  }
+
+  const analysis = data.ai_analysis
+  const ratings = (data.ratings ?? []) as Rating[]
+  const visibleReviews = showAllReviews ? ratings : ratings.slice(0, 8)
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a]">
+      {/* Header */}
+      <header className="border-b border-zinc-900 px-6 py-4 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/90">
+        <div className="max-w-5xl mx-auto flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </Link>
+          <div className="h-4 w-px bg-zinc-800" />
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded flex items-center justify-center font-black text-white text-xs" style={{ backgroundColor: '#CC0033' }}>RU</div>
+            <span className="font-bold text-white text-sm">RU Rate</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
+        {/* Hero block */}
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+            <div>
+              <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{data.department}</div>
+              <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">
+                {data.first_name} {data.last_name}
+              </h1>
+              <p className="text-zinc-400 mt-2">{data.school_name}</p>
+              <p className="text-sm text-zinc-600 mt-1">{data.num_ratings} student ratings</p>
+            </div>
+
+            <div className="flex gap-6 shrink-0">
+              <RatingCircle value={data.avg_rating ?? 0} label="Quality" />
+              <RatingCircle value={data.avg_difficulty ?? 0} label="Difficulty" />
+              {data.would_take_again != null && (
+                <RatingCircle value={data.would_take_again} label="Again" pct />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Verdict */}
+        {analysis && <VerdictBox analysis={analysis} />}
+
+        {/* Analysis grid */}
+        {analysis && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { title: 'Teaching Style', content: analysis.teaching_style },
+              { title: 'Workload', content: analysis.workload },
+              { title: 'Grading', content: analysis.grading },
+            ].map(({ title, content }) => (
+              <div key={title} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">{title}</h3>
+                <p className="text-sm text-zinc-300 leading-relaxed">{content}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Praise / Complaints */}
+        {analysis && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <h3 className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Common Praise
+              </h3>
+              <ul className="space-y-2">
+                {(analysis.common_praise ?? []).map((item, i) => (
+                  <li key={i} className="text-sm text-zinc-300 flex gap-2">
+                    <span className="text-green-600 mt-0.5 shrink-0">+</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <h3 className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Common Complaints
+              </h3>
+              <ul className="space-y-2">
+                {(analysis.common_complaints ?? []).map((item, i) => (
+                  <li key={i} className="text-sm text-zinc-300 flex gap-2">
+                    <span className="text-red-600 mt-0.5 shrink-0">−</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Tips */}
+        {analysis?.tips && analysis.tips.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+              <span style={{ color: '#CC0033' }}>★</span> Student Tips
+            </h3>
+            <TipsList tips={analysis.tips} />
+          </div>
+        )}
+
+        {/* Tag cloud */}
+        {ratings.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+            <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Common Tags</h3>
+            <TagCloud ratings={ratings} />
+          </div>
+        )}
+
+        {/* Grade distribution */}
+        {ratings.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+            <GradeChart ratings={ratings} />
+          </div>
+        )}
+
+        {/* Native reviews (RU Rate) — above RMP reviews */}
+        {rmpId && <NativeReviewsSection rmpId={rmpId} />}
+
+        {/* RMP Reviews */}
+        {ratings.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-zinc-300">
+                Student Reviews
+                <span className="ml-2 text-zinc-600 font-normal">({ratings.length})</span>
+              </h3>
+              <div className="text-xs text-zinc-600">Most recent first</div>
+            </div>
+            <div className="space-y-3">
+              {visibleReviews.map((r) => (
+                <ReviewCard key={r.id} rating={r} />
+              ))}
+            </div>
+            {ratings.length > 8 && !showAllReviews && (
+              <button
+                onClick={() => setShowAllReviews(true)}
+                className="mt-4 w-full py-3 rounded-xl border border-zinc-800 text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+              >
+                Show all {ratings.length} reviews
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Related professors */}
+        {rmpId && <RelatedProfessorsSection rmpId={rmpId} />}
+      </main>
+
+      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
+          <span>RU Rate — Rutgers University Professor Reviews</span>
+          <span>Data sourced from RateMyProfessors · Powered by Claude AI</span>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+function ProfessorRouter() {
+  const searchParams = useSearchParams()
+  const socId = searchParams.get('socId')
+  if (socId) return <SocProfessorContent socId={socId} />
+  return <ProfessorContent />
+}
+
+function PageLoading() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+      <div className="relative w-16 h-16">
+        <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+        <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
+      </div>
+      <div className="text-center">
+        <p className="text-white font-semibold">Loading...</p>
+        <p className="text-zinc-500 text-sm mt-1">Fetching professor data</p>
+      </div>
+    </div>
+  )
+}
+
+export default function ProfessorPage({ params }: { params: Promise<{ slug: string }> }) {
+  void use(params)
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <ProfessorRouter />
+    </Suspense>
+  )
+}
