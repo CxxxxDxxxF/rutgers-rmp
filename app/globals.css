@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --scarlet: #CC0033;
+  --scarlet-dark: #a8002b;
+  --bg: #0a0a0a;
+  --card: #111111;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #0a0a0a;
+  color: white;
+}
+
+::selection {
+  background: #CC0033;
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #CC0033;
+}
