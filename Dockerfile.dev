@@ -1,0 +1,23 @@
+# Development Dockerfile with hot reload support
+FROM node:22-slim
+
+WORKDIR /app
+
+# Create non-root user
+RUN useradd -m -u 1001 nextjs
+
+# Copy package files
+COPY package.json package-lock.json ./
+
+# Install dependencies (including devDependencies for development)
+RUN npm ci && npm cache clean --force
+
+# Copy all source files
+COPY --chown=nextjs:nextjs . .
+
+USER nextjs
+
+EXPOSE 3000
+
+# Run development server with turbopack
+CMD ["npm", "run", "dev"]

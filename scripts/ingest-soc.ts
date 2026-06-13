@@ -252,7 +252,8 @@ async function main() {
 
   // 1. Fetch SOC data
   console.log('─ Fetching SOC data …')
-  const url = `https://sis.rutgers.edu/soc/api/courses.json?year=${YEAR}&term=${TERM}&campus=${CAMPUS}`
+  // classes.rutgers.edu is the canonical host; sis.rutgers.edu now 302-redirects
+  const url = `https://classes.rutgers.edu/soc/api/courses.json?year=${YEAR}&term=${TERM}&campus=${CAMPUS}`
   const resp = await fetch(url, { headers: { 'Accept-Encoding': 'gzip' } })
   if (!resp.ok) {
     console.error(`  FAILED: HTTP ${resp.status} – ${resp.statusText}`)
@@ -388,6 +389,8 @@ async function main() {
       const instructorsRaw = section.instructors ?? []
       const instructorsText = section.instructorsText ?? ''
       const campusCode = section.campusCode ?? ''
+      const openStatus: boolean | null = typeof section.openStatus === 'boolean' ? section.openStatus : null
+      const openStatusText: string | null = section.openStatusText ?? null
       const mt = section.meetingTimes ?? []
       const meetingDays = formatMeetingDays(mt)
       const meetingTimes = formatMeetingTimes(mt)
@@ -418,6 +421,8 @@ async function main() {
             instructorNameRaw: instructorsText || null,
             instructorNameNormalized: null,
             sourceUrl,
+            openStatus,
+            openStatusText,
           })
         }
         continue
@@ -512,6 +517,8 @@ async function main() {
             instructorNameRaw: instructorsText || rawName,
             instructorNameNormalized: normalized.full,
             sourceUrl,
+            openStatus,
+            openStatusText,
           })
         }
       }
@@ -565,6 +572,8 @@ async function upsertAssignment(params: {
   instructorNameRaw: string | null
   instructorNameNormalized: string | null
   sourceUrl: string
+  openStatus: boolean | null
+  openStatusText: string | null
 }) {
   // Check by (index_number, semester_id) – unique per section+semester
   const { data: existing } = await supabase
@@ -575,6 +584,19 @@ async function upsertAssignment(params: {
     .maybeSingle()
 
   if (existing) {
+    // Row already ingested — refresh the section status so re-running the
+    // pipeline tracks open/closed transitions without duplicating rows.
+    const { error: updErr } = await supabase
+      .from('teaching_assignments')
+      .update({
+        open_status: params.openStatus,
+        open_status_text: params.openStatusText,
+        status_updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+    if (updErr) {
+      stats.errors.push(`TA status update error [idx ${params.indexNumber}]: ${updErr.message}`)
+    }
     stats.assignments_skipped++
     return
   }
@@ -597,6 +619,9 @@ async function upsertAssignment(params: {
       source_url: params.sourceUrl,
       confidence: 'verified',
       status: 'active',
+      open_status: params.openStatus,
+      open_status_text: params.openStatusText,
+      status_updated_at: new Date().toISOString(),
     })
 
   if (taErr) {

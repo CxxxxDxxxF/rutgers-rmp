@@ -7,20 +7,6 @@ interface ReviewCardProps {
   rating: Rating
 }
 
-function Stars({ value, max = 5 }: { value: number; max?: number }) {
-  return (
-    <div className="flex gap-0.5">
-      {Array.from({ length: max }).map((_, i) => (
-        <div
-          key={i}
-          className="w-2 h-2 rounded-full"
-          style={{ backgroundColor: i < Math.round(value) ? '#CC0033' : '#3f3f46' }}
-        />
-      ))}
-    </div>
-  )
-}
-
 export default function ReviewCard({ rating }: ReviewCardProps) {
   const date = rating.date ? new Date(rating.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''
   const storageKey = `rmp-vote-${rating.id}`

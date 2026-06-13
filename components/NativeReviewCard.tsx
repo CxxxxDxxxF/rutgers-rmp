@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Toast from './Toast'
 
 export interface NativeReview {
@@ -31,10 +31,17 @@ function difficultyColor(rating: number) {
 }
 
 export default function NativeReviewCard({ review }: { review: NativeReview }) {
+  const storageKey = `rmp-native-vote-${review.id}`
   const [helpfulCount, setHelpfulCount] = useState(review.helpful_count)
   const [voted, setVoted] = useState(false)
   const [voting, setVoting] = useState(false)
   const [voteError, setVoteError] = useState<string | null>(null)
+
+  // Restore voted state from localStorage as a UX hint only.
+  // Server enforces deduplication via fingerprint — localStorage is not authoritative.
+  useEffect(() => {
+    setVoted(localStorage.getItem(storageKey) === '1')
+  }, [storageKey])
 
   const date = review.created_at
     ? new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
@@ -53,6 +60,7 @@ export default function NativeReviewCard({ review }: { review: NativeReview }) {
         const data = await res.json()
         setHelpfulCount(data.helpful_count)
         setVoted(true)
+        localStorage.setItem(storageKey, '1')
       } else {
         setVoteError('Could not record your vote. Try again.')
       }

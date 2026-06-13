@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 
 export async function GET(req: NextRequest) {
@@ -64,9 +65,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
-  }
+  const db = createServiceClient()
 
   const body = await req.json()
   const {
@@ -99,7 +98,7 @@ export async function POST(req: NextRequest) {
   const reviewer_ip = (forwarded ? forwarded.split(',')[0].trim() : realIp) || '0.0.0.0'
 
   // Look up professor by rmp_id
-  const { data: professor, error: profError } = await supabase
+  const { data: professor, error: profError } = await db
     .from('professors')
     .select('id')
     .eq('rmp_id', rmp_id)
@@ -112,7 +111,7 @@ export async function POST(req: NextRequest) {
   const professor_id = professor.id
 
   // Rate limit: max 3 reviews per professor per IP
-  const { count } = await supabase
+  const { count } = await db
     .from('reviews')
     .select('id', { count: 'exact', head: true })
     .eq('professor_id', professor_id)
@@ -128,7 +127,7 @@ export async function POST(req: NextRequest) {
   // Look up course if course_number provided
   let course_id: string | null = null
   if (course_number) {
-    const { data: course } = await supabase
+    const { data: course } = await db
       .from('courses')
       .select('id')
       .eq('course_number', course_number)
@@ -137,7 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Insert review
-  const { data: review, error: insertError } = await supabase
+  const { data: review, error: insertError } = await db
     .from('reviews')
     .insert({
       professor_id,

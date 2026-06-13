@@ -1,8 +1,14 @@
 'use client'
 
 import { Suspense, use, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import AppHeader from '@/components/AppHeader'
+import Badge from '@/components/Badge'
+import EmptyState from '@/components/EmptyState'
+import CompareButton from '@/components/CompareButton'
+import SectionTable, { CopyButton, type SectionRow } from '@/components/SectionTable'
+import { SkeletonBlock, RowListSkeleton } from '@/components/LoadingSkeleton'
+import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
 
 interface Department {
   id: string
@@ -16,25 +22,39 @@ interface Course {
   course_number: string
   name: string
   credits: number
+  slug: string
   description: string | null
   prerequisites: string | null
+  subject_code: string | null
+  academic_level: string | null
 }
 
 interface Professor {
+  id: string
   first_name: string
   last_name: string
   slug: string
-  rmp_id: string
+  rmp_id: string | null
   avg_rating: number | null
   avg_difficulty: number | null
+  would_take_again: number | null
   num_ratings: number | null
   verdict: string | null
+}
+
+interface SemesterGroup {
+  id: string
+  name: string
+  code: string | null
+  is_current: boolean
+  sections: SectionRow[]
 }
 
 interface CourseData {
   course: Course
   professors: Professor[]
   department: Department | null
+  semesters: SemesterGroup[]
 }
 
 function ratingColor(r: number) {
@@ -43,57 +63,163 @@ function ratingColor(r: number) {
   return '#ef4444'
 }
 
-const VERDICT_CONFIG: Record<string, { bg: string; border: string; text: string; label: string }> = {
-  take: { bg: 'bg-green-950', border: 'border-green-800', text: 'text-green-400', label: 'TAKE' },
-  avoid: { bg: 'bg-red-950', border: 'border-red-900', text: 'text-red-400', label: 'AVOID' },
-  depends: { bg: 'bg-amber-950', border: 'border-amber-800', text: 'text-amber-400', label: 'DEPENDS' },
+const VERDICT_CONFIG: Record<string, { tone: 'green' | 'red' | 'amber'; label: string }> = {
+  take: { tone: 'green', label: 'TAKE' },
+  avoid: { tone: 'red', label: 'AVOID' },
+  depends: { tone: 'amber', label: 'DEPENDS' },
 }
 
-function ProfessorCard({ prof }: { prof: Professor }) {
+function professorHref(prof: Professor) {
+  return prof.rmp_id
+    ? `/professor/${prof.slug}?rmpId=${prof.rmp_id}`
+    : `/professor/${prof.slug}?socId=${prof.id}`
+}
+
+function ProfessorOptionCard({ prof }: { prof: Professor }) {
   const vc = prof.verdict ? VERDICT_CONFIG[prof.verdict] : null
-  const href = `/professor/${prof.slug}?rmpId=${prof.rmp_id}`
 
   return (
-    <Link
-      href={href}
-      className="group block bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all"
-    >
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-[#CC0033]/50 transition-all">
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors">
+        <Link href={professorHref(prof)} className="min-w-0 group">
+          <div className="font-semibold text-white group-hover:text-[#ff4d6d] transition-colors truncate">
             {prof.first_name} {prof.last_name}
           </div>
-          {prof.num_ratings != null && (
-            <div className="text-xs text-zinc-500 mt-0.5">{prof.num_ratings} ratings</div>
-          )}
-        </div>
+          <div className="text-xs text-zinc-500 mt-0.5">
+            {prof.num_ratings != null && prof.num_ratings > 0
+              ? `${prof.num_ratings} RMP ratings`
+              : 'No RMP ratings yet'}
+          </div>
+        </Link>
 
         <div className="flex items-center gap-3 shrink-0">
           {prof.avg_rating != null && (
             <div className="text-right">
-              <div
-                className="text-xl font-black"
-                style={{ color: ratingColor(prof.avg_rating) }}
-              >
-                {prof.avg_rating.toFixed(1)}
+              <div className="text-xl font-black" style={{ color: ratingColor(prof.avg_rating) }}>
+                {Number(prof.avg_rating).toFixed(1)}
               </div>
               {prof.avg_difficulty != null && (
-                <div className="text-xs text-zinc-600">
-                  diff {prof.avg_difficulty.toFixed(1)}
-                </div>
+                <div className="text-xs text-zinc-600">diff {Number(prof.avg_difficulty).toFixed(1)}</div>
               )}
             </div>
           )}
-          {vc && (
-            <span
-              className={`text-xs font-bold px-2 py-1 rounded-md border ${vc.bg} ${vc.border} ${vc.text}`}
-            >
-              {vc.label}
-            </span>
-          )}
+          {vc && <Badge tone={vc.tone}>{vc.label}</Badge>}
         </div>
       </div>
-    </Link>
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="text-xs text-zinc-500">
+          {prof.would_take_again != null && prof.would_take_again >= 0 && (
+            <span>{Math.round(prof.would_take_again)}% would take again</span>
+          )}
+        </div>
+        {prof.rmp_id && (
+          <CompareButton
+            rmpId={prof.rmp_id}
+            slug={prof.slug}
+            name={`${prof.first_name} ${prof.last_name}`}
+            department={null}
+            compact
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function WatchCourseButton({ courseId }: { courseId: string }) {
+  const { items, loading } = useWatchlist()
+  const [busy, setBusy] = useState(false)
+  const courseWatch = items.find(
+    w => w.course_id === courseId && w.teaching_assignment_id === null
+  )
+
+  async function toggle() {
+    if (busy) return
+    setBusy(true)
+    try {
+      if (courseWatch) {
+        await removeWatch(courseWatch.id)
+      } else {
+        await addWatch({ courseId })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy || loading}
+      className={`inline-flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl border transition-all disabled:opacity-50 ${
+        courseWatch
+          ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
+          : 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:border-[#CC0033]/60 hover:text-white'
+      }`}
+    >
+      {courseWatch ? '★ Watching this course' : '☆ Watch this course'}
+    </button>
+  )
+}
+
+function RegistrationHelper({
+  course,
+  semesters,
+}: {
+  course: Course
+  semesters: SemesterGroup[]
+}) {
+  const sourceUrl = semesters.flatMap(s => s.sections).find(s => s.source_url)?.source_url ?? null
+  const openSections = semesters
+    .filter(s => s.is_current)
+    .flatMap(s => s.sections)
+    .filter(s => s.open_status === true && s.index_number)
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+      <div>
+        <h2 className="font-semibold text-white">Registration helper</h2>
+        <p className="text-sm text-zinc-500 mt-1">
+          Grab what you need for WebReg. RU Rate shows you the data — you register yourself.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm">
+          <span className="text-zinc-500 text-xs">Course #</span>
+          <span className="font-mono text-zinc-200">{course.course_number}</span>
+          <CopyButton value={course.course_number} label="course number" />
+        </span>
+
+        {openSections.slice(0, 6).map(s => (
+          <span
+            key={s.id}
+            className="inline-flex items-center gap-2 bg-zinc-950 border border-green-900/60 rounded-lg px-3 py-2 text-sm"
+          >
+            <span className="text-green-500 text-xs">Open · Sec {s.section_number ?? '—'}</span>
+            <span className="font-mono text-zinc-200">{s.index_number}</span>
+            <CopyButton value={s.index_number!} label="index number" />
+          </span>
+        ))}
+
+        {sourceUrl && (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+          >
+            Open Rutgers SOC ↗
+          </a>
+        )}
+      </div>
+
+      <p className="text-[11px] text-zinc-600 leading-relaxed">
+        Paste an index number into WebReg to register for that section. RU Rate never auto-registers,
+        never touches WebReg on your behalf, and section status can lag the live Schedule of Classes.
+      </p>
+    </div>
   )
 }
 
@@ -202,83 +328,68 @@ function CourseContent({ slug }: { slug: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
-        <div className="relative w-16 h-16">
-          <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
-          <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
-        </div>
-        <div className="text-center">
-          <p className="text-white font-semibold">Loading course...</p>
-          <p className="text-zinc-500 text-sm mt-1">Fetching professors and ratings</p>
-        </div>
+      <div className="min-h-screen bg-[#0a0a0a]">
+        <AppHeader />
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8">
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 space-y-4">
+            <SkeletonBlock className="h-6 w-28" />
+            <SkeletonBlock className="h-10 w-2/3" />
+            <SkeletonBlock className="h-4 w-1/3" />
+          </div>
+          <RowListSkeleton rows={4} />
+        </main>
       </div>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6">
-        <div className="text-5xl">📚</div>
-        <h1 className="text-xl font-bold text-white">Course Not Found</h1>
-        <p className="text-zinc-500 text-sm">{error ?? 'This course does not exist'}</p>
-        <Link
-          href="/courses"
-          className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-          style={{ backgroundColor: '#CC0033' }}
-        >
-          ← Back to Courses
-        </Link>
+      <div className="min-h-screen bg-[#0a0a0a]">
+        <AppHeader />
+        <div className="flex flex-col items-center justify-center gap-4 px-6 py-32">
+          <div className="text-5xl">📚</div>
+          <h1 className="text-xl font-bold text-white">Course Not Found</h1>
+          <p className="text-zinc-500 text-sm">{error ?? 'This course does not exist'}</p>
+          <Link
+            href="/courses"
+            className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+            style={{ backgroundColor: '#CC0033' }}
+          >
+            ← Back to Courses
+          </Link>
+        </div>
       </div>
     )
   }
 
-  const { course, professors, department } = data
+  const { course, professors, department, semesters } = data
+  const ratedProfessors = professors.filter(p => p.avg_rating != null)
+  const totalSections = semesters.reduce((n, s) => n + s.sections.length, 0)
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      {/* Header */}
-      <header className="border-b border-zinc-900 px-6 py-4 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/90">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <Link
-            href="/courses"
-            className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Courses
-          </Link>
-          <div className="h-4 w-px bg-zinc-800" />
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded flex items-center justify-center font-black text-white text-xs"
-              style={{ backgroundColor: '#CC0033' }}
-            >
-              RU
-            </div>
-            <span className="font-bold text-white text-sm">RU Rate</span>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
         {/* Course hero */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div className="min-w-0">
-              {/* Course number badge */}
-              <span
-                className="inline-block text-xs font-black tracking-wider px-2.5 py-1 rounded mb-3"
-                style={{ backgroundColor: '#CC0033', color: 'white' }}
-              >
-                {course.course_number}
-              </span>
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span
+                  className="inline-block text-xs font-black tracking-wider px-2.5 py-1 rounded"
+                  style={{ backgroundColor: '#CC0033', color: 'white' }}
+                >
+                  {course.course_number}
+                </span>
+                {course.academic_level && <Badge>{course.academic_level}</Badge>}
+                <Badge tone="scarlet">Rutgers SOC data</Badge>
+              </div>
 
               <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight leading-tight">
                 {course.name}
               </h1>
 
-              {/* Department link */}
               {department && (
                 <div className="mt-3">
                   <Link
@@ -292,16 +403,24 @@ function CourseContent({ slug }: { slug: string }) {
                   </Link>
                 </div>
               )}
+
+              <div className="mt-4">
+                <WatchCourseButton courseId={course.id} />
+              </div>
             </div>
 
-            {/* Credits */}
-            <div className="shrink-0 text-center bg-zinc-800 border border-zinc-700 rounded-xl px-6 py-4">
-              <div className="text-3xl font-black text-white">{course.credits}</div>
-              <div className="text-xs text-zinc-500 mt-0.5">credits</div>
+            <div className="shrink-0 flex md:flex-col gap-3">
+              <div className="text-center bg-zinc-800 border border-zinc-700 rounded-xl px-6 py-4">
+                <div className="text-3xl font-black text-white">{course.credits ?? '—'}</div>
+                <div className="text-xs text-zinc-500 mt-0.5">credits</div>
+              </div>
+              <div className="text-center bg-zinc-800 border border-zinc-700 rounded-xl px-6 py-4">
+                <div className="text-3xl font-black text-white">{totalSections}</div>
+                <div className="text-xs text-zinc-500 mt-0.5">sections</div>
+              </div>
             </div>
           </div>
 
-          {/* Description */}
           {course.description && (
             <div className="mt-6 pt-6 border-t border-zinc-800">
               <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
@@ -311,7 +430,6 @@ function CourseContent({ slug }: { slug: string }) {
             </div>
           )}
 
-          {/* Prerequisites */}
           {course.prerequisites && (
             <div className="mt-4">
               <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
@@ -322,33 +440,64 @@ function CourseContent({ slug }: { slug: string }) {
           )}
         </div>
 
-        {/* Professors section */}
+        {/* Registration helper */}
+        {totalSections > 0 && <RegistrationHelper course={course} semesters={semesters} />}
+
+        {/* Sections by semester */}
+        {semesters.length > 0 && (
+          <div className="space-y-6">
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+              Sections
+            </h2>
+            {semesters.map(sem => (
+              <div key={sem.id} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-white text-sm">{sem.name}</h3>
+                  {sem.is_current && <Badge tone="green">CURRENT</Badge>}
+                  <span className="text-xs text-zinc-600">
+                    {sem.sections.length} section{sem.sections.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <SectionTable sections={sem.sections} courseId={course.id} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Best professor options */}
         <div>
-          <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
-            Professors Who Teach This Course
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+              {ratedProfessors.length > 0 ? 'Best Professor Options' : 'Professors Who Teach This Course'}
+            </h2>
+            {ratedProfessors.length >= 2 && (
+              <span className="text-xs text-zinc-600">
+                Tip: add 2+ to the compare tray, then hit Compare
+              </span>
+            )}
+          </div>
 
           {professors.length > 0 ? (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {professors.map(prof => (
-                <ProfessorCard key={prof.slug} prof={prof} />
+                <ProfessorOptionCard key={prof.slug} prof={prof} />
               ))}
             </div>
           ) : (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center">
-              <div className="text-3xl mb-3">🔍</div>
-              <p className="text-white font-semibold">No professors linked yet</p>
-              <p className="text-zinc-500 text-sm mt-1 mb-4">
-                We don&apos;t have teaching data for this course yet.
-              </p>
-              <Link
-                href="#submit"
-                className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white transition-all hover:brightness-110"
-                style={{ backgroundColor: '#CC0033' }}
-              >
-                Know who teaches this? Report it →
-              </Link>
-            </div>
+            <EmptyState
+              icon="🔍"
+              title="No professors linked yet"
+              subtitle="We don't have teaching data for this course yet."
+              action={
+                <Link
+                  href="#submit"
+                  className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white transition-all hover:brightness-110"
+                  style={{ backgroundColor: '#CC0033' }}
+                >
+                  Know who teaches this? Report it →
+                </Link>
+              }
+            />
           )}
         </div>
 
@@ -368,7 +517,7 @@ function CourseContent({ slug }: { slug: string }) {
 
       <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
-          RU Rate — Rutgers University Professor Reviews · Data sourced from RateMyProfessors
+          RU Rate — Rutgers Registration Command Center · Course data from Rutgers SOC · Ratings from RateMyProfessors
         </div>
       </footer>
     </div>

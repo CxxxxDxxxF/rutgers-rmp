@@ -1,15 +1,34 @@
-# RU Rate — Rutgers Professor Reviews
+# RU Rate — Rutgers Registration Command Center
 
-AI-powered Rate My Professor for Rutgers students. Search any professor, get real reviews + Claude AI analysis in seconds.
+Pick better Rutgers classes. Professor reviews + Claude AI analysis, real Rutgers course
+sections from the Schedule of Classes, professor comparison, and a registration watchlist
+with WebReg-ready index numbers.
+
+## Features
+
+- **Professor search & AI analysis** — RMP reviews summarized into a take/avoid/depends verdict
+- **Global search** — professors, course numbers, and course titles in one box
+- **Course browser** (`/courses`) — filter by department, credits, level; deep-linkable URLs
+- **Course pages** (`/course/[slug]`) — per-semester section tables (index number, instructor,
+  meeting times, campus, open/closed status) + registration helper with copy-paste index numbers
+- **Compare professors** (`/compare`) — 2–4 side by side: rating, difficulty, would-take-again,
+  AI verdict, workload, grading, courses taught
+- **Watchlist** (`/watchlist`) — track sections per browser (no account needed), copy index
+  numbers, see open/closed status from the last SOC sync
+
+**Hard boundary:** RU Rate is registration *prep* only. It never auto-registers, never submits
+anything to WebReg, and never polls Rutgers endpoints aggressively. Section status is synced by
+the batch ingest script, not live. Open-section notifications are planned but not implemented.
 
 ## Stack
 
-- **Next.js 14** (App Router)
+- **Next.js 16** (App Router)
 - **TypeScript**
 - **Tailwind CSS**
-- **Supabase** (caching layer — avoids redundant RMP/AI calls)
+- **Supabase** (cache + SOC course/section data + watchlist)
 - **Claude Haiku** (`anthropic/claude-haiku-4-5` via OpenRouter) for AI analysis
 - **RateMyProfessors GraphQL API**
+- **Rutgers SOC API** (batch ingestion via `npm run ingest`)
 
 ## Setup
 
@@ -26,16 +45,27 @@ Copy `.env.local.example` to `.env.local` and fill in:
 ```
 NEXT_PUBLIC_SUPABASE_URL=       # Supabase project settings → API
 NEXT_PUBLIC_SUPABASE_ANON_KEY=  # Supabase project settings → API
-OPENROUTER_API_KEY=             # openrouter.ai/keys
+SUPABASE_SERVICE_ROLE_KEY=      # server-only; required for watchlist, submissions, votes
+OPENROUTER_API_KEY=             # openrouter.ai/keys; required for AI analysis
+ADMIN_SECRET=                   # server-only; protects /admin/submissions
+VOTE_FINGERPRINT_SALT=          # server-only; salts review-vote fingerprints
 ```
+
+The app degrades gracefully when secrets are missing: pages and read APIs work with just
+the two public Supabase keys; watchlist/submissions/votes return 503 and AI analysis is
+skipped until the corresponding secret is set.
 
 ### 3. Supabase database
 
-Run the migration in your Supabase SQL editor (`supabase/migrations/001_schema.sql`), or:
+Run the migrations in `supabase/migrations/` in order in your Supabase SQL editor, or:
 
 ```bash
 supabase db push
 ```
+
+> **Note:** migration `009_watchlist_section_status.sql` is required for the watchlist and
+> section open/closed status. After applying it, re-run `npm run ingest` so sections pick up
+> their `open_status` from the SOC API.
 
 ### 4. Run locally
 
@@ -59,7 +89,10 @@ Open [http://localhost:3000](http://localhost:3000).
 npx vercel
 ```
 
-Add the same three environment variables in Vercel → Project → Settings → Environment Variables.
+Add the same environment variables from `.env.local.example` in Vercel → Project →
+Settings → Environment Variables. `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`,
+`ADMIN_SECRET`, and `VOTE_FINGERPRINT_SALT` are server-side secrets — do not prefix
+them with `NEXT_PUBLIC_`.
 
 ## Notes
 
