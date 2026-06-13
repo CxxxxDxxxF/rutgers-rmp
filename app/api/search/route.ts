@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!q || q.length < 2) return NextResponse.json([])
 
   try {
-    const [cachedResult, socResult, rmpProfessors] = await Promise.allSettled([
+    const [cachedResult, socResult, rmpProfessors, courseResult] = await Promise.allSettled([
       supabase
         ? supabase
             .from('professor_cache')
@@ -26,6 +26,21 @@ export async function GET(req: NextRequest) {
             .limit(8)
         : Promise.resolve({ data: [] }),
       searchProfessors(q),
+      supabase
+        ? supabase
+            .from('courses')
+            .select(`
+              id, course_number, name, credits, slug,
+              course_departments (
+                is_primary,
+                departments ( code, slug )
+              ),
+              teaching_assignments ( count )
+            `)
+            .or(courseSearchFilter(q))
+            .order('course_number', { ascending: true })
+            .limit(6)
+        : Promise.resolve({ data: [] }),
     ])
 
     const cached =
@@ -98,11 +113,72 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return NextResponse.json(results.slice(0, 10))
+    const courseRaw =
+      courseResult.status === 'fulfilled' && courseResult.value?.data
+        ? (courseResult.value.data as CourseRow[])
+        : []
+
+    const courses = courseRaw.map(c => {
+      const deptJoins = Array.isArray(c.course_departments)
+        ? c.course_departments
+        : c.course_departments
+          ? [c.course_departments]
+          : []
+      const primary = deptJoins.find(d => d.is_primary) ?? deptJoins[0]
+      const dept = Array.isArray(primary?.departments)
+        ? primary?.departments[0]
+        : primary?.departments
+      const taCount = Array.isArray(c.teaching_assignments)
+        ? (c.teaching_assignments[0]?.count ?? 0)
+        : 0
+
+      return {
+        id: c.id,
+        course_number: c.course_number,
+        name: c.name,
+        credits: c.credits,
+        slug: c.slug,
+        department_code: dept?.code ?? null,
+        section_count: taCount,
+      }
+    })
+
+    return NextResponse.json({
+      professors: results.slice(0, 8),
+      courses,
+    })
   } catch (err) {
     log.error('Search error:', err)
     return NextResponse.json({ error: 'Search failed' }, { status: 500 })
   }
+}
+
+/**
+ * Multi-word queries match when every word appears in the title (so
+ * "intro to computer" finds "Introduction to Computer Science"), or when
+ * the whole query matches the course number.
+ */
+function courseSearchFilter(q: string): string {
+  const sanitized = q.replace(/[(),]/g, ' ').trim()
+  const words = sanitized.split(/\s+/).filter(Boolean)
+  if (words.length <= 1) {
+    return `course_number.ilike.%${sanitized}%,name.ilike.%${sanitized}%`
+  }
+  const nameAnd = `and(${words.map(w => `name.ilike.%${w}%`).join(',')})`
+  return `course_number.ilike.%${sanitized}%,${nameAnd}`
+}
+
+interface CourseRow {
+  id: string
+  course_number: string
+  name: string
+  credits: number | null
+  slug: string
+  course_departments:
+    | { is_primary: boolean; departments: { code: string; slug: string } | { code: string; slug: string }[] | null }[]
+    | { is_primary: boolean; departments: { code: string; slug: string } | { code: string; slug: string }[] | null }
+    | null
+  teaching_assignments: { count: number }[] | null
 }
 
 interface SocProf {

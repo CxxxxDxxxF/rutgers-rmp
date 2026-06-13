@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 
 type Status = 'pending' | 'approved' | 'rejected'
@@ -33,45 +33,126 @@ function timeAgo(iso: string) {
   return `${Math.floor(h / 24)}d ago`
 }
 
-export default function SubmissionsAdminPage() {
+// --------------------------------------------------------------------------
+// Lock screen
+// --------------------------------------------------------------------------
+function LockScreen({ onUnlock }: { onUnlock: (secret: string) => void }) {
+  const [input, setInput] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!input.trim()) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/submissions?status=pending', {
+        headers: { Authorization: `Bearer ${input.trim()}` },
+      })
+      if (res.status === 401 || res.status === 403) {
+        setError('Invalid admin secret.')
+        return
+      }
+      if (!res.ok) {
+        setError('Server error — try again.')
+        return
+      }
+      onUnlock(input.trim())
+    } catch {
+      setError('Network error — try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="flex items-center gap-2 justify-center">
+          <div
+            className="w-8 h-8 rounded flex items-center justify-center font-black text-white text-sm"
+            style={{ backgroundColor: '#CC0033' }}
+          >
+            RU
+          </div>
+          <span className="font-bold text-white">Admin — Submissions</span>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="password"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Admin secret"
+            autoFocus
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 text-sm"
+          />
+          {error && <p className="text-red-400 text-sm">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-40 transition-all"
+            style={{ backgroundColor: '#CC0033' }}
+          >
+            {loading ? 'Verifying…' : 'Enter'}
+          </button>
+        </form>
+
+        <div className="text-center">
+          <Link href="/" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+            ← Back to home
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Admin panel (shown after successful auth)
+// --------------------------------------------------------------------------
+function AdminPanel({ secret }: { secret: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [filter, setFilter] = useState<Status | 'all'>('pending')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const url = filter === 'all'
-          ? '/api/admin/submissions'
-          : `/api/admin/submissions?status=${filter}`
-        const res = await fetch(url)
+  // Load on mount and when filter changes
+  const [loadedFilter, setLoadedFilter] = useState<string | null>(null)
+
+  if (loadedFilter !== filter) {
+    setLoadedFilter(filter)
+    setLoading(true)
+    setError(null)
+    const url =
+      filter === 'all'
+        ? '/api/admin/submissions'
+        : `/api/admin/submissions?status=${filter}`
+    fetch(url, { headers: { Authorization: `Bearer ${secret}` } })
+      .then(res => {
         if (!res.ok) throw new Error('Failed to load submissions')
-        setSubmissions(await res.json())
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Something went wrong')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [filter])
+        return res.json()
+      })
+      .then(data => setSubmissions(data))
+      .catch(e => setError(e instanceof Error ? e.message : 'Something went wrong'))
+      .finally(() => setLoading(false))
+  }
 
   async function updateStatus(id: string, status: 'approved' | 'rejected') {
     setUpdating(id)
     try {
       const res = await fetch(`/api/submissions/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${secret}`,
+        },
         body: JSON.stringify({ status }),
       })
       if (!res.ok) throw new Error('Update failed')
-      setSubmissions(prev =>
-        prev.map(s => s.id === id ? { ...s, status } : s)
-      )
+      setSubmissions(prev => prev.map(s => (s.id === id ? { ...s, status } : s)))
     } catch {
       // keep current state on failure
     } finally {
@@ -80,7 +161,10 @@ export default function SubmissionsAdminPage() {
   }
 
   const counts = submissions.reduce(
-    (acc, s) => { acc[s.status] = (acc[s.status] ?? 0) + 1; return acc },
+    (acc, s) => {
+      acc[s.status] = (acc[s.status] ?? 0) + 1
+      return acc
+    },
     {} as Record<Status, number>
   )
 
@@ -110,9 +194,7 @@ export default function SubmissionsAdminPage() {
             </div>
           </div>
 
-          <div className="text-xs text-zinc-600">
-            {submissions.length} total
-          </div>
+          <div className="text-xs text-zinc-600">{submissions.length} total</div>
         </div>
       </header>
 
@@ -218,4 +300,17 @@ export default function SubmissionsAdminPage() {
       </main>
     </div>
   )
+}
+
+// --------------------------------------------------------------------------
+// Page root — controls locked / unlocked state
+// --------------------------------------------------------------------------
+export default function SubmissionsAdminPage() {
+  const [secret, setSecret] = useState<string | null>(null)
+
+  if (!secret) {
+    return <LockScreen onUnlock={setSecret} />
+  }
+
+  return <AdminPanel secret={secret} />
 }

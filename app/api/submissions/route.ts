@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
-  }
+  const db = createServiceClient()
 
   try {
     const body = await req.json()
@@ -23,7 +21,7 @@ export async function POST(req: NextRequest) {
     const lastName = nameParts[nameParts.length - 1]
     const firstName = nameParts.length > 1 ? nameParts[0] : null
 
-    let profQuery = supabase
+    let profQuery = db
       .from('professors')
       .select('id, first_name, last_name')
       .ilike('last_name', `%${lastName}%`)
@@ -37,7 +35,7 @@ export async function POST(req: NextRequest) {
     const professor_id = matchedProfs && matchedProfs.length > 0 ? matchedProfs[0].id : null
 
     // Insert into user_submissions
-    const { data: submission, error: insertError } = await supabase
+    const { data: submission, error: insertError } = await db
       .from('user_submissions')
       .insert({
         professor_name: professor_name.trim(),
@@ -64,17 +62,15 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
-  }
-
   const course_id = req.nextUrl.searchParams.get('course_id')
   if (!course_id) {
     return NextResponse.json({ error: 'course_id query param required' }, { status: 400 })
   }
 
+  const db = createServiceClient()
+
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_submissions')
       .select(`
         id,

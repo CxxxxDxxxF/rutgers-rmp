@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Toast from './Toast'
 
-interface SearchResult {
+interface ProfessorResult {
   id: string
   firstName: string
   lastName: string
@@ -18,15 +18,35 @@ interface SearchResult {
   isSocOnly?: boolean
 }
 
+interface CourseResult {
+  id: string
+  course_number: string
+  name: string
+  credits: number | null
+  slug: string
+  department_code: string | null
+  section_count: number
+}
+
+type SearchItem =
+  | { kind: 'professor'; professor: ProfessorResult }
+  | { kind: 'course'; course: CourseResult }
+
 const VERDICT_STYLES = {
   take: { label: 'TAKE', className: 'bg-green-950 border-green-800 text-green-400' },
   depends: { label: 'DEPENDS', className: 'bg-amber-950 border-amber-800 text-amber-400' },
   avoid: { label: 'AVOID', className: 'bg-red-950 border-red-900 text-red-400' },
 }
 
+function ratingColor(r: number) {
+  if (r >= 4) return '#22c55e'
+  if (r >= 3) return '#f59e0b'
+  return '#ef4444'
+}
+
 export default function SearchBar() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResult[]>([])
+  const [items, setItems] = useState<SearchItem[]>([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState(-1)
@@ -47,18 +67,23 @@ export default function SearchBar() {
   }, [])
 
   const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); setOpen(false); return }
+    if (q.length < 2) { setItems([]); setOpen(false); return }
     setLoading(true)
     setSearchError(null)
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
       if (!res.ok) throw new Error('Search failed')
       const data = await res.json()
-      setResults(Array.isArray(data) ? data : [])
+      const professors: ProfessorResult[] = Array.isArray(data?.professors) ? data.professors : []
+      const courses: CourseResult[] = Array.isArray(data?.courses) ? data.courses : []
+      setItems([
+        ...professors.map(p => ({ kind: 'professor' as const, professor: p })),
+        ...courses.map(c => ({ kind: 'course' as const, course: c })),
+      ])
       setOpen(true)
       setSelected(-1)
     } catch {
-      setResults([])
+      setItems([])
       setOpen(false)
       setSearchError('Search is unavailable right now. Try again in a moment.')
     } finally {
@@ -72,26 +97,28 @@ export default function SearchBar() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query, search])
 
-  function handleSelect(prof: SearchResult) {
+  function handleSelect(item: SearchItem) {
     setOpen(false)
     setQuery('')
-    const param = prof.isSocOnly ? `socId=${prof.id}` : `rmpId=${prof.id}`
-    router.push(`/professor/${prof.slug}?${param}`)
+    if (item.kind === 'course') {
+      router.push(`/course/${item.course.slug}`)
+    } else {
+      const prof = item.professor
+      const param = prof.isSocOnly ? `socId=${prof.id}` : `rmpId=${prof.id}`
+      router.push(`/professor/${prof.slug}?${param}`)
+    }
   }
 
   function handleKey(e: React.KeyboardEvent) {
     if (!open) return
-    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s + 1, results.length - 1)) }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s + 1, items.length - 1)) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(s => Math.max(s - 1, -1)) }
-    if (e.key === 'Enter' && selected >= 0) handleSelect(results[selected])
+    if (e.key === 'Enter' && selected >= 0) handleSelect(items[selected])
     if (e.key === 'Escape') { setOpen(false); setSelected(-1) }
   }
 
-  function ratingColor(r: number) {
-    if (r >= 4) return '#22c55e'
-    if (r >= 3) return '#f59e0b'
-    return '#ef4444'
-  }
+  const firstProfessorIdx = items.findIndex(i => i.kind === 'professor')
+  const firstCourseIdx = items.findIndex(i => i.kind === 'course')
 
   return (
     <div ref={containerRef} className="relative w-full max-w-2xl mx-auto">
@@ -114,71 +141,101 @@ export default function SearchBar() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKey}
-          onFocus={() => results.length > 0 && setOpen(true)}
-          placeholder="Search Rutgers professors..."
-          className="w-full pl-12 pr-4 py-4 bg-zinc-900 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 text-lg focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] transition-colors"
+          onFocus={() => items.length > 0 && setOpen(true)}
+          placeholder="Search professors, courses, or course numbers..."
+          className="w-full pl-12 pr-4 py-4 bg-zinc-900 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 text-base sm:text-lg focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] transition-colors"
           autoComplete="off"
         />
       </div>
 
-      {open && results.length > 0 && (
-        <div className="absolute top-full mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl z-50">
-          {results.map((prof, i) => {
-            const vc = prof.verdict ? VERDICT_STYLES[prof.verdict] : null
-            return (
-              <button
-                key={prof.id}
-                onClick={() => handleSelect(prof)}
-                onMouseEnter={() => setSelected(i)}
-                className={`w-full text-left px-5 py-3.5 flex items-center justify-between gap-4 transition-colors border-b border-zinc-800 last:border-0 ${
-                  i === selected ? 'bg-zinc-800' : 'hover:bg-zinc-800/60'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {vc ? (
-                    <span className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded border ${vc.className}`}>
-                      {vc.label}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 w-2 h-2 rounded-full bg-zinc-700" />
-                  )}
-                  <div className="min-w-0">
-                    <div className="font-semibold text-white truncate">
-                      {prof.firstName} {prof.lastName}
-                    </div>
-                    <div className="text-xs text-zinc-500 truncate">{prof.department}</div>
-                  </div>
-                </div>
+      {open && items.length > 0 && (
+        <div className="absolute top-full mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl z-50 max-h-[28rem] overflow-y-auto">
+          {items.map((item, i) => {
+            const groupHeader =
+              i === firstProfessorIdx ? 'Professors' : i === firstCourseIdx ? 'Courses' : null
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {prof.avgRating != null && prof.avgRating > 0 && (
-                    <div className="text-right">
-                      <div className="text-lg font-bold" style={{ color: ratingColor(prof.avgRating) }}>
-                        {prof.avgRating.toFixed(1)}
+            return (
+              <div key={item.kind === 'professor' ? `p-${item.professor.id}` : `c-${item.course.id}`}>
+                {groupHeader && (
+                  <div className="px-5 pt-3 pb-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-600 bg-zinc-900 sticky top-0">
+                    {groupHeader}
+                  </div>
+                )}
+                <button
+                  onClick={() => handleSelect(item)}
+                  onMouseEnter={() => setSelected(i)}
+                  className={`w-full text-left px-5 py-3 flex items-center justify-between gap-4 transition-colors border-b border-zinc-800/60 last:border-0 ${
+                    i === selected ? 'bg-zinc-800' : 'hover:bg-zinc-800/60'
+                  }`}
+                >
+                  {item.kind === 'professor' ? (
+                    <>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {item.professor.verdict ? (
+                          <span className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded border ${VERDICT_STYLES[item.professor.verdict].className}`}>
+                            {VERDICT_STYLES[item.professor.verdict].label}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 w-2 h-2 rounded-full bg-zinc-700" />
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white truncate">
+                            {item.professor.firstName} {item.professor.lastName}
+                          </div>
+                          <div className="text-xs text-zinc-500 truncate">
+                            {item.professor.department ?? 'Rutgers University'}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-[10px] text-zinc-600 leading-tight">{prof.numRatings} ratings</div>
-                    </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {item.professor.avgRating != null && item.professor.avgRating > 0 && (
+                          <div className="text-right">
+                            <div className="text-lg font-bold" style={{ color: ratingColor(item.professor.avgRating) }}>
+                              {item.professor.avgRating.toFixed(1)}
+                            </div>
+                            <div className="text-[10px] text-zinc-600 leading-tight">
+                              {item.professor.numRatings} ratings
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: '#CC0033' }}>
+                          {item.course.course_number}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white truncate">{item.course.name}</div>
+                          <div className="text-xs text-zinc-500 truncate">
+                            {[
+                              item.course.department_code,
+                              item.course.credits != null ? `${item.course.credits} cr` : null,
+                              item.course.section_count > 0
+                                ? `${item.course.section_count} section${item.course.section_count !== 1 ? 's' : ''}`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        </div>
+                      </div>
+                      <svg className="w-3.5 h-3.5 text-zinc-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </>
                   )}
-                  <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </button>
+                </button>
+              </div>
             )
           })}
-
-          {results.some(r => r.analyzed) && (
-            <div className="px-5 py-2 border-t border-zinc-800 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#CC0033' }} />
-              <span className="text-[10px] text-zinc-600">Colored badges = AI analyzed · click for full breakdown</span>
-            </div>
-          )}
         </div>
       )}
 
-      {open && query.length >= 2 && results.length === 0 && !loading && (
+      {open && query.length >= 2 && items.length === 0 && !loading && (
         <div className="absolute top-full mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-6 text-center text-zinc-500 shadow-2xl z-50">
-          No Rutgers professors found for &ldquo;{query}&rdquo;
+          No professors or courses found for &ldquo;{query}&rdquo;
         </div>
       )}
 

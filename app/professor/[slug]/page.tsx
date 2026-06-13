@@ -3,6 +3,9 @@
 import { Suspense, use, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import AppHeader from '@/components/AppHeader'
+import Badge from '@/components/Badge'
+import CompareButton from '@/components/CompareButton'
 import GradeChart from '@/components/GradeChart'
 import ReviewCard from '@/components/ReviewCard'
 import NativeReviewCard, { type NativeReview } from '@/components/NativeReviewCard'
@@ -13,25 +16,6 @@ import type { ProfessorCache, AIAnalysis, Rating } from '@/lib/supabase'
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function StatBar({ label, value, max = 5 }: { label: string; value: number; max?: number }) {
-  const pct = Math.min((value / max) * 100, 100)
-  const color = label === 'Difficulty'
-    ? (value >= 4 ? '#ef4444' : value >= 3 ? '#f59e0b' : '#22c55e')
-    : (value >= 4 ? '#22c55e' : value >= 3 ? '#f59e0b' : '#ef4444')
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between text-sm">
-        <span className="text-zinc-400">{label}</span>
-        <span className="font-semibold" style={{ color }}>{value.toFixed(1)}<span className="text-zinc-600 font-normal">/{max}</span></span>
-      </div>
-      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-    </div>
-  )
-}
 
 function VerdictBox({ analysis }: { analysis: AIAnalysis }) {
   const config = {
@@ -408,9 +392,14 @@ function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
 // ---------------------------------------------------------------------------
 
 interface TeachingRow {
-  section_number: string
+  section_number: string | null
+  index_number: string | null
+  meeting_days: string | null
+  meeting_times: string | null
   campus: string | null
-  courses: { id: string; course_number: string; name: string } | null
+  location: string | null
+  open_status: boolean | null
+  courses: { id: string; course_number: string; name: string; slug: string } | null
   semesters: { id: string; name: string; is_current: boolean } | null
 }
 
@@ -418,6 +407,16 @@ interface SemesterCourse {
   course_id: string
   course_number: string
   course_name: string
+  course_slug: string
+  sections: {
+    section_number: string | null
+    index_number: string | null
+    meeting_days: string | null
+    meeting_times: string | null
+    campus: string | null
+    location: string | null
+    open_status: boolean | null
+  }[]
 }
 
 interface SemesterGroup {
@@ -437,7 +436,7 @@ function TeachingHistorySection({ professorId }: { professorId: string }) {
     async function load() {
       const { data } = await supabase!
         .from('teaching_assignments')
-        .select('section_number, campus, courses(id, course_number, name), semesters(id, name, is_current)')
+        .select('section_number, index_number, meeting_days, meeting_times, campus, location, open_status, courses(id, course_number, name, slug), semesters(id, name, is_current)')
         .eq('professor_id', professorId)
         .eq('status', 'active')
 
@@ -453,9 +452,26 @@ function TeachingHistorySection({ professorId }: { professorId: string }) {
           semMap.set(sem.id, { semester_id: sem.id, semester_name: sem.name, is_current: sem.is_current, courses: [] })
         }
         const sg = semMap.get(sem.id)!
-        if (!sg.courses.find(c => c.course_id === course.id)) {
-          sg.courses.push({ course_id: course.id, course_number: course.course_number, course_name: course.name })
+        let sc = sg.courses.find(c => c.course_id === course.id)
+        if (!sc) {
+          sc = {
+            course_id: course.id,
+            course_number: course.course_number,
+            course_name: course.name,
+            course_slug: course.slug,
+            sections: [],
+          }
+          sg.courses.push(sc)
         }
+        sc.sections.push({
+          section_number: r.section_number,
+          index_number: r.index_number,
+          meeting_days: r.meeting_days,
+          meeting_times: r.meeting_times,
+          campus: r.campus,
+          location: r.location,
+          open_status: r.open_status,
+        })
       }
 
       setSemesters(Array.from(semMap.values()).sort((a, b) => b.semester_name.localeCompare(a.semester_name)))
@@ -467,33 +483,106 @@ function TeachingHistorySection({ professorId }: { professorId: string }) {
   if (loading) return <div className="text-sm text-zinc-600 py-2">Loading teaching history...</div>
   if (semesters.length === 0) return null
 
+  // Unique courses across all semesters for quick links
+  const courseMap = new Map<string, SemesterCourse>()
+  for (const sem of semesters) {
+    for (const c of sem.courses) {
+      if (!courseMap.has(c.course_id)) courseMap.set(c.course_id, c)
+    }
+  }
+  const allCourses = Array.from(courseMap.values()).sort((a, b) =>
+    a.course_number.localeCompare(b.course_number)
+  )
+
   return (
-    <div className="space-y-4">
-      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Teaching History</h3>
-      {semesters.map(sem => (
-        <div key={sem.semester_id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-white text-sm">{sem.semester_name}</span>
-            {sem.is_current && (
-              <span className="text-[10px] font-black px-1.5 py-0.5 rounded border bg-green-950 border-green-800 text-green-400">
-                CURRENT
-              </span>
-            )}
-          </div>
-          <div className="divide-y divide-zinc-800/60">
-            {sem.courses.map(course => (
-              <div key={course.course_id} className="py-2 first:pt-0 last:pb-0">
-                <p className="text-sm text-zinc-300">
-                  <span className="font-mono text-xs text-zinc-500 mr-2">{course.course_number}</span>
-                  {course.course_name}
-                </p>
-              </div>
-            ))}
-          </div>
+    <div className="space-y-6">
+      {/* Courses taught quick links */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Courses Taught</h3>
+          <Badge tone="scarlet">Rutgers SOC</Badge>
         </div>
-      ))}
+        <div className="flex flex-wrap gap-2">
+          {allCourses.map(c => (
+            <Link
+              key={c.course_id}
+              href={`/course/${c.course_slug}`}
+              className="group bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 hover:border-[#CC0033]/50 transition-all"
+            >
+              <span className="font-mono text-xs text-zinc-500 group-hover:text-[#ff4d6d] transition-colors">
+                {c.course_number}
+              </span>
+              <span className="ml-2 text-sm text-zinc-300 group-hover:text-white transition-colors">
+                {c.course_name}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Per-semester detail */}
+      <div className="space-y-4">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Teaching History</h3>
+        {semesters.map(sem => (
+          <div key={sem.semester_id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-white text-sm">{sem.semester_name}</span>
+              {sem.is_current && <Badge tone="green">CURRENT</Badge>}
+            </div>
+            <div className="divide-y divide-zinc-800/60">
+              {sem.courses.map(course => (
+                <div key={course.course_id} className="py-2.5 first:pt-0 last:pb-0">
+                  <Link href={`/course/${course.course_slug}`} className="text-sm text-zinc-300 hover:text-[#ff4d6d] transition-colors">
+                    <span className="font-mono text-xs text-zinc-500 mr-2">{course.course_number}</span>
+                    {course.course_name}
+                  </Link>
+                  <div className="mt-1.5 space-y-1">
+                    {course.sections.map((s, i) => (
+                      <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+                        <span className="text-zinc-400">Sec {s.section_number ?? '—'}</span>
+                        {s.index_number && <span className="font-mono">idx {s.index_number}</span>}
+                        {(s.meeting_days || s.meeting_times) && (
+                          <span>{[s.meeting_days, s.meeting_times].filter(Boolean).join(' ')}</span>
+                        )}
+                        {(s.campus || s.location) && (
+                          <span className="text-zinc-600">{[s.campus, s.location].filter(Boolean).join(' · ')}</span>
+                        )}
+                        {s.open_status === true && sem.is_current && <Badge tone="green">OPEN</Badge>}
+                        {s.open_status === false && sem.is_current && <Badge tone="red">CLOSED</Badge>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
+}
+
+/** Resolves the SOC professors.id for an RMP professor so SOC-backed sections render on RMP profiles too. */
+function SocDataForRmpProfessor({ rmpId }: { rmpId: string }) {
+  const [professorId, setProfessorId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    async function load() {
+      const { data } = await supabase!
+        .from('professors')
+        .select('id')
+        .eq('rmp_id', rmpId)
+        .maybeSingle()
+      if (!cancelled && data) setProfessorId(data.id)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [rmpId])
+
+  if (!professorId) return null
+  return <TeachingHistorySection professorId={professorId} />
 }
 
 // ---------------------------------------------------------------------------
@@ -680,24 +769,10 @@ function SocProfessorContent({ socId }: { socId: string }) {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      <header className="border-b border-zinc-900 px-6 py-4 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/90">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </Link>
-          <div className="h-4 w-px bg-zinc-800" />
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded flex items-center justify-center font-black text-white text-xs" style={{ backgroundColor: '#CC0033' }}>RU</div>
-            <span className="font-bold text-white text-sm">RU Rate</span>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8">
           {prof.department && (
             <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{prof.department}</div>
           )}
@@ -708,6 +783,9 @@ function SocProfessorContent({ socId }: { socId: string }) {
           {prof.teaching_count > 0 && (
             <p className="text-sm text-zinc-600 mt-1">{prof.teaching_count} course sections on record</p>
           )}
+          <div className="mt-3">
+            <Badge tone="scarlet">Rutgers SOC data</Badge>
+          </div>
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -746,6 +824,7 @@ function ProfessorContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAllReviews, setShowAllReviews] = useState(false)
+  const [staleInfo, setStaleInfo] = useState<{ isStale: boolean; cacheAgeDays: number } | null>(null)
 
   useEffect(() => {
     if (!rmpId) { setError('No professor ID provided.'); setLoading(false); return }
@@ -761,6 +840,11 @@ function ProfessorContent() {
         if (!res.ok) throw new Error('Failed to load professor data')
         const json = await res.json()
         setData(json)
+        if (json.cached_at) {
+          const ageMs = Date.now() - new Date(json.cached_at).getTime()
+          const days = Math.floor(ageMs / (24 * 60 * 60 * 1000))
+          setStaleInfo({ isStale: days >= 30, cacheAgeDays: days })
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -801,29 +885,13 @@ function ProfessorContent() {
   const analysis = data.ai_analysis
   const ratings = (data.ratings ?? []) as Rating[]
   const visibleReviews = showAllReviews ? ratings : ratings.slice(0, 8)
-
-  return (
+return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      {/* Header */}
-      <header className="border-b border-zinc-900 px-6 py-4 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/90">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </Link>
-          <div className="h-4 w-px bg-zinc-800" />
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded flex items-center justify-center font-black text-white text-xs" style={{ backgroundColor: '#CC0033' }}>RU</div>
-            <span className="font-bold text-white text-sm">RU Rate</span>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
         {/* Hero block */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div>
               <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{data.department}</div>
@@ -832,17 +900,45 @@ function ProfessorContent() {
               </h1>
               <p className="text-zinc-400 mt-2">{data.school_name}</p>
               <p className="text-sm text-zinc-600 mt-1">{data.num_ratings} student ratings</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Badge>RateMyProfessors data</Badge>
+                {rmpId && (
+                  <CompareButton
+                    rmpId={rmpId}
+                    slug={data.slug}
+                    name={`${data.first_name} ${data.last_name}`}
+                    department={data.department}
+                  />
+                )}
+              </div>
             </div>
 
-            <div className="flex gap-6 shrink-0">
-              <RatingCircle value={data.avg_rating ?? 0} label="Quality" />
-              <RatingCircle value={data.avg_difficulty ?? 0} label="Difficulty" />
-              {data.would_take_again != null && (
-                <RatingCircle value={data.would_take_again} label="Again" pct />
-              )}
-            </div>
+            {data.num_ratings > 0 ? (
+              <div className="flex gap-6 shrink-0">
+                <RatingCircle value={data.avg_rating ?? 0} label="Quality" />
+                <RatingCircle value={data.avg_difficulty ?? 0} label="Difficulty" />
+                {data.would_take_again != null && (
+                  <RatingCircle value={data.would_take_again} label="Again" pct />
+                )}
+              </div>
+            ) : (
+              <div className="shrink-0 flex items-center justify-center bg-zinc-800/50 border border-zinc-700 rounded-xl px-6 py-4 text-center">
+                <div>
+                  <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">RMP Rating</div>
+                  <div className="text-sm text-zinc-400 mt-1">No ratings yet</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Stale cache notice */}
+        {staleInfo?.isStale && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50 text-xs text-amber-400">
+            <span>⚠</span>
+            <span>RMP data last refreshed {staleInfo.cacheAgeDays} days ago — ratings may be outdated.</span>
+          </div>
+        )}
 
         {/* Verdict */}
         {analysis && <VerdictBox analysis={analysis} />}
@@ -919,6 +1015,9 @@ function ProfessorContent() {
             <GradeChart ratings={ratings} />
           </div>
         )}
+
+        {/* Teaching history + courses taught (Rutgers SOC) */}
+        {rmpId && <SocDataForRmpProfessor rmpId={rmpId} />}
 
         {/* Native reviews (RU Rate) — above RMP reviews */}
         {rmpId && <NativeReviewsSection rmpId={rmpId} />}

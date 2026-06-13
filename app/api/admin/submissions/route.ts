@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceClient } from '@/lib/supabase-server'
+import { isAdminAuthorized } from '@/lib/admin-auth'
 
 export async function GET(req: NextRequest) {
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+  if (!isAdminAuthorized(req.headers.get('authorization'))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const supabase = createServiceClient()
   const status = req.nextUrl.searchParams.get('status')
 
   let query = supabase

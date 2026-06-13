@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceClient } from '@/lib/supabase-server'
+import { isAdminAuthorized } from '@/lib/admin-auth'
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+  if (!isAdminAuthorized(req.headers.get('authorization'))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const supabase = createServiceClient()
   const { id } = await params
   const body = await req.json()
   const { status } = body
