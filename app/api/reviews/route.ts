@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
 
   const {
     rmp_id,
+    professor_id: direct_professor_id,
     quality_rating,
     difficulty_rating,
     would_take_again,
@@ -157,9 +158,11 @@ export async function POST(req: NextRequest) {
   const cleanTags = sanitizeTags(tags)
   const cleanGrade = sanitizeGrade(grade_received)
 
-  if (!rmp_id || typeof rmp_id !== 'string' || typeof comment !== 'string') {
+  const hasIdentifier = (typeof rmp_id === 'string' && rmp_id.length > 0) ||
+    (typeof direct_professor_id === 'string' && direct_professor_id.length > 0)
+  if (!hasIdentifier || typeof comment !== 'string') {
     return NextResponse.json(
-      { error: 'rmp_id, quality_rating, difficulty_rating, and comment are required' },
+      { error: 'rmp_id or professor_id, plus quality_rating, difficulty_rating, and comment are required' },
       { status: 400 }
     )
   }
@@ -186,18 +189,29 @@ export async function POST(req: NextRequest) {
 
   const reviewer_ip = buildReviewerFingerprint(req)
 
-  // Look up professor by rmp_id
-  const { data: professor, error: profError } = await db
-    .from('professors')
-    .select('id')
-    .eq('rmp_id', rmp_id)
-    .single()
-
-  if (profError || !professor) {
-    return NextResponse.json({ error: 'Professor not found' }, { status: 404 })
+  // Resolve professor ID: prefer direct UUID, fall back to rmp_id lookup
+  let professor_id: string
+  if (typeof direct_professor_id === 'string' && direct_professor_id.length > 0) {
+    const { data: prof, error: profError } = await db
+      .from('professors')
+      .select('id')
+      .eq('id', direct_professor_id)
+      .single()
+    if (profError || !prof) {
+      return NextResponse.json({ error: 'Professor not found' }, { status: 404 })
+    }
+    professor_id = prof.id
+  } else {
+    const { data: prof, error: profError } = await db
+      .from('professors')
+      .select('id')
+      .eq('rmp_id', rmp_id as string)
+      .single()
+    if (profError || !prof) {
+      return NextResponse.json({ error: 'Professor not found' }, { status: 404 })
+    }
+    professor_id = prof.id
   }
-
-  const professor_id = professor.id
 
   // Rate limit: max 3 reviews per professor per IP
   const { count } = await db

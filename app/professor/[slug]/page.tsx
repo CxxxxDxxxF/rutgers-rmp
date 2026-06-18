@@ -157,7 +157,7 @@ function ratingColor(r: number) {
 }
 
 function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
-  const qColor = ratingColor(prof.avg_rating)
+  const qColor = ratingColor(prof.avg_rating ?? 0)
   const href = prof.rmp_id
     ? `/professor/${prof.slug}?rmpId=${prof.rmp_id}`
     : `/professor/${prof.slug}`
@@ -309,7 +309,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
             </span>
           )}
         </h3>
-        {rmpId && !showForm && (
+        {(rmpId || professorId) && !showForm && (
           <button
             onClick={() => setShowForm(true)}
             className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-opacity hover:opacity-80"
@@ -320,9 +320,10 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         )}
       </div>
 
-      {showForm && rmpId && professorId && (
+      {showForm && (rmpId || professorId) && (
         <WriteReviewForm
           rmpId={rmpId}
+          professorId={professorId ?? undefined}
           onSubmitted={handleReviewSubmitted}
           onCancel={() => setShowForm(false)}
         />
@@ -335,7 +336,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
           <div className="text-2xl">📝</div>
           <p className="text-sm font-semibold text-white">Be the first to review on RU Rate!</p>
           <p className="text-xs text-zinc-500">Share your experience to help fellow Rutgers students.</p>
-          {rmpId && (
+          {(rmpId || professorId) && (
             <button
               onClick={() => setShowForm(true)}
               className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-80"
