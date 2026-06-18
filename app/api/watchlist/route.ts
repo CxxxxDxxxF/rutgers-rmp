@@ -11,7 +11,7 @@ const MAX_WATCHES_PER_WATCHER = 50
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 function isValidWatcherId(id: string | null): id is string {
-  return !!id && /^[0-9a-fA-F-]{8,64}$/.test(id)
+  return !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
 }
 
 function getServiceClient() {

@@ -1,21 +1,21 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { AnimatePresence, motion } from 'motion/react'
 import AppHeader from '@/components/AppHeader'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import { CopyButton } from '@/components/SectionTable'
 import { RowListSkeleton } from '@/components/LoadingSkeleton'
 import {
-  currentSectionStatus,
   addWatchByIndex,
+  currentSectionStatus,
   isNewlyOpen,
   markWatchStatusSeen,
   removeWatch,
   updateWatchNotificationsDetailed,
   useWatchlist,
-  type NotificationSettingsInput,
   type WatchedSection,
 } from '@/lib/watchlist-client'
 
@@ -23,174 +23,456 @@ const ALERT_NOTIFIED_KEY = 'ru-rate-open-alert-notified'
 const QUICK_ALERT_PREFS_KEY = 'ru-rate-sniper-alert-prefs'
 const WEBREG_URL = 'https://sims.rutgers.edu/webreg/'
 
-function StatusBadge({ watch }: { watch: WatchedSection }) {
-  const s = watch.section
-  if (!s) return <Badge tone="neutral">COURSE</Badge>
-  if (s.open_status === true) return <Badge tone="green">OPEN</Badge>
-  if (s.open_status === false) return <Badge tone="red">CLOSED</Badge>
-  return <Badge tone="neutral">UNKNOWN</Badge>
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function openStatus(w: WatchedSection): 'open' | 'closed' | 'unknown' {
+  if (!w.section) return 'unknown'
+  if (w.section.open_status === true) return 'open'
+  if (w.section.open_status === false) return 'closed'
+  return 'unknown'
 }
 
-function WebRegButton({ indexNumber }: { indexNumber: string }) {
-  async function openWebReg() {
-    try {
-      await navigator.clipboard.writeText(indexNumber)
-    } catch {
-      // Clipboard can be blocked by browser settings; WebReg still opens.
-    }
+function watchTitle(w: WatchedSection) {
+  return `${w.course?.course_number ?? 'Course'} ${w.section?.section_number ? `Sec ${w.section.section_number}` : ''}`.trim()
+}
+
+function alertKey(w: WatchedSection) {
+  return `${w.id}:${w.section?.status_updated_at ?? currentSectionStatus(w) ?? 'open'}`
+}
+
+function formatLocation(section: WatchedSection['section']): string | null {
+  if (!section) return null
+  const parts: string[] = []
+  if (section.campus) parts.push(section.campus)
+  if (section.location) parts.push(section.location)
+  return parts.length ? parts.join(' · ') : null
+}
+
+function formatMeets(section: WatchedSection['section']): string | null {
+  if (!section) return null
+  const parts: string[] = []
+  if (section.meeting_days) parts.push(section.meeting_days)
+  if (section.meeting_times) parts.push(section.meeting_times)
+  return parts.length ? parts.join(' ') : null
+}
+
+function readNotifiedKeys() {
+  try { return new Set(JSON.parse(localStorage.getItem(ALERT_NOTIFIED_KEY) ?? '[]') as string[]) }
+  catch { return new Set<string>() }
+}
+
+function writeNotifiedKeys(keys: Set<string>) {
+  try { localStorage.setItem(ALERT_NOTIFIED_KEY, JSON.stringify([...keys].slice(-200))) }
+  catch { /* localStorage blocked */ }
+}
+
+function readQuickPrefs() {
+  if (typeof window === 'undefined') return null
+  try { return JSON.parse(localStorage.getItem(QUICK_ALERT_PREFS_KEY) ?? 'null') as { email?: string; phone?: string; emailEnabled?: boolean; smsEnabled?: boolean } | null }
+  catch { return null }
+}
+
+function writeQuickPrefs(prefs: { email: string; phone: string; emailEnabled: boolean; smsEnabled: boolean }) {
+  try { localStorage.setItem(QUICK_ALERT_PREFS_KEY, JSON.stringify(prefs)) }
+  catch { /* localStorage blocked */ }
+}
+
+// ─── StatusPip ────────────────────────────────────────────────────────────────
+
+function StatusPip({ status }: { status: 'open' | 'closed' | 'unknown' }) {
+  if (status === 'open') {
+    return (
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-400" />
+      </span>
+    )
+  }
+  if (status === 'closed') {
+    return <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500/70" />
+  }
+  return <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-zinc-600" />
+}
+
+// ─── CourseNumberBadge ────────────────────────────────────────────────────────
+// Color reflects section status, not always scarlet — avoids "everything looks closed"
+
+function CourseNumberBadge({ watch }: { watch: WatchedSection }) {
+  if (!watch.course) return null
+  const status = openStatus(watch)
+  const styles = {
+    open:    'bg-green-500/15 border border-green-500/40 text-green-300 hover:bg-green-500/25',
+    closed:  'bg-zinc-800/80 border border-zinc-700 text-zinc-400 hover:bg-zinc-700/60',
+    unknown: 'bg-zinc-800/60 border border-zinc-800 text-zinc-500 hover:bg-zinc-700/50',
+  }[status]
+
+  return (
+    <Link
+      href={`/course/${watch.course.slug}`}
+      className={`text-[11px] font-black tracking-wider px-2 py-0.5 rounded transition-all ${styles}`}
+    >
+      {watch.course.course_number}
+    </Link>
+  )
+}
+
+// ─── WebRegButton ─────────────────────────────────────────────────────────────
+
+function WebRegButton({ indexNumber, compact = false }: { indexNumber: string; compact?: boolean }) {
+  const [clicked, setClicked] = useState(false)
+
+  async function go() {
+    if (clicked) return
+    setClicked(true)
+    try { await navigator.clipboard.writeText(indexNumber) } catch { /* blocked */ }
     window.open(WEBREG_URL, '_blank', 'noopener,noreferrer')
+    setTimeout(() => setClicked(false), 2000)
   }
 
   return (
     <button
-      onClick={openWebReg}
-      className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+      onClick={go}
+      className={`inline-flex items-center gap-1.5 font-semibold rounded-lg border transition-all ${
+        compact ? 'text-[11px] px-2 py-1' : 'text-xs px-3 py-1.5'
+      } ${
+        clicked
+          ? 'bg-green-500/20 border-green-600 text-green-300'
+          : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-500 hover:text-white'
+      }`}
     >
-      Copy + WebReg
+      {clicked ? (
+        <>
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Copied!
+        </>
+      ) : (
+        <>
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+          WebReg
+        </>
+      )}
     </button>
   )
 }
 
-function WatchRow({ watch }: { watch: WatchedSection }) {
+// ─── InlineNotificationPanel ──────────────────────────────────────────────────
+
+function InlineNotificationPanel({ watch, onClose }: { watch: WatchedSection; onClose: () => void }) {
+  const ns = watch.notification_settings
+  const [email, setEmail] = useState(ns?.email ?? '')
+  const [phone, setPhone] = useState(ns?.phone_e164 ?? '')
+  const [emailEnabled, setEmailEnabled] = useState(ns?.email_enabled ?? false)
+  const [smsEnabled, setSmsEnabled] = useState(ns?.sms_enabled ?? false)
+  const [notifyOnOpen, setNotifyOnOpen] = useState(ns?.notify_on_open ?? true)
+  const [notifyOnClose, setNotifyOnClose] = useState(ns?.notify_on_close ?? false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    if (saving) return
+    setSaving(true)
+    setSaved(false)
+    setError(null)
+    try {
+      const result = await updateWatchNotificationsDetailed(
+        { email, phone_e164: phone, email_enabled: emailEnabled, sms_enabled: smsEnabled, notify_on_open: notifyOnOpen, notify_on_close: notifyOnClose },
+        [watch.id]
+      )
+      if (result.ok) { setSaved(true); setTimeout(onClose, 800) }
+      else setError(result.error ?? 'Failed to save')
+    } catch {
+      setError('Network error — check your connection')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.22, ease: 'easeInOut' }}
+      className="overflow-hidden"
+    >
+      <div className="border-t border-zinc-800 mt-3 pt-3 space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Alert settings for this snipe</p>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-[11px] text-zinc-500 font-medium">Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="mt-1 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] text-zinc-500 font-medium">Phone (E.164)</span>
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="+17325551234"
+              className="mt-1 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-4">
+          {[
+            { label: 'Email alerts', checked: emailEnabled, set: setEmailEnabled },
+            { label: 'SMS alerts', checked: smsEnabled, set: setSmsEnabled },
+            { label: 'Notify when open', checked: notifyOnOpen, set: setNotifyOnOpen },
+            { label: 'Notify when closed', checked: notifyOnClose, set: setNotifyOnClose },
+          ].map(({ label, checked, set }) => (
+            <label key={label} className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
+              <div
+                onClick={() => set(!checked)}
+                className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer ${checked ? 'bg-[#CC0033]' : 'bg-zinc-700'}`}
+              >
+                <div className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </div>
+              {label}
+            </label>
+          ))}
+        </div>
+
+        {error && (
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-red-400 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            {error}
+          </motion.p>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="px-4 py-1.5 rounded-lg bg-[#CC0033] text-white text-xs font-semibold hover:bg-[#a8002b] disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save alerts'}
+          </button>
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── WatchCard ────────────────────────────────────────────────────────────────
+
+function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean }) {
   const [removing, setRemoving] = useState(false)
+  const [showNotifs, setShowNotifs] = useState(false)
+  const status = openStatus(watch)
   const s = watch.section
   const indexNumber = watch.index_number ?? s?.index_number ?? null
+  const newly = isNew && isNewlyOpen(watch)
+  const hasAlerts = watch.notification_settings?.email_enabled || watch.notification_settings?.sms_enabled
+
+  const location = formatLocation(s)
+  const meets = formatMeets(s)
+
+  const statusBar = {
+    open:    'bg-green-400',
+    closed:  'bg-red-500/60',
+    unknown: 'bg-zinc-700',
+  }[status]
+
+  const cardBg = newly
+    ? 'bg-zinc-900 border-green-800/60 motion-flash-open'
+    : status === 'open'
+    ? 'bg-zinc-900 border-green-900/40'
+    : 'bg-zinc-900 border-zinc-800'
 
   async function handleRemove() {
     if (removing) return
     setRemoving(true)
     try {
       await removeWatch(watch.id)
-    } finally {
+    } catch {
       setRemoving(false)
     }
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 sm:p-5">
-      <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <StatusBadge watch={watch} />
-            {watch.course && (
-              <Link
-                href={`/course/${watch.course.slug}`}
-                className="text-xs font-black tracking-wider px-2 py-0.5 rounded text-white hover:brightness-110 transition-all"
-                style={{ backgroundColor: '#CC0033' }}
-              >
-                {watch.course.course_number}
-              </Link>
-            )}
-            {s?.semester_name && <span className="text-xs text-zinc-500">{s.semester_name}</span>}
+    <div className={`relative overflow-hidden rounded-xl border transition-all ${cardBg} ${status === 'open' ? 'motion-pulse-green' : ''}`}>
+      {/* left status bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusBar} rounded-l-xl`} />
+
+      <div className="pl-4 pr-4 pt-4 pb-3 sm:pl-5 sm:pr-5">
+        {/* top row */}
+        <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+          <div className="min-w-0 flex-1">
+            {/* status + course number + semester */}
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <StatusPip status={status} />
+              <span className={`text-[11px] font-bold tracking-wide ${
+                status === 'open' ? 'text-green-400' : status === 'closed' ? 'text-red-400/80' : 'text-zinc-500'
+              }`}>
+                {status === 'open' ? 'OPEN' : status === 'closed' ? 'CLOSED' : 'UNKNOWN'}
+              </span>
+              <CourseNumberBadge watch={watch} />
+              {s?.semester_name && (
+                <span className="text-[11px] text-zinc-600 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
+                  {s.semester_name}
+                </span>
+              )}
+              {newly && <Badge tone="green">NEW OPEN ↑</Badge>}
+            </div>
+
+            {/* course name */}
+            <Link
+              href={watch.course ? `/course/${watch.course.slug}` : '#'}
+              className="font-semibold text-white hover:text-[#ff4d6d] transition-colors leading-snug block"
+            >
+              {watch.course?.name ?? 'Unknown course'}
+            </Link>
+
+            {/* section details */}
+            <div className="mt-2 space-y-1">
+              {s ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-400">
+                    {s.section_number && (
+                      <span className="font-mono text-zinc-500">§{s.section_number}</span>
+                    )}
+                    {s.professor ? (
+                      <Link
+                        href={
+                          s.professor.rmp_id
+                            ? `/professor/${s.professor.slug}?rmpId=${s.professor.rmp_id}`
+                            : `/professor/${s.professor.slug}?socId=${s.professor.id}`
+                        }
+                        className="text-zinc-300 hover:text-[#ff4d6d] transition-colors"
+                      >
+                        {s.professor.first_name} {s.professor.last_name}
+                      </Link>
+                    ) : s.instructor_name_raw ? (
+                      <span className="text-zinc-400">{s.instructor_name_raw}</span>
+                    ) : (
+                      <span className="text-zinc-600">Instructor TBA</span>
+                    )}
+                    {meets && (
+                      <span className="flex items-center gap-1 text-zinc-400">
+                        <svg className="w-3 h-3 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {meets}
+                      </span>
+                    )}
+                  </div>
+                  {location && (
+                    <div className="flex items-center gap-1 text-xs text-zinc-500">
+                      <svg className="w-3 h-3 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {location}
+                    </div>
+                  )}
+                  {s.status_updated_at && (
+                    <div className="text-[11px] text-zinc-600">
+                      Synced {new Date(s.status_updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-zinc-600">Watching whole course — pick a section for section-level alerts.</p>
+              )}
+            </div>
           </div>
 
-          <Link
-            href={watch.course ? `/course/${watch.course.slug}` : '#'}
-            className="font-semibold text-white hover:text-[#ff4d6d] transition-colors leading-snug block truncate"
-          >
-            {watch.course?.name ?? 'Unknown course'}
-          </Link>
-
-          <div className="mt-2 text-xs text-zinc-400 space-y-1">
-            {s ? (
-              <>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span>Sec {s.section_number ?? '—'}</span>
-                  {s.professor ? (
-                    <Link
-                      href={
-                        s.professor.rmp_id
-                          ? `/professor/${s.professor.slug}?rmpId=${s.professor.rmp_id}`
-                          : `/professor/${s.professor.slug}?socId=${s.professor.id}`
-                      }
-                      className="text-zinc-300 hover:text-[#ff4d6d] transition-colors"
-                    >
-                      {s.professor.first_name} {s.professor.last_name}
-                    </Link>
-                  ) : (
-                    <span>{s.instructor_name_raw || 'Instructor TBA'}</span>
-                  )}
-                  {(s.meeting_days || s.meeting_times) && (
-                    <span>{[s.meeting_days, s.meeting_times].filter(Boolean).join(' ')}</span>
-                  )}
-                  {(s.campus || s.location) && (
-                    <span className="text-zinc-500">{[s.campus, s.location].filter(Boolean).join(' · ')}</span>
-                  )}
-                </div>
-                {s.status_updated_at && (
-                  <div className="text-zinc-600">
-                    Status synced {new Date(s.status_updated_at).toLocaleDateString()}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-zinc-500">
-                Watching the whole course — open it to watch specific sections.
+          {/* right side: index + actions */}
+          <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
+            {indexNumber && (
+              <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5">
+                <span className="font-mono text-sm font-bold text-zinc-200">{indexNumber}</span>
+                <CopyButton value={indexNumber} label="index" />
               </div>
             )}
+            <div className="flex items-center gap-1.5 flex-wrap sm:justify-end">
+              {indexNumber && <WebRegButton indexNumber={indexNumber} compact />}
+              {s?.source_url && (
+                <a
+                  href={s.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 transition-colors"
+                >
+                  SOC ↗
+                </a>
+              )}
+              {/* bell toggle */}
+              <button
+                onClick={() => setShowNotifs(v => !v)}
+                title="Alert settings"
+                className={`p-1.5 rounded-lg border transition-colors ${
+                  hasAlerts
+                    ? 'bg-[#CC0033]/15 border-[#CC0033]/40 text-[#ff4d6d] hover:bg-[#CC0033]/25'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-200 hover:border-zinc-500'
+                }`}
+              >
+                {hasAlerts ? (
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 20 20" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17H5a1 1 0 01-.707-1.707L5 14.586V11a7 7 0 0110 0v3.586l.707.707A1 1 0 0115 17zM10 19a2 2 0 01-2-2h4a2 2 0 01-2 2z" />
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={handleRemove}
+                disabled={removing}
+                className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900/60 hover:bg-red-950/20 transition-colors disabled:opacity-40"
+                title="Remove snipe"
+              >
+                {removing ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
-            {indexNumber && (
-              <span className="inline-flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5">
-                <span className="font-mono text-sm text-zinc-200">{indexNumber}</span>
-                <CopyButton value={indexNumber} label="index number" />
-              </span>
-            )}
-          <div className="flex items-center gap-2">
-            {indexNumber && <WebRegButton indexNumber={indexNumber} />}
-            {s?.source_url && (
-              <a
-                href={s.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors"
-              >
-                SOC ↗
-              </a>
-            )}
-            <button
-              onClick={handleRemove}
-              disabled={removing}
-              className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-red-400 hover:border-red-900 transition-colors disabled:opacity-50"
-            >
-              Remove
-            </button>
-          </div>
-        </div>
+        {/* expandable notification panel */}
+        <AnimatePresence>
+          {showNotifs && (
+            <InlineNotificationPanel watch={watch} onClose={() => setShowNotifs(false)} />
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
 }
 
-function watchTitle(watch: WatchedSection) {
-  return `${watch.course?.course_number ?? 'Course'} ${watch.section?.section_number ? `Sec ${watch.section.section_number}` : ''}`.trim()
-}
-
-function alertKey(watch: WatchedSection) {
-  return `${watch.id}:${watch.section?.status_updated_at ?? currentSectionStatus(watch) ?? 'open'}`
-}
-
-function readNotifiedKeys() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(ALERT_NOTIFIED_KEY) ?? '[]') as string[])
-  } catch {
-    return new Set<string>()
-  }
-}
-
-function writeNotifiedKeys(keys: Set<string>) {
-  try {
-    localStorage.setItem(ALERT_NOTIFIED_KEY, JSON.stringify([...keys].slice(-200)))
-  } catch {
-    // localStorage blocked — in-app alerts still work
-  }
-}
+// ─── OpenSectionAlerts ────────────────────────────────────────────────────────
 
 function OpenSectionAlerts({ newlyOpen }: { newlyOpen: WatchedSection[] }) {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
   const [markingSeen, setMarkingSeen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setPermission('Notification' in window ? Notification.permission : 'unsupported')
@@ -198,126 +480,139 @@ function OpenSectionAlerts({ newlyOpen }: { newlyOpen: WatchedSection[] }) {
 
   useEffect(() => {
     if (permission !== 'granted' || newlyOpen.length === 0) return
-
     const notified = readNotifiedKeys()
     let changed = false
-
     for (const watch of newlyOpen) {
       const key = alertKey(watch)
       if (notified.has(key)) continue
-
-      const indexNumber = watch.index_number ?? watch.section?.index_number
-      new Notification('Section is open', {
-        body: `${watchTitle(watch)}${indexNumber ? ` · Index ${indexNumber}` : ''}`,
+      const idx = watch.index_number ?? watch.section?.index_number
+      new Notification('Seat opened!', {
+        body: `${watchTitle(watch)}${idx ? ` · Index ${idx}` : ''}`,
         tag: key,
       })
       notified.add(key)
       changed = true
     }
-
     if (changed) writeNotifiedKeys(notified)
   }, [newlyOpen, permission])
 
   if (newlyOpen.length === 0) return null
 
   async function enableNotifications() {
-    if (!('Notification' in window)) {
-      setPermission('unsupported')
-      return
-    }
-    const nextPermission = await Notification.requestPermission()
-    setPermission(nextPermission)
+    if (!('Notification' in window)) { setPermission('unsupported'); return }
+    const next = await Notification.requestPermission()
+    setPermission(next)
   }
 
   async function markSeen() {
     if (markingSeen) return
     setMarkingSeen(true)
+    setError(null)
     try {
       await markWatchStatusSeen(newlyOpen.map(w => w.id), 'OPEN')
+    } catch {
+      setError('Failed to mark seen — try again')
     } finally {
       setMarkingSeen(false)
     }
   }
 
   return (
-    <div className="mb-6 border border-green-800 bg-green-950/30 rounded-xl p-4 sm:p-5">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="green">OPEN ALERT</Badge>
-            <p className="text-white font-semibold">
-              {newlyOpen.length === 1 ? 'A watched section opened.' : `${newlyOpen.length} watched sections opened.`}
-            </p>
-          </div>
-          <p className="text-xs text-green-100/70 mt-1">
-            Based on the last Schedule of Classes sync. Confirm in WebReg before registering.
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="mb-5 rounded-xl border border-green-700/60 bg-green-950/20 overflow-hidden"
+    >
+      {/* header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 border-b border-green-800/30 bg-green-950/30">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-400" />
+          </span>
+          <p className="text-sm font-bold text-green-300">
+            {newlyOpen.length === 1 ? '1 watched section just opened' : `${newlyOpen.length} watched sections just opened`}
           </p>
         </div>
-
         <div className="flex flex-wrap gap-2">
           {permission === 'default' && (
             <button
               onClick={enableNotifications}
-              className="text-xs font-semibold px-3 py-2 rounded-lg bg-green-500 text-black hover:bg-green-400 transition-colors"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-500 text-black hover:bg-green-400 transition-colors"
             >
-              Enable Alerts
+              Enable browser alerts
             </button>
           )}
           {permission === 'denied' && (
-            <span className="text-[11px] text-green-100/60 py-2">
-              Browser notifications are blocked.
-            </span>
+            <span className="text-[11px] text-green-100/50 py-1.5">Browser alerts blocked</span>
           )}
           <button
             onClick={markSeen}
             disabled={markingSeen}
-            className="text-xs font-semibold px-3 py-2 rounded-lg bg-zinc-900 border border-green-800 text-green-300 hover:text-white transition-colors disabled:opacity-50"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-green-700 text-green-300 hover:text-white hover:border-green-500 transition-colors disabled:opacity-50"
           >
-            {markingSeen ? 'Marking...' : 'Mark Seen'}
+            {markingSeen ? 'Marking…' : 'Mark seen'}
           </button>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2">
+      {error && (
+        <div className="px-4 py-2 bg-red-950/30 border-b border-red-900/40 text-xs text-red-400 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          {error}
+        </div>
+      )}
+
+      <div className="p-3 grid gap-2">
         {newlyOpen.map(watch => {
-          const indexNumber = watch.index_number ?? watch.section?.index_number
+          const idx = watch.index_number ?? watch.section?.index_number
           return (
-            <div key={watch.id} className="rounded-lg border border-green-900/70 bg-black/30 px-3 py-2">
+            <div key={watch.id} className="rounded-lg border border-green-800/40 bg-black/20 px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-sm text-white font-semibold truncate">
-                    {watch.course?.course_number ?? 'Course'} · {watch.course?.name ?? 'Unknown course'}
+                  <p className="text-sm font-semibold text-white truncate">
+                    {watch.course?.course_number ?? '—'} · {watch.course?.name ?? 'Unknown course'}
                   </p>
-                  <p className="text-xs text-green-100/60">
-                    Sec {watch.section?.section_number ?? '—'}
-                    {watch.section?.semester_name ? ` · ${watch.section.semester_name}` : ''}
-                    {indexNumber ? ` · Index ${indexNumber}` : ''}
+                  <p className="text-xs text-green-300/70">
+                    {[
+                      watch.section?.section_number ? `Sec ${watch.section.section_number}` : null,
+                      watch.section?.semester_name,
+                      idx ? `Index ${idx}` : null,
+                    ].filter(Boolean).join(' · ')}
                   </p>
                 </div>
-                {indexNumber && (
-                  <span className="inline-flex items-center gap-2 rounded-lg border border-green-800 bg-green-950/60 px-2 py-1">
-                    <span className="font-mono text-sm text-green-100">{indexNumber}</span>
-                    <CopyButton value={indexNumber} label="index number" />
-                    <WebRegButton indexNumber={indexNumber} />
-                  </span>
+                {idx && (
+                  <div className="flex items-center gap-1.5">
+                    <WebRegButton indexNumber={idx} compact />
+                  </div>
                 )}
               </div>
             </div>
           )
         })}
       </div>
-    </div>
+
+      <p className="px-4 pb-3 text-[11px] text-green-100/40 leading-relaxed">
+        Confirm in WebReg before registering — status is from the last SOC sync, not live.
+      </p>
+    </motion.div>
   )
 }
 
-function NotificationSettings({ items }: { items: WatchedSection[] }) {
+// ─── GlobalNotificationCenter ─────────────────────────────────────────────────
+
+function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
+  const [open, setOpen] = useState(false)
   const first = items[0]?.notification_settings
   const [email, setEmail] = useState(first?.email ?? '')
   const [phone, setPhone] = useState(first?.phone_e164 ?? '')
   const [emailEnabled, setEmailEnabled] = useState(first?.email_enabled ?? false)
   const [smsEnabled, setSmsEnabled] = useState(first?.sms_enabled ?? false)
   const [notifyOnOpen, setNotifyOnOpen] = useState(first?.notify_on_open ?? true)
-  const [notifyOnClose, setNotifyOnClose] = useState(first?.notify_on_close ?? true)
+  const [notifyOnClose, setNotifyOnClose] = useState(first?.notify_on_close ?? false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -328,124 +623,144 @@ function NotificationSettings({ items }: { items: WatchedSection[] }) {
     setEmailEnabled(first?.email_enabled ?? false)
     setSmsEnabled(first?.sms_enabled ?? false)
     setNotifyOnOpen(first?.notify_on_open ?? true)
-    setNotifyOnClose(first?.notify_on_close ?? true)
+    setNotifyOnClose(first?.notify_on_close ?? false)
   }, [first])
 
-  async function save() {
+  const activeChannels = [emailEnabled && 'email', smsEnabled && 'SMS'].filter(Boolean).join(' + ')
+
+  async function saveAll() {
     if (saving) return
     setSaving(true)
     setSaved(false)
     setError(null)
-    const settings: NotificationSettingsInput = {
-      email,
-      phone_e164: phone,
-      email_enabled: emailEnabled,
-      sms_enabled: smsEnabled,
-      notify_on_open: notifyOnOpen,
-      notify_on_close: notifyOnClose,
-    }
     try {
-      const result = await updateWatchNotificationsDetailed(settings, items.map(item => item.id))
-      setSaved(result.ok)
-      if (!result.ok) setError(result.error ?? 'Failed to save alert settings')
+      const result = await updateWatchNotificationsDetailed(
+        { email, phone_e164: phone, email_enabled: emailEnabled, sms_enabled: smsEnabled, notify_on_open: notifyOnOpen, notify_on_close: notifyOnClose },
+        items.map(i => i.id)
+      )
+      if (result.ok) { setSaved(true); setTimeout(() => setOpen(false), 900) }
+      else setError(result.error ?? 'Failed to save')
+    } catch {
+      setError('Network error — check your connection')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <section className="mb-6 border border-zinc-800 bg-zinc-950 rounded-xl p-4 sm:p-5">
-      <div className="flex flex-col lg:flex-row lg:items-end gap-4">
-        <div className="min-w-0 flex-1">
-          <p className="text-white font-semibold">Email and SMS alerts</p>
-          <p className="text-xs text-zinc-500 mt-1">
-            Saved to your watched sections. Alerts send when Railway detects an open or closed status change.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="mt-1 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033]"
-              />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Phone</span>
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="+17325551234"
-                className="mt-1 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033]"
-              />
-            </label>
+    <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 sm:px-5 hover:bg-zinc-900/60 transition-colors group"
+      >
+        <div className="flex items-center gap-3">
+          <div className={`p-1.5 rounded-lg border transition-colors ${
+            activeChannels ? 'bg-[#CC0033]/15 border-[#CC0033]/40 text-[#ff4d6d]' : 'bg-zinc-800 border-zinc-700 text-zinc-500 group-hover:text-zinc-300'
+          }`}>
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+            </svg>
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-semibold text-white">Notification center</p>
+            <p className="text-[11px] text-zinc-500">
+              {activeChannels ? `Active: ${activeChannels} · applies to all ${items.length} snipes` : `No channels active · set email or SMS below`}
+            </p>
           </div>
         </div>
+        <svg
+          className={`w-4 h-4 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
-        <div className="grid gap-2 text-xs text-zinc-300">
-          <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} />
-            Email
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={smsEnabled} onChange={e => setSmsEnabled(e.target.checked)} />
-            SMS
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={notifyOnOpen} onChange={e => setNotifyOnOpen(e.target.checked)} />
-            Open
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={notifyOnClose} onChange={e => setNotifyOnClose(e.target.checked)} />
-            Closed
-          </label>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:min-w-32">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="rounded-lg bg-[#CC0033] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a8002a] disabled:opacity-50"
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
           >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          {saved && <span className="text-[11px] text-green-400 text-center">Saved</span>}
-          {error && <span className="text-[11px] text-red-400 text-center">{error}</span>}
-        </div>
-      </div>
-    </section>
+            <div className="border-t border-zinc-800 px-4 pt-4 pb-5 sm:px-5 space-y-4">
+              <p className="text-xs text-zinc-500">Applies to all your snipes. You can also set per-snipe alerts via the 🔔 on each card.</p>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Email</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="mt-1.5 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Phone (E.164)</span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="+17325551234"
+                    className="mt-1.5 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'Email', sublabel: 'via Resend', checked: emailEnabled, set: setEmailEnabled },
+                  { label: 'SMS', sublabel: 'via Twilio', checked: smsEnabled, set: setSmsEnabled },
+                  { label: 'Notify open', sublabel: 'seat opens', checked: notifyOnOpen, set: setNotifyOnOpen },
+                  { label: 'Notify closed', sublabel: 'seat closes', checked: notifyOnClose, set: setNotifyOnClose },
+                ].map(({ label, sublabel, checked, set }) => (
+                  <button
+                    key={label}
+                    onClick={() => set(!checked)}
+                    className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                      checked
+                        ? 'bg-[#CC0033]/10 border-[#CC0033]/40 text-white'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className="text-xs font-semibold">{label}</span>
+                      <div className={`w-3 h-3 rounded-full border-2 transition-colors ${checked ? 'bg-[#CC0033] border-[#CC0033]' : 'border-zinc-600'}`} />
+                    </div>
+                    <span className="text-[11px] text-zinc-600">{sublabel}</span>
+                  </button>
+                ))}
+              </div>
+
+              {error && (
+                <p className="text-xs text-red-400 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {error}
+                </p>
+              )}
+
+              <button
+                onClick={saveAll}
+                disabled={saving}
+                className="px-5 py-2 rounded-lg bg-[#CC0033] text-white text-sm font-semibold hover:bg-[#a8002b] disabled:opacity-50 transition-colors"
+              >
+                {saving ? 'Saving…' : saved ? '✓ Saved to all snipes' : `Save to all ${items.length} snipes`}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
-function readQuickPrefs() {
-  if (typeof window === 'undefined') return null
-  try {
-    return JSON.parse(localStorage.getItem(QUICK_ALERT_PREFS_KEY) ?? 'null') as {
-      email?: string
-      phone?: string
-      emailEnabled?: boolean
-      smsEnabled?: boolean
-    } | null
-  } catch {
-    return null
-  }
-}
-
-function writeQuickPrefs(prefs: {
-  email: string
-  phone: string
-  emailEnabled: boolean
-  smsEnabled: boolean
-}) {
-  try {
-    localStorage.setItem(QUICK_ALERT_PREFS_KEY, JSON.stringify(prefs))
-  } catch {
-    // localStorage blocked — the snipe still works
-  }
-}
+// ─── QuickSnipeBox ─────────────────────────────────────────────────────────────
 
 function QuickSnipeBox() {
   const [indexNumber, setIndexNumber] = useState('')
@@ -456,6 +771,7 @@ function QuickSnipeBox() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const prefs = readQuickPrefs()
@@ -469,16 +785,14 @@ function QuickSnipeBox() {
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (saving) return
-
-    const digits = indexNumber.replace(/\D/g, '')
     setError(null)
     setSuccess(null)
-
+    const digits = indexNumber.replace(/\D/g, '')
     if (!/^\d{5}$/.test(digits)) {
-      setError('Enter the 5-digit Rutgers index number.')
+      setError('Enter the 5-digit Rutgers section index number.')
+      inputRef.current?.focus()
       return
     }
-
     setSaving(true)
     try {
       const result = await addWatchByIndex({
@@ -492,221 +806,416 @@ function QuickSnipeBox() {
           notify_on_close: false,
         },
       })
-
       if (!result.ok) {
-        setError(result.error ?? 'Could not start sniping that index.')
+        setError(result.error ?? 'Could not snipe that index — check the number and try again.')
         return
       }
-
       writeQuickPrefs({ email, phone, emailEnabled, smsEnabled })
-      setSuccess(result.duplicate ? `Already sniping ${digits}.` : `Sniping ${digits}. We will watch it from here.`)
+      setSuccess(result.duplicate ? `Already sniping ${digits}.` : `Locked on ${digits}. Watching for opens.`)
       setIndexNumber('')
+      setTimeout(() => setSuccess(null), 5000)
+    } catch {
+      setError('Network error — check your connection and try again.')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <section className="mb-8 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
-      <div className="border-b border-zinc-800 bg-zinc-900/70 px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="scarlet">Fast setup</Badge>
-          <span className="text-sm font-semibold text-white">Paste an index number. Start sniping.</span>
-        </div>
+    <section className="mb-6 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
+      <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/60 px-4 py-3 sm:px-5">
+        <div className="h-2 w-2 rounded-full bg-[#CC0033] motion-pulse-soft" />
+        <span className="text-sm font-semibold text-white">Paste an index. Start sniping.</span>
+        <Badge tone="scarlet" className="ml-auto">Live worker</Badge>
       </div>
 
-      <form onSubmit={submit} className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            Rutgers index number
-          </label>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <input
-              inputMode="numeric"
-              value={indexNumber}
-              onChange={e => setIndexNumber(e.target.value)}
-              placeholder="e.g. 26253"
-              maxLength={12}
-              className="min-h-12 flex-1 rounded-xl border border-zinc-800 bg-black px-4 py-3 font-mono text-lg font-black tracking-wider text-white outline-none transition-colors focus:border-[#CC0033]"
-            />
-            <button
-              type="submit"
-              disabled={saving}
-              className="min-h-12 rounded-xl bg-[#CC0033] px-5 py-3 text-sm font-black text-white transition-colors hover:bg-[#a8002b] disabled:opacity-50"
-            >
-              {saving ? 'Starting...' : 'Start Sniping'}
-            </button>
+      <form onSubmit={submit} className="p-4 sm:p-5">
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+          {/* index input */}
+          <div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <input
+                  ref={inputRef}
+                  inputMode="numeric"
+                  value={indexNumber}
+                  onChange={e => { setIndexNumber(e.target.value); setError(null) }}
+                  placeholder="Index number (e.g. 26253)"
+                  maxLength={12}
+                  className={`w-full min-h-12 rounded-xl border bg-black px-4 py-3 font-mono text-lg font-black tracking-wider text-white outline-none transition-all ${
+                    error ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-[#CC0033]'
+                  }`}
+                />
+                {indexNumber.replace(/\D/g, '').length === 5 && !error && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-400">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="min-h-12 rounded-xl bg-[#CC0033] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#a8002b] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100 whitespace-nowrap"
+              >
+                {saving ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Locking on…
+                  </span>
+                ) : 'Snipe it'}
+              </button>
+            </div>
+
+            <AnimatePresence mode="wait">
+              {error && (
+                <motion.p
+                  key="err"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-2 flex items-center gap-1.5 text-sm text-red-400"
+                >
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {error}
+                </motion.p>
+              )}
+              {success && (
+                <motion.p
+                  key="ok"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-2 flex items-center gap-1.5 text-sm text-green-400"
+                >
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {success}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
 
-          {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
-          {success && <p className="mt-2 text-sm text-green-400">{success}</p>}
-
-          <div className="mt-4 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
-            <div className="rounded-xl border border-zinc-800 bg-black/40 p-3">
-              <span className="block font-semibold text-zinc-300">1. Validate</span>
-              Current-term section lookup.
-            </div>
-            <div className="rounded-xl border border-zinc-800 bg-black/40 p-3">
-              <span className="block font-semibold text-zinc-300">2. Alert</span>
-              Browser now, email/SMS when providers are enabled.
-            </div>
-            <div className="rounded-xl border border-zinc-800 bg-black/40 p-3">
-              <span className="block font-semibold text-zinc-300">3. Register</span>
-              Copy index and jump to WebReg.
+          {/* alert contact */}
+          <div className="rounded-xl border border-zinc-800 bg-black/40 p-4 lg:w-64">
+            <p className="text-xs font-semibold text-zinc-300 mb-3">Alert contact</p>
+            <div className="space-y-2">
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="Email"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+              />
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="Phone (+1…)"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+              />
+              <div className="flex gap-3 text-xs text-zinc-400">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} className="accent-[#CC0033]" />
+                  Email
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={smsEnabled} onChange={e => setSmsEnabled(e.target.checked)} className="accent-[#CC0033]" />
+                  SMS
+                </label>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-zinc-800 bg-black/40 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-white">Alert contact</p>
-              <p className="mt-0.5 text-xs text-zinc-500">Saved to every new snipe you add here.</p>
+        {/* how it works */}
+        <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] text-zinc-500">
+          {[
+            { n: '1', title: 'Validate', desc: 'Index looked up in current SOC' },
+            { n: '2', title: 'Alert', desc: 'Email · SMS · browser notification' },
+            { n: '3', title: 'Register', desc: 'Copy index → WebReg' },
+          ].map(step => (
+            <div key={step.n} className="rounded-xl border border-zinc-800/60 bg-black/30 p-2.5">
+              <span className="block font-bold text-zinc-400 mb-0.5">{step.n}. {step.title}</span>
+              {step.desc}
             </div>
-            <Badge tone="green">OPEN ONLY</Badge>
-          </div>
-
-          <div className="mt-4 grid gap-3">
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="Email for alerts"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033]"
-            />
-            <input
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="Phone for SMS alerts"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033]"
-            />
-            <div className="flex flex-wrap gap-4 text-xs text-zinc-300">
-              <label className="inline-flex items-center gap-2">
-                <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} />
-                Email
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input type="checkbox" checked={smsEnabled} onChange={e => setSmsEnabled(e.target.checked)} />
-                SMS
-              </label>
-            </div>
-          </div>
+          ))}
         </div>
       </form>
     </section>
   )
 }
 
+// ─── StatCards ────────────────────────────────────────────────────────────────
+
+function StatCards({ total, openCount, closedCount, alertCount }: { total: number; openCount: number; closedCount: number; alertCount: number }) {
+  return (
+    <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      {[
+        { value: total, label: 'snipes', border: 'border-zinc-800', bg: 'bg-zinc-900', num: 'text-white' },
+        { value: openCount, label: 'open now', border: 'border-green-900/50', bg: 'bg-green-950/20', num: 'text-green-400' },
+        { value: closedCount, label: 'closed', border: 'border-red-900/40', bg: 'bg-red-950/15', num: 'text-red-400' },
+        { value: alertCount, label: 'new alerts', border: 'border-amber-900/50', bg: 'bg-amber-950/20', num: 'text-amber-400' },
+      ].map((card, i) => (
+        <motion.div
+          key={card.label}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.06, duration: 0.3 }}
+          className={`rounded-xl border ${card.border} ${card.bg} px-4 py-3`}
+        >
+          <div className={`text-2xl font-black ${card.num} tabular-nums`}>{card.value}</div>
+          <div className="text-[11px] text-zinc-500 mt-0.5">{card.label}</div>
+        </motion.div>
+      ))}
+    </div>
+  )
+}
+
+// ─── FilterBar ────────────────────────────────────────────────────────────────
+
+type FilterTab = 'all' | 'open' | 'closed' | 'alerts'
+type SortMode = 'status' | 'added' | 'course'
+
+function FilterBar({
+  tab, setTab, sort, setSort, total, openCount, closedCount, alertCount,
+}: {
+  tab: FilterTab; setTab: (t: FilterTab) => void
+  sort: SortMode; setSort: (s: SortMode) => void
+  total: number; openCount: number; closedCount: number; alertCount: number
+}) {
+  const tabs: { id: FilterTab; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: total },
+    { id: 'open', label: 'Open', count: openCount },
+    { id: 'closed', label: 'Closed', count: closedCount },
+    { id: 'alerts', label: 'Alerts', count: alertCount },
+  ]
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`relative px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              tab === t.id
+                ? 'bg-zinc-700 text-white shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {t.label}
+            {t.count > 0 && (
+              <span className={`ml-1.5 text-[10px] font-bold tabular-nums ${
+                tab === t.id ? 'text-zinc-300' : 'text-zinc-600'
+              }`}>
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] text-zinc-600 font-medium">Sort:</span>
+        {(['status', 'added', 'course'] as SortMode[]).map(s => (
+          <button
+            key={s}
+            onClick={() => setSort(s)}
+            className={`text-[11px] font-semibold px-2 py-1 rounded-lg border transition-all ${
+              sort === s
+                ? 'bg-zinc-800 border-zinc-600 text-white'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── WatchlistPage ─────────────────────────────────────────────────────────────
+
 export default function WatchlistPage() {
   const { items, loading, error, reload } = useWatchlist()
+  const [tab, setTab] = useState<FilterTab>('all')
+  const [sort, setSort] = useState<SortMode>('status')
+  const prevItemIds = useRef(new Set<string>())
 
-  const openCount = items.filter(w => w.section?.open_status === true).length
-  const closedCount = items.filter(w => w.section?.open_status === false).length
+  useEffect(() => {
+    document.title = 'Course Sniper | RU Rate'
+    return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
+  }, [])
+
+  const openCount = items.filter(w => openStatus(w) === 'open').length
+  const closedCount = items.filter(w => openStatus(w) === 'closed').length
   const newlyOpen = useMemo(() => items.filter(isNewlyOpen), [items])
+
+  // track which IDs are freshly added this session
+  const [newIds, setNewIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const current = new Set(items.map(i => i.id))
+    const added = new Set([...current].filter(id => !prevItemIds.current.has(id)))
+    prevItemIds.current = current
+    if (added.size > 0) {
+      setNewIds(added)
+      const t = setTimeout(() => setNewIds(new Set()), 1500)
+      return () => clearTimeout(t)
+    }
+  }, [items])
 
   useEffect(() => {
     const interval = window.setInterval(reload, 60_000)
     return () => window.clearInterval(interval)
   }, [reload])
 
+  const filtered = useMemo(() => {
+    let result = [...items]
+    if (tab === 'open') result = result.filter(w => openStatus(w) === 'open')
+    else if (tab === 'closed') result = result.filter(w => openStatus(w) === 'closed')
+    else if (tab === 'alerts') result = result.filter(isNewlyOpen)
+
+    if (sort === 'status') {
+      const order = { open: 0, unknown: 1, closed: 2 }
+      result.sort((a, b) => order[openStatus(a)] - order[openStatus(b)])
+    } else if (sort === 'course') {
+      result.sort((a, b) => (a.course?.name ?? '').localeCompare(b.course?.name ?? ''))
+    }
+    // 'added' keeps insertion order
+    return result
+  }, [items, tab, sort])
+
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 pb-28">
-        <div className="motion-rise mb-8">
-          <div className="mb-3 flex flex-wrap gap-2">
+        {/* hero */}
+        <div className="motion-rise mb-7">
+          <div className="mb-2.5 flex flex-wrap gap-2">
             <Badge tone="scarlet">Course Sniper</Badge>
-            <Badge tone="green">Railway worker</Badge>
+            <Badge tone="green">Railway worker · 500 ms polls</Badge>
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight sm:text-4xl">
             Stop refreshing. Snipe the section.
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-            Track Rutgers sections by index number, get alerted when a seat opens, and jump to
-            WebReg with the index ready to paste.
+            Track any Rutgers section by index number. Get alerted by email or SMS the moment a seat opens. Jump straight to WebReg with the index ready.
           </p>
         </div>
 
         <QuickSnipeBox />
 
-        {!loading && items.length > 0 && (
-          <div className="mb-6 grid gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-              <div className="text-2xl font-black text-white">{items.length}</div>
-              <div className="text-xs text-zinc-500">active snipes</div>
-            </div>
-            <div className="rounded-xl border border-green-900/60 bg-green-950/20 p-4">
-              <div className="text-2xl font-black text-green-400">{openCount}</div>
-              <div className="text-xs text-green-100/60">open now</div>
-            </div>
-            <div className="rounded-xl border border-red-900/60 bg-red-950/20 p-4">
-              <div className="text-2xl font-black text-red-400">{closedCount}</div>
-              <div className="text-xs text-red-100/60">closed now</div>
-            </div>
-            <div className="rounded-xl border border-amber-900/60 bg-amber-950/20 p-4">
-              <div className="text-2xl font-black text-amber-400">{newlyOpen.length}</div>
-              <div className="text-xs text-amber-100/60">new alerts</div>
-            </div>
-          </div>
+        {/* loaded state */}
+        {!loading && !error && items.length > 0 && (
+          <>
+            <StatCards
+              total={items.length}
+              openCount={openCount}
+              closedCount={closedCount}
+              alertCount={newlyOpen.length}
+            />
+
+            <OpenSectionAlerts newlyOpen={newlyOpen} />
+
+            <GlobalNotificationCenter items={items} />
+
+            <FilterBar
+              tab={tab} setTab={setTab}
+              sort={sort} setSort={setSort}
+              total={items.length}
+              openCount={openCount}
+              closedCount={closedCount}
+              alertCount={newlyOpen.length}
+            />
+
+            {/* list */}
+            {filtered.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-6 py-10 text-center text-zinc-500 text-sm"
+              >
+                No snipes match this filter.
+              </motion.div>
+            ) : (
+              <motion.div layout className="space-y-2.5">
+                <AnimatePresence initial={false}>
+                  {filtered.map((w, i) => (
+                    <motion.div
+                      key={w.id}
+                      layout
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.97, height: 0, marginBottom: 0 }}
+                      transition={{
+                        layout: { duration: 0.25 },
+                        opacity: { duration: 0.2 },
+                        delay: newIds.has(w.id) ? 0 : i * 0.04,
+                      }}
+                    >
+                      <WatchCard watch={w} isNew={newIds.has(w.id)} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </>
         )}
-
-        {!loading && !error && <OpenSectionAlerts newlyOpen={newlyOpen} />}
-
-        {!loading && !error && items.length > 0 && <NotificationSettings items={items} />}
 
         {loading && <RowListSkeleton rows={4} />}
 
         {!loading && error && (
-          <EmptyState icon="⚠️" title="Couldn't load your watchlist" subtitle={error} />
+          <div className="rounded-xl border border-red-900/50 bg-red-950/20 px-5 py-4 flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-red-300">Couldn&apos;t load your watchlist</p>
+              <p className="text-xs text-red-400/70 mt-0.5">{error}</p>
+              <button
+                onClick={reload}
+                className="mt-2 text-xs font-semibold text-red-300 hover:text-white underline underline-offset-2"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
         )}
 
         {!loading && !error && items.length === 0 && (
           <EmptyState
-            icon="🔭"
+            icon="🎯"
             title="No active snipes yet"
-            subtitle="Paste a 5-digit section index above, or find a course and hit Watch on a section."
+            subtitle="Paste a 5-digit section index above, or browse courses and hit Watch on any section."
             action={
-              <Link
-                href="/courses"
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                style={{ backgroundColor: '#CC0033' }}
-              >
+              <Link href="/courses" className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#CC0033' }}>
                 Browse Courses
               </Link>
             }
           />
         )}
 
-        {!loading && !error && items.length > 0 && (
-          <div className="space-y-3">
-            {items.map(w => (
-              <WatchRow key={w.id} watch={w} />
-            ))}
-          </div>
-        )}
-
-        <div className="mt-8 bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 text-[11px] text-zinc-500 leading-relaxed space-y-1.5">
+        {/* footer explainer */}
+        <div className="mt-10 rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-4 text-[11px] text-zinc-600 leading-relaxed space-y-1.5">
           <p className="font-semibold text-zinc-400 text-xs">How the sniper works</p>
-          <p>
-            Section status comes from the Rutgers Schedule of Classes and updates when our data syncs —
-            it is not live. Always confirm in WebReg before planning around it.
-          </p>
-          <p>
-            Email and SMS alerts are sent by the Railway worker after a watched section changes status.
-            RU Rate will never auto-register, auto-submit, or touch WebReg on your behalf — it hands you
-            the index number, you do the registering.
-          </p>
-          <p>
-            Your watchlist is tied to this browser (no account needed). Clearing site data clears it.
-          </p>
+          <p>The Railway worker polls the Rutgers Schedule of Classes every 500 ms, compares open/closed status against what was last recorded, and fires email/SMS alerts when a watched section changes. Status is not live — always confirm in WebReg before planning around it.</p>
+          <p>RU Rate never auto-registers, never touches WebReg on your behalf, and never stores your NetID. Your watchlist is tied to this browser — clearing site data clears it.</p>
         </div>
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t border-zinc-900 px-6 py-6 mt-4">
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
-          RU Rate — Course Watchlist · Status data from the Rutgers Schedule of Classes
+          RU Rate Course Sniper · Status from Rutgers Schedule of Classes
         </div>
       </footer>
     </div>

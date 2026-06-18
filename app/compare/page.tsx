@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
@@ -39,9 +39,42 @@ function ratingColor(r: number) {
   return '#ef4444'
 }
 
+function ShareCompareButton({ ids }: { ids: string[] }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(async () => {
+    const url = `${window.location.origin}/compare?ids=${encodeURIComponent(ids.join(','))}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // clipboard blocked
+    }
+  }, [ids])
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+        copied
+          ? 'border-green-800 bg-green-950/30 text-green-400'
+          : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-white'
+      }`}
+    >
+      {copied ? '✓ Copied' : '↗ Share link'}
+    </button>
+  )
+}
+
 function CompareContent() {
   const searchParams = useSearchParams()
   const trayItems = useCompareItems()
+
+  useEffect(() => {
+    document.title = 'Compare Professors | RU Rate'
+    return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
+  }, [])
 
   // URL ids win (shareable links); otherwise use the tray
   const ids = useMemo(() => {
@@ -98,11 +131,16 @@ function CompareContent() {
       <AppHeader />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 pb-28">
-        <div className="mb-8">
-          <h1 className="text-3xl font-black text-white tracking-tight">Compare Professors</h1>
-          <p className="text-zinc-400 text-sm mt-1">
-            Side-by-side RMP stats and AI analysis — pick the right professor for your section
-          </p>
+        <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-black text-white tracking-tight">Compare Professors</h1>
+            <p className="text-zinc-400 text-sm mt-1">
+              Side-by-side RMP stats and AI analysis — pick the right professor for your section
+            </p>
+          </div>
+          {professors.length > 0 && (
+            <ShareCompareButton ids={ids} />
+          )}
         </div>
 
         {loading && (

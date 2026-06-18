@@ -20,39 +20,84 @@ body {
   color: white;
 }
 
+/* ── entrance animations ─────────────────────────────────── */
 @keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── pulse / glow ────────────────────────────────────────── */
 @keyframes soft-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 rgba(204, 0, 51, 0);
-  }
-  50% {
-    box-shadow: 0 0 28px rgba(204, 0, 51, 0.28);
-  }
+  0%, 100% { box-shadow: 0 0 0 rgba(204, 0, 51, 0); }
+  50%       { box-shadow: 0 0 28px rgba(204, 0, 51, 0.28); }
 }
 
-.motion-rise {
-  animation: rise-in 420ms ease-out both;
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 rgba(74, 222, 128, 0); }
+  50%       { box-shadow: 0 0 20px rgba(74, 222, 128, 0.20); }
 }
 
-.motion-pulse-soft {
-  animation: soft-pulse 2.8s ease-in-out infinite;
+@keyframes flash-open {
+  0%   { background-color: rgba(74, 222, 128, 0.18); }
+  100% { background-color: transparent; }
 }
+
+/* ── count badge pop ─────────────────────────────────────── */
+@keyframes count-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+/* ── tab indicator slide ─────────────────────────────────── */
+@keyframes tab-slide {
+  from { opacity: 0; transform: scaleX(0); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+/* ── notification panel expand ───────────────────────────── */
+@keyframes expand-down {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 400px; }
+}
+
+/* ── utility classes ─────────────────────────────────────── */
+.motion-rise         { animation: rise-in 420ms ease-out both; }
+.motion-fade         { animation: fade-in 300ms ease-out both; }
+.motion-slide-down   { animation: slide-down 300ms ease-out both; }
+.motion-slide-up     { animation: slide-up 300ms ease-out both; }
+.motion-scale-in     { animation: scale-in 200ms ease-out both; }
+.motion-pulse-soft   { animation: soft-pulse 2.8s ease-in-out infinite; }
+.motion-pulse-green  { animation: pulse-green 2.4s ease-in-out infinite; }
+.motion-flash-open   { animation: flash-open 1.4s ease-out forwards; }
+.motion-count-pop    { animation: count-pop 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.motion-expand       { animation: expand-down 250ms ease-out both; overflow: hidden; }
+
+/* stagger helpers: apply --delay on each child */
+.stagger > * { animation-delay: var(--delay, 0ms); }
 
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
+  html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
@@ -65,16 +110,7 @@ body {
   color: white;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #111;
-}
-::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #CC0033;
-}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #CC0033; }

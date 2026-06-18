@@ -1,14 +1,16 @@
 'use client'
 
-import { Suspense, use, useEffect, useState } from 'react'
+import { Suspense, use, useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'motion/react'
 import AppHeader from '@/components/AppHeader'
 import Badge from '@/components/Badge'
 import CompareButton from '@/components/CompareButton'
 import GradeChart from '@/components/GradeChart'
 import ReviewCard from '@/components/ReviewCard'
 import NativeReviewCard, { type NativeReview } from '@/components/NativeReviewCard'
+import NativeGradeChart from '@/components/NativeGradeChart'
 import WriteReviewForm from '@/components/WriteReviewForm'
 import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import { supabase } from '@/lib/supabase'
@@ -64,12 +66,18 @@ function TipsList({ tips }: { tips: string[] }) {
   )
 }
 
-function TagCloud({ ratings }: { ratings: Rating[] }) {
-  const tagCounts: Record<string, number> = {}
-  for (const r of ratings) {
-    for (const tag of r.tags ?? []) {
-      if (tag && tag.trim()) tagCounts[tag.trim()] = (tagCounts[tag.trim()] ?? 0) + 1
+function TagCloud({ ratings, tagCounts: precomputed }: { ratings: Rating[]; tagCounts?: Record<string, number> | null }) {
+  let tagCounts: Record<string, number>
+  if (precomputed) {
+    tagCounts = precomputed
+  } else {
+    const counts: Record<string, number> = {}
+    for (const r of ratings) {
+      for (const tag of r.tags ?? []) {
+        if (tag?.trim()) counts[tag.trim()] = (counts[tag.trim()] ?? 0) + 1
+      }
     }
+    tagCounts = counts
   }
   const sorted = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 15)
   if (sorted.length === 0) return null
@@ -149,14 +157,20 @@ function ratingColor(r: number) {
 }
 
 function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
+  const qColor = ratingColor(prof.avg_rating ?? 0)
+  const href = prof.rmp_id
+    ? `/professor/${prof.slug}?rmpId=${prof.rmp_id}`
+    : `/professor/${prof.slug}`
+
   return (
     <Link
-      href={`/professor/${prof.slug}?rmpId=${prof.rmp_id}`}
-      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors"
+      href={href}
+      className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
+      <div className="pl-4 pr-4 py-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white truncate">
+          <p className="text-sm font-semibold text-white group-hover:text-[#CC0033] transition-colors truncate">
             {prof.first_name} {prof.last_name}
           </p>
           {prof.department && (
@@ -165,10 +179,10 @@ function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
         </div>
         {prof.avg_rating != null && (
           <div className="shrink-0 text-center">
-            <div className="text-lg font-black" style={{ color: ratingColor(prof.avg_rating) }}>
+            <div className="text-lg font-black leading-none" style={{ color: qColor }}>
               {prof.avg_rating.toFixed(1)}
             </div>
-            <div className="text-xs text-zinc-600">Quality</div>
+            <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
           </div>
         )}
       </div>
@@ -180,64 +194,122 @@ function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
 // Native reviews section
 // ---------------------------------------------------------------------------
 
+type ReviewSortMode = 'newest' | 'helpful' | 'quality_desc' | 'quality_asc'
+
+const REVIEW_SORT_OPTIONS: { value: ReviewSortMode; label: string }[] = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'helpful', label: 'Most Helpful' },
+  { value: 'quality_desc', label: 'Best Rating' },
+  { value: 'quality_asc', label: 'Worst Rating' },
+]
+
+const REVIEWS_PER_PAGE = 10
+
 function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: string; professorId?: string }) {
   const [professorId, setProfessorId] = useState<string | null>(initProfId ?? null)
   const [reviews, setReviews] = useState<NativeReview[]>([])
-  const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [sort, setSort] = useState<ReviewSortMode>('newest')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [allTagCounts, setAllTagCounts] = useState<[string, number][]>([])
+  const [page, setPage] = useState(1)
+  const [resolving, setResolving] = useState(!initProfId)
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [showForm, setShowForm] = useState(false)
 
+  // Step 1: resolve professor UUID from rmpId if not provided directly
   useEffect(() => {
-    if (!supabase) { setLoading(false); return }
+    if (initProfId) { setProfessorId(initProfId); setResolving(false); return }
+    if (!rmpId || !supabase) { setResolving(false); return }
 
-    async function load() {
-      setLoading(true)
-      try {
-        let pid = initProfId ?? null
-        if (!pid && rmpId) {
-          const { data: prof } = await supabase!
-            .from('professors')
-            .select('id')
-            .eq('rmp_id', rmpId)
-            .single()
-
-          if (!prof) { setLoading(false); return }
-          pid = prof.id
-          setProfessorId(prof.id)
-        }
-        if (!pid) { setLoading(false); return }
-
-        const res = await fetch(`/api/reviews?professor_id=${pid}`)
-        if (res.ok) {
-          const data = await res.json()
-          setReviews(data)
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+    supabase
+      .from('professors')
+      .select('id')
+      .eq('rmp_id', rmpId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setProfessorId(data.id)
+        setResolving(false)
+      })
   }, [rmpId, initProfId])
 
+  // Step 2: load reviews whenever professorId, sort, activeTag, or page changes
+  const loadReviews = useCallback(async (pid: string, s: ReviewSortMode, p: number, append: boolean, tag: string | null) => {
+    if (append) setLoadingMore(true); else setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        professor_id: pid,
+        sort: s,
+        page: String(p),
+        limit: String(REVIEWS_PER_PAGE),
+      })
+      if (tag) params.set('tag', tag)
+      const res = await fetch(`/api/reviews?${params}`)
+      if (!res.ok) return
+      const json = await res.json()
+      const incoming: NativeReview[] = json.reviews ?? []
+      setReviews(prev => append ? [...prev, ...incoming] : incoming)
+      setTotal(json.total ?? 0)
+      setHasMore(json.has_more ?? false)
+      // Cache tag counts from the first unfiltered page to power filter chips
+      if (!tag && !append) {
+        const counts: Record<string, number> = {}
+        for (const r of incoming) {
+          for (const t of r.tags ?? []) {
+            if (t) counts[t] = (counts[t] ?? 0) + 1
+          }
+        }
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
+        if (sorted.length > 0) setAllTagCounts(sorted)
+      }
+    } finally {
+      if (append) setLoadingMore(false); else setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!professorId) return
+    loadReviews(professorId, sort, 1, false, activeTag)
+    setPage(1)
+  }, [professorId, sort, activeTag, loadReviews])
+
+  function handleLoadMore() {
+    if (!professorId || !hasMore || loadingMore) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    loadReviews(professorId, sort, nextPage, true, activeTag)
+  }
+
+  function handleTagClick(tag: string) {
+    setActiveTag(prev => (prev === tag ? null : tag))
+  }
+
   function handleReviewSubmitted(review: NativeReview) {
-    setReviews((prev) => [review, ...prev])
+    setReviews(prev => [review, ...prev])
+    setTotal(t => t + 1)
     setShowForm(false)
   }
-  const nativeGrade = buildProfessorGrade({
-    native: summarizeNativeReviews(reviews),
-  })
+
+  const nativeStats = summarizeNativeReviews(reviews)
+  const nativeGrade = buildProfessorGrade({ native: nativeStats })
+
+  if (resolving) return <div className="text-sm text-zinc-600 py-4">Loading reviews...</div>
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
           Student Reviews on RU Rate
-          {!loading && (
-            <span className="ml-1 text-xs font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500">
-              {reviews.length}
+          {total > 0 && (
+            <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500">
+              {total}
             </span>
           )}
         </h3>
-        {rmpId && !showForm && (
+        {(rmpId || professorId) && !showForm && (
           <button
             onClick={() => setShowForm(true)}
             className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-opacity hover:opacity-80"
@@ -248,9 +320,10 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         )}
       </div>
 
-      {showForm && rmpId && professorId && (
+      {showForm && (rmpId || professorId) && (
         <WriteReviewForm
           rmpId={rmpId}
+          professorId={professorId ?? undefined}
           onSubmitted={handleReviewSubmitted}
           onCancel={() => setShowForm(false)}
         />
@@ -258,12 +331,12 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
 
       {loading ? (
         <div className="text-sm text-zinc-600 py-4">Loading reviews...</div>
-      ) : reviews.length === 0 ? (
+      ) : reviews.length === 0 && !showForm ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center space-y-3">
           <div className="text-2xl">📝</div>
           <p className="text-sm font-semibold text-white">Be the first to review on RU Rate!</p>
           <p className="text-xs text-zinc-500">Share your experience to help fellow Rutgers students.</p>
-          {rmpId && !showForm && (
+          {(rmpId || professorId) && (
             <button
               onClick={() => setShowForm(true)}
               className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-80"
@@ -275,16 +348,135 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <ProfessorGradeBadge grade={nativeGrade} />
-            <p className="mt-2 text-xs text-zinc-500">
-              Based only on RU Rate reviews students left here, including quality, difficulty,
-              would-take-again, and reported grades.
-            </p>
-          </div>
-          {reviews.map((r) => (
-            <NativeReviewCard key={r.id} review={r} />
-          ))}
+          {/* Grade summary */}
+          {reviews.length > 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <ProfessorGradeBadge grade={nativeGrade} />
+                {nativeStats.review_count >= 2 && (
+                  <div className="flex items-center gap-4">
+                    {nativeStats.avg_quality != null && (
+                      <div className="text-center">
+                        <div
+                          className="text-xl font-black leading-none"
+                          style={{ color: nativeStats.avg_quality >= 4 ? '#22c55e' : nativeStats.avg_quality >= 3 ? '#f59e0b' : '#ef4444' }}
+                        >
+                          {nativeStats.avg_quality.toFixed(1)}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">Quality</div>
+                      </div>
+                    )}
+                    {nativeStats.avg_quality != null && nativeStats.avg_difficulty != null && (
+                      <div className="h-7 w-px bg-zinc-800" />
+                    )}
+                    {nativeStats.avg_difficulty != null && (
+                      <div className="text-center">
+                        <div
+                          className="text-xl font-black leading-none"
+                          style={{ color: nativeStats.avg_difficulty >= 4 ? '#ef4444' : nativeStats.avg_difficulty >= 3 ? '#f59e0b' : '#22c55e' }}
+                        >
+                          {nativeStats.avg_difficulty.toFixed(1)}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">Difficulty</div>
+                      </div>
+                    )}
+                    {nativeStats.would_take_again_pct != null && (
+                      <>
+                        <div className="h-7 w-px bg-zinc-800" />
+                        <div className="text-center">
+                          <div
+                            className="text-xl font-black leading-none"
+                            style={{ color: nativeStats.would_take_again_pct >= 70 ? '#22c55e' : nativeStats.would_take_again_pct >= 50 ? '#f59e0b' : '#ef4444' }}
+                          >
+                            {Math.round(nativeStats.would_take_again_pct)}%
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-0.5">Again</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-zinc-500">
+                Based on RU Rate reviews including quality, difficulty, would-take-again, and reported grades.
+              </p>
+              <NativeGradeChart reviews={reviews} />
+            </div>
+          )}
+
+          {/* Sort + tag filter bar */}
+          {total > 1 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
+                {REVIEW_SORT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSort(opt.value)}
+                    className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                      sort === opt.value
+                        ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
+                        : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {allTagCounts.length > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+                  {activeTag && (
+                    <button
+                      onClick={() => setActiveTag(null)}
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:text-white transition-all flex items-center gap-1"
+                    >
+                      ✕ Clear
+                    </button>
+                  )}
+                  {allTagCounts.map(([tag, count]) => (
+                    <button
+                      key={tag}
+                      onClick={() => handleTagClick(tag)}
+                      className={`shrink-0 text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                        activeTag === tag
+                          ? 'border-[#CC0033] bg-[#CC003320] text-[#CC0033] font-semibold'
+                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      }`}
+                    >
+                      {tag}
+                      <span className="ml-1 opacity-50">{count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reviews list */}
+          <AnimatePresence mode="popLayout">
+            {reviews.map((r, i) => (
+              <motion.div
+                key={r.id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97 }}
+                transition={{ duration: 0.18, delay: i < 3 ? i * 0.04 : 0 }}
+              >
+                <NativeReviewCard review={r} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Load more */}
+          {hasMore && (
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="w-full py-3 rounded-xl border border-zinc-800 text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : `Load more (${total - reviews.length} remaining)`}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -298,6 +490,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
 function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
   const [related, setRelated] = useState<RelatedProfessor[]>([])
   const [deptName, setDeptName] = useState<string | null>(null)
+  const [deptSlug, setDeptSlug] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -318,16 +511,17 @@ function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
         // 2. Get their primary department
         const { data: deptRow } = await supabase!
           .from('professor_departments')
-          .select('department_id, departments(id, name)')
+          .select('department_id, departments(id, name, slug)')
           .eq('professor_id', prof.id)
           .eq('is_primary', true)
           .single()
 
         if (!deptRow) { setLoading(false); return }
 
-        const dept = deptRow.departments as unknown as { id: string; name: string } | null
+        const dept = deptRow.departments as unknown as { id: string; name: string; slug: string } | null
         if (!dept) { setLoading(false); return }
         setDeptName(dept.name)
+        setDeptSlug(dept.slug)
 
         // 3. Find other professors in same department
         const { data: otherDeptRows } = await supabase!
@@ -387,9 +581,19 @@ function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-zinc-300">
-        Other professors in {deptName ?? 'this department'}
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-zinc-300">
+          Other professors in {deptName ?? 'this department'}
+        </h3>
+        {deptSlug && (
+          <Link
+            href={`/department/${deptSlug}`}
+            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors shrink-0"
+          >
+            View department →
+          </Link>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {related.map((p) => (
           <RelatedProfessorCard key={p.rmp_id} prof={p} />
@@ -613,6 +817,7 @@ interface SocRelatedProf {
 function SocRelatedSection({ professorId }: { professorId: string }) {
   const [related, setRelated] = useState<SocRelatedProf[]>([])
   const [deptName, setDeptName] = useState<string | null>(null)
+  const [deptSlug, setDeptSlug] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -621,15 +826,16 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
     async function load() {
       const { data: deptRows } = await supabase!
         .from('professor_departments')
-        .select('department_id, departments(id, name)')
+        .select('department_id, departments(id, name, slug)')
         .eq('professor_id', professorId)
         .order('is_primary', { ascending: false })
         .limit(1)
 
       if (!deptRows?.length) { setLoading(false); return }
-      const dept = deptRows[0].departments as unknown as { id: string; name: string } | null
+      const dept = deptRows[0].departments as unknown as { id: string; name: string; slug: string } | null
       if (!dept) { setLoading(false); return }
       setDeptName(dept.name)
+      setDeptSlug(dept.slug)
 
       const { data: others } = await supabase!
         .from('professor_departments')
@@ -683,27 +889,43 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-zinc-300">
-        Other professors in {deptName ?? 'this department'}
-      </h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {related.map(p => (
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-zinc-300">
+          Other professors in {deptName ?? 'this department'}
+        </h3>
+        {deptSlug && (
           <Link
-            key={p.id}
-            href={p.rmp_id ? `/professor/${p.slug}?rmpId=${p.rmp_id}` : `/professor/${p.slug}?socId=${p.id}`}
-            className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors"
+            href={`/department/${deptSlug}`}
+            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors shrink-0"
           >
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-semibold text-white truncate min-w-0">{p.first_name} {p.last_name}</p>
-              {p.avg_rating != null && (
-                <div className="shrink-0 text-center">
-                  <div className="text-lg font-black" style={{ color: ratingColor(p.avg_rating) }}>{p.avg_rating.toFixed(1)}</div>
-                  <div className="text-xs text-zinc-600">Quality</div>
-                </div>
-              )}
-            </div>
+            View department →
           </Link>
-        ))}
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {related.map(p => {
+          const qColor = p.avg_rating != null ? ratingColor(p.avg_rating) : '#52525b'
+          return (
+            <Link
+              key={p.id}
+              href={p.rmp_id ? `/professor/${p.slug}?rmpId=${p.rmp_id}` : `/professor/${p.slug}?socId=${p.id}`}
+              className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
+            >
+              <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
+              <div className="pl-4 pr-4 py-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-white group-hover:text-[#CC0033] transition-colors truncate min-w-0">
+                  {p.first_name} {p.last_name}
+                </p>
+                {p.avg_rating != null && (
+                  <div className="shrink-0 text-center">
+                    <div className="text-lg font-black leading-none" style={{ color: qColor }}>{p.avg_rating.toFixed(1)}</div>
+                    <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+                  </div>
+                )}
+              </div>
+            </Link>
+          )
+        })}
       </div>
     </div>
   )
@@ -742,6 +964,7 @@ function SocProfessorContent({ socId }: { socId: string }) {
           .eq('professor_id', socId)
 
         setProf({ first_name: profRow.first_name, last_name: profRow.last_name, department: deptName, teaching_count: count ?? 0 })
+        document.title = `${profRow.first_name} ${profRow.last_name} | RU Rate`
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -834,37 +1057,39 @@ function ProfessorContent() {
   const rmpId = searchParams.get('rmpId')
   const [data, setData] = useState<ProfessorCache | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAllReviews, setShowAllReviews] = useState(false)
+  const [rmpSort, setRmpSort] = useState<'newest' | 'helpful' | 'quality_desc' | 'quality_asc'>('newest')
   const [staleInfo, setStaleInfo] = useState<{ isStale: boolean; cacheAgeDays: number } | null>(null)
 
-  useEffect(() => {
+  const loadData = useCallback(async (force = false) => {
     if (!rmpId) { setError('No professor ID provided.'); setLoading(false); return }
-
-    async function load() {
-      setLoading(true)
-      try {
-        const res = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rmpId }),
-        })
-        if (!res.ok) throw new Error('Failed to load professor data')
-        const json = await res.json()
-        setData(json)
-        if (json.cached_at) {
-          const ageMs = Date.now() - new Date(json.cached_at).getTime()
-          const days = Math.floor(ageMs / (24 * 60 * 60 * 1000))
-          setStaleInfo({ isStale: days >= 30, cacheAgeDays: days })
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Something went wrong')
-      } finally {
-        setLoading(false)
+    if (force) setRefreshing(true); else setLoading(true)
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rmpId, force }),
+      })
+      if (!res.ok) throw new Error('Failed to load professor data')
+      const json = await res.json()
+      setData(json)
+      document.title = `${json.first_name} ${json.last_name} | RU Rate`
+      if (json.cached_at) {
+        const ageMs = Date.now() - new Date(json.cached_at).getTime()
+        const days = Math.floor(ageMs / (24 * 60 * 60 * 1000))
+        setStaleInfo({ isStale: days >= 30, cacheAgeDays: days })
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    load()
   }, [rmpId])
+
+  useEffect(() => { loadData() }, [loadData])
 
   if (loading) {
     return (
@@ -896,14 +1121,27 @@ function ProfessorContent() {
 
   const analysis = data.ai_analysis
   const ratings = (data.ratings ?? []) as Rating[]
-  const visibleReviews = showAllReviews ? ratings : ratings.slice(0, 8)
+  const tagCounts = data.tag_counts ?? null
+
+  const sortedRatings = [...ratings].sort((a, b) => {
+    if (rmpSort === 'helpful') return (b.thumbsUpTotal ?? 0) - (a.thumbsUpTotal ?? 0)
+    if (rmpSort === 'quality_desc') return (b.qualityRating ?? 0) - (a.qualityRating ?? 0)
+    if (rmpSort === 'quality_asc') return (a.qualityRating ?? 0) - (b.qualityRating ?? 0)
+    return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime()
+  })
+  const visibleReviews = showAllReviews ? sortedRatings : sortedRatings.slice(0, 8)
 return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
         {/* Hero block */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8"
+        >
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div>
               <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{data.department}</div>
@@ -942,18 +1180,29 @@ return (
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Stale cache notice */}
         {staleInfo?.isStale && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50 text-xs text-amber-400">
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50 text-xs text-amber-400">
             <span>⚠</span>
-            <span>RMP data last refreshed {staleInfo.cacheAgeDays} days ago — ratings may be outdated.</span>
+            <span className="flex-1">RMP data last refreshed {staleInfo.cacheAgeDays} days ago — ratings may be outdated.</span>
+            <button
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+              className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-900/40 hover:bg-amber-900/70 transition-colors font-semibold disabled:opacity-50"
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh now'}
+            </button>
           </div>
         )}
 
         {/* Verdict */}
-        {analysis && <VerdictBox analysis={analysis} />}
+        {analysis && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }}>
+            <VerdictBox analysis={analysis} />
+          </motion.div>
+        )}
 
         {/* Analysis grid */}
         {analysis && (
@@ -962,11 +1211,17 @@ return (
               { title: 'Teaching Style', content: analysis.teaching_style },
               { title: 'Workload', content: analysis.workload },
               { title: 'Grading', content: analysis.grading },
-            ].map(({ title, content }) => (
-              <div key={title} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            ].map(({ title, content }, i) => (
+              <motion.div
+                key={title}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: 0.12 + i * 0.05 }}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl p-5"
+              >
                 <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">{title}</h3>
                 <p className="text-sm text-zinc-300 leading-relaxed">{content}</p>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
@@ -1017,7 +1272,7 @@ return (
         {ratings.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
             <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Common Tags</h3>
-            <TagCloud ratings={ratings} />
+            <TagCloud ratings={ratings} tagCounts={tagCounts} />
           </div>
         )}
 
@@ -1037,12 +1292,33 @@ return (
         {/* RMP Reviews */}
         {ratings.length > 0 && (
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-zinc-300">
-                Student Reviews
+                RateMyProfessors Reviews
                 <span className="ml-2 text-zinc-600 font-normal">({ratings.length})</span>
               </h3>
-              <div className="text-xs text-zinc-600">Most recent first</div>
+              {ratings.length > 1 && (
+                <div className="flex items-center gap-1">
+                  {([
+                    { value: 'newest', label: 'Newest' },
+                    { value: 'helpful', label: 'Helpful' },
+                    { value: 'quality_desc', label: 'Best' },
+                    { value: 'quality_asc', label: 'Worst' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setRmpSort(opt.value)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                        rmpSort === opt.value
+                          ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
+                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-3">
               {visibleReviews.map((r) => (

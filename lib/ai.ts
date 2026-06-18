@@ -49,7 +49,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'HTTP-Referer': 'https://rurate.vercel.app',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://rurate-web-production.up.railway.app',
       'X-Title': 'RU Rate',
     },
     body: JSON.stringify({
@@ -62,10 +62,14 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
   if (!res.ok) throw new Error(`OpenRouter error: ${res.status} ${await res.text()}`)
 
   const data = await res.json()
-  const text: string = data.choices[0].message.content ?? ''
+  const text: string = data.choices?.[0]?.message?.content ?? ''
 
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('No JSON in AI response')
 
-  return JSON.parse(jsonMatch[0]) as AIAnalysis
+  try {
+    return JSON.parse(jsonMatch[0]) as AIAnalysis
+  } catch {
+    throw new Error('Invalid JSON in AI response')
+  }
 }

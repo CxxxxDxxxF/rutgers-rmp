@@ -43,7 +43,7 @@ export async function POST(
     .select('vote_type')
     .eq('review_id', review_id)
     .eq('voter_fingerprint', voter_fingerprint)
-    .single()
+    .maybeSingle()
 
   if (existing?.vote_type === vote_type) {
     // Exact same vote already recorded — return current count without mutating

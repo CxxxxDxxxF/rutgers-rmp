@@ -47,7 +47,7 @@ export async function searchProfessors(name: string, schoolId = RUTGERS_SCHOOL_I
 
 export async function getProfessorById(id: string) {
   const query = `
-    query GetProfessor($id: ID!) {
+    query GetProfessor($id: ID!, $cursor: String) {
       node(id: $id) {
         ... on Teacher {
           id
@@ -63,7 +63,8 @@ export async function getProfessorById(id: string) {
           avgDifficulty
           wouldTakeAgainPercent
           numRatings
-          ratings(first: 100) {
+          ratings(first: 100, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
             edges {
               node {
                 id
@@ -85,21 +86,13 @@ export async function getProfessorById(id: string) {
       }
     }
   `
-  const data = await rmpFetch(query, { id })
+  // Fetch first page
+  const data = await rmpFetch(query, { id, cursor: null })
   const teacher = data?.data?.node
   if (!teacher) return null
 
-  return {
-    id: teacher.id,
-    firstName: teacher.firstName,
-    lastName: teacher.lastName,
-    department: teacher.department,
-    schoolName: teacher.school?.name ?? 'Rutgers University',
-    avgRating: teacher.avgRating,
-    avgDifficulty: teacher.avgDifficulty,
-    wouldTakeAgainPercent: teacher.wouldTakeAgainPercent,
-    numRatings: teacher.numRatings,
-    ratings: (teacher.ratings?.edges ?? []).map((e: { node: RMPRatingNode }) => ({
+  function parseEdges(edges: { node: RMPRatingNode }[]) {
+    return edges.map(e => ({
       id: e.node.id,
       comment: e.node.comment,
       qualityRating: e.node.qualityRating,
@@ -112,7 +105,34 @@ export async function getProfessorById(id: string) {
       attendanceMandatory: e.node.attendanceMandatory,
       wouldTakeAgain: e.node.wouldTakeAgain,
       tags: e.node.ratingTags ? e.node.ratingTags.split('--') : [],
-    })),
+    }))
+  }
+
+  const ratings = parseEdges(teacher.ratings?.edges ?? [])
+
+  // Fetch one additional page if there are more reviews (up to 200 total)
+  const pageInfo = teacher.ratings?.pageInfo
+  if (pageInfo?.hasNextPage && pageInfo.endCursor && ratings.length < 200) {
+    try {
+      const page2 = await rmpFetch(query, { id, cursor: pageInfo.endCursor })
+      const page2Edges = page2?.data?.node?.ratings?.edges ?? []
+      ratings.push(...parseEdges(page2Edges))
+    } catch {
+      // Non-fatal: keep first page results
+    }
+  }
+
+  return {
+    id: teacher.id,
+    firstName: teacher.firstName,
+    lastName: teacher.lastName,
+    department: teacher.department,
+    schoolName: teacher.school?.name ?? 'Rutgers University',
+    avgRating: teacher.avgRating,
+    avgDifficulty: teacher.avgDifficulty,
+    wouldTakeAgainPercent: teacher.wouldTakeAgainPercent,
+    numRatings: teacher.numRatings,
+    ratings,
   }
 }
 

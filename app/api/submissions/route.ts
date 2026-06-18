@@ -1,6 +1,15 @@
+import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
+
+function submitterFingerprint(req: NextRequest): string {
+  const salt = process.env.VOTE_FINGERPRINT_SALT ?? ''
+  const forwarded = req.headers.get('x-forwarded-for')
+  const realIp = req.headers.get('x-real-ip')
+  const ip = (forwarded ? forwarded.split(',')[0].trim() : realIp) ?? '0.0.0.0'
+  return createHash('sha256').update(`${salt}:submission:${ip}`).digest('hex')
+}
 
 export async function POST(req: NextRequest) {
   const db = createServiceClient()
@@ -13,6 +22,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'professor_name and course_id are required' },
         { status: 400 }
+      )
+    }
+
+    // Rate limit: max 5 submissions per IP
+    const fingerprint = submitterFingerprint(req)
+    const { count } = await db
+      .from('user_submissions')
+      .select('id', { count: 'exact', head: true })
+      .eq('submitter_fingerprint', fingerprint)
+    if ((count ?? 0) >= 5) {
+      return NextResponse.json(
+        { error: 'Submission limit reached' },
+        { status: 429 }
       )
     }
 
@@ -41,6 +63,7 @@ export async function POST(req: NextRequest) {
         professor_name: professor_name.trim(),
         professor_id,
         course_id,
+        submitter_fingerprint: fingerprint,
         semester_code: semester_code ?? null,
         section_number: section_number ?? null,
         evidence: evidence ?? null,

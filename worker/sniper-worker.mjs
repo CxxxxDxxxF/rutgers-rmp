@@ -363,7 +363,15 @@ async function sendStatusNotifications(watch, openStatus, openStatusText, detect
     }
   }
 
-  await markWatchNotified(watch.watchId, status, statusAt, channels.length, sent)
+  try {
+    await markWatchNotified(watch.watchId, status, statusAt, channels.length, sent)
+  } catch (err) {
+    console.error(JSON.stringify({
+      event: 'mark_notified_error',
+      watch_id: watch.watchId,
+      message: errorMessage(err),
+    }))
+  }
 
   console.log(JSON.stringify({
     event: 'section_status_detected',

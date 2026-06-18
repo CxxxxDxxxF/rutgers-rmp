@@ -25,6 +25,17 @@ const TAG_OPTIONS = new Set([
 ])
 const COURSE_NUMBER_RE = /^\d{2}:\d{3}:\d{3}$/
 
+const SORT_COLUMNS = {
+  newest:       { column: 'created_at',   ascending: false },
+  oldest:       { column: 'created_at',   ascending: true  },
+  helpful:      { column: 'helpful_count', ascending: false },
+  quality_desc: { column: 'quality_rating', ascending: false },
+  quality_asc:  { column: 'quality_rating', ascending: true  },
+} as const
+
+const DEFAULT_LIMIT = 10
+const MAX_LIMIT = 50
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const professor_id = searchParams.get('professor_id')
@@ -37,28 +48,53 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
   }
 
-  const { data, error } = await supabase
+  const sortKey = (searchParams.get('sort') ?? 'newest') as keyof typeof SORT_COLUMNS
+  const sortConfig = SORT_COLUMNS[sortKey] ?? SORT_COLUMNS.newest
+  const tag = searchParams.get('tag')
+  const limit = Math.min(Math.max(parseInt(searchParams.get('limit') ?? '') || DEFAULT_LIMIT, 1), MAX_LIMIT)
+  const page = Math.max(parseInt(searchParams.get('page') ?? '') || 1, 1)
+  const offset = (page - 1) * limit
+
+  const SELECT = `
+    id,
+    quality_rating,
+    difficulty_rating,
+    would_take_again,
+    grade_received,
+    comment,
+    tags,
+    is_online,
+    attendance_required,
+    helpful_count,
+    created_at,
+    courses (
+      course_number,
+      name
+    )
+  `
+
+  // Count query (excludes removed reviews)
+  let countQuery = supabase
     .from('reviews')
-    .select(`
-      id,
-      quality_rating,
-      difficulty_rating,
-      would_take_again,
-      grade_received,
-      comment,
-      tags,
-      is_online,
-      attendance_required,
-      helpful_count,
-      created_at,
-      courses (
-        course_number,
-        name
-      )
-    `)
+    .select('id', { count: 'exact', head: true })
     .eq('professor_id', professor_id)
     .eq('source', 'native')
-    .order('created_at', { ascending: false })
+    .eq('is_removed', false)
+  if (tag) countQuery = countQuery.contains('tags', [tag])
+  const { count: total } = await countQuery
+
+  // Data query
+  let query = supabase
+    .from('reviews')
+    .select(SELECT)
+    .eq('professor_id', professor_id)
+    .eq('source', 'native')
+    .eq('is_removed', false)
+    .order(sortConfig.column, { ascending: sortConfig.ascending })
+    .range(offset, offset + limit - 1)
+  if (tag) query = query.contains('tags', [tag])
+
+  const { data, error } = await query
 
   if (error) {
     log.error('Error fetching reviews:', error)
@@ -83,7 +119,13 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json(reviews)
+  return NextResponse.json({
+    reviews,
+    total: total ?? 0,
+    page,
+    limit,
+    has_more: offset + reviews.length < (total ?? 0),
+  })
 }
 
 export async function POST(req: NextRequest) {
@@ -97,6 +139,7 @@ export async function POST(req: NextRequest) {
 
   const {
     rmp_id,
+    professor_id: direct_professor_id,
     quality_rating,
     difficulty_rating,
     would_take_again,
@@ -115,9 +158,11 @@ export async function POST(req: NextRequest) {
   const cleanTags = sanitizeTags(tags)
   const cleanGrade = sanitizeGrade(grade_received)
 
-  if (!rmp_id || typeof rmp_id !== 'string' || typeof comment !== 'string') {
+  const hasIdentifier = (typeof rmp_id === 'string' && rmp_id.length > 0) ||
+    (typeof direct_professor_id === 'string' && direct_professor_id.length > 0)
+  if (!hasIdentifier || typeof comment !== 'string') {
     return NextResponse.json(
-      { error: 'rmp_id, quality_rating, difficulty_rating, and comment are required' },
+      { error: 'rmp_id or professor_id, plus quality_rating, difficulty_rating, and comment are required' },
       { status: 400 }
     )
   }
@@ -144,18 +189,29 @@ export async function POST(req: NextRequest) {
 
   const reviewer_ip = buildReviewerFingerprint(req)
 
-  // Look up professor by rmp_id
-  const { data: professor, error: profError } = await db
-    .from('professors')
-    .select('id')
-    .eq('rmp_id', rmp_id)
-    .single()
-
-  if (profError || !professor) {
-    return NextResponse.json({ error: 'Professor not found' }, { status: 404 })
+  // Resolve professor ID: prefer direct UUID, fall back to rmp_id lookup
+  let professor_id: string
+  if (typeof direct_professor_id === 'string' && direct_professor_id.length > 0) {
+    const { data: prof, error: profError } = await db
+      .from('professors')
+      .select('id')
+      .eq('id', direct_professor_id)
+      .single()
+    if (profError || !prof) {
+      return NextResponse.json({ error: 'Professor not found' }, { status: 404 })
+    }
+    professor_id = prof.id
+  } else {
+    const { data: prof, error: profError } = await db
+      .from('professors')
+      .select('id')
+      .eq('rmp_id', rmp_id as string)
+      .single()
+    if (profError || !prof) {
+      return NextResponse.json({ error: 'Professor not found' }, { status: 404 })
+    }
+    professor_id = prof.id
   }
-
-  const professor_id = professor.id
 
   // Rate limit: max 3 reviews per professor per IP
   const { count } = await db
@@ -178,7 +234,7 @@ export async function POST(req: NextRequest) {
       .from('courses')
       .select('id')
       .eq('course_number', cleanCourseNumber)
-      .single()
+      .maybeSingle()
     course_id = course?.id ?? null
   }
 

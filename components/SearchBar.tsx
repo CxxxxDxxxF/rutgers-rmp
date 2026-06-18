@@ -76,10 +76,12 @@ export default function SearchBar() {
       const data = await res.json()
       const professors: ProfessorResult[] = Array.isArray(data?.professors) ? data.professors : []
       const courses: CourseResult[] = Array.isArray(data?.courses) ? data.courses : []
-      setItems([
-        ...professors.map(p => ({ kind: 'professor' as const, professor: p })),
-        ...courses.map(c => ({ kind: 'course' as const, course: c })),
-      ])
+      // If query looks like a course number (digits, colons, or starts with digits),
+      // put courses first so they're immediately visible
+      const looksCourseNumber = /^\d|^\d{2}:\d|:\d{3}/.test(q.trim())
+      const courseItems = courses.map(c => ({ kind: 'course' as const, course: c }))
+      const profItems = professors.map(p => ({ kind: 'professor' as const, professor: p }))
+      setItems(looksCourseNumber ? [...courseItems, ...profItems] : [...profItems, ...courseItems])
       setOpen(true)
       setSelected(-1)
     } catch {
@@ -113,7 +115,10 @@ export default function SearchBar() {
     if (!open) return
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s + 1, items.length - 1)) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(s => Math.max(s - 1, -1)) }
-    if (e.key === 'Enter' && selected >= 0) handleSelect(items[selected])
+    if (e.key === 'Enter') {
+      if (selected >= 0) handleSelect(items[selected])
+      else if (items.length > 0) handleSelect(items[0])
+    }
     if (e.key === 'Escape') { setOpen(false); setSelected(-1) }
   }
 

@@ -82,52 +82,71 @@ function professorHref(prof: Professor) {
 
 function ProfessorOptionCard({ prof }: { prof: Professor }) {
   const vc = prof.verdict ? VERDICT_CONFIG[prof.verdict] : null
+  const qColor = prof.avg_rating != null ? ratingColor(prof.avg_rating) : '#52525b'
+  const dColor = prof.avg_difficulty != null
+    ? (prof.avg_difficulty >= 4 ? '#ef4444' : prof.avg_difficulty >= 3 ? '#f59e0b' : '#22c55e')
+    : '#52525b'
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-[#CC0033]/50 transition-all">
-      <div className="flex items-center justify-between gap-3">
-        <Link href={professorHref(prof)} className="min-w-0 group">
-          <div className="font-semibold text-white group-hover:text-[#ff4d6d] transition-colors truncate">
-            {prof.first_name} {prof.last_name}
-          </div>
-          <div className="text-xs text-zinc-500 mt-0.5">
-            {prof.num_ratings != null && prof.num_ratings > 0
-              ? `${prof.num_ratings} RMP ratings`
-              : 'No RMP ratings yet'}
-          </div>
-        </Link>
+    <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 transition-all group/card">
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
-        <div className="flex items-center gap-3 shrink-0">
-          {prof.avg_rating != null && (
-            <div className="text-right">
-              <div className="text-xl font-black" style={{ color: ratingColor(prof.avg_rating) }}>
-                {Number(prof.avg_rating).toFixed(1)}
-              </div>
+      <div className="pl-4 pr-5 pt-4 pb-3 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <Link href={professorHref(prof)} className="min-w-0">
+            <div className="font-semibold text-white group-hover/card:text-[#ff4d6d] transition-colors truncate leading-tight">
+              {prof.first_name} {prof.last_name}
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5">
+              {prof.num_ratings != null && prof.num_ratings > 0
+                ? `${prof.num_ratings} RMP ratings`
+                : 'No RMP ratings yet'}
+            </div>
+          </Link>
+
+          <div className="flex items-center gap-3 shrink-0 pt-0.5">
+            <div className="flex items-center gap-2.5">
+              {prof.avg_rating != null && (
+                <div className="text-center">
+                  <div className="text-xl font-black leading-none" style={{ color: qColor }}>
+                    {Number(prof.avg_rating).toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+                </div>
+              )}
+              {prof.avg_rating != null && prof.avg_difficulty != null && (
+                <div className="h-7 w-px bg-zinc-800" />
+              )}
               {prof.avg_difficulty != null && (
-                <div className="text-xs text-zinc-600">diff {Number(prof.avg_difficulty).toFixed(1)}</div>
+                <div className="text-center">
+                  <div className="text-xl font-black leading-none" style={{ color: dColor }}>
+                    {Number(prof.avg_difficulty).toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-zinc-600 mt-0.5">Diff</div>
+                </div>
               )}
             </div>
-          )}
-          {vc && <Badge tone={vc.tone}>{vc.label}</Badge>}
+            {vc && <Badge tone={vc.tone}>{vc.label}</Badge>}
+          </div>
         </div>
-      </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-          <ProfessorGradeBadge grade={prof.student_grade} compact />
-          {prof.would_take_again != null && prof.would_take_again >= 0 && (
-            <span>{Math.round(prof.would_take_again)}% would take again</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+            <ProfessorGradeBadge grade={prof.student_grade} compact />
+            {prof.would_take_again != null && prof.would_take_again >= 0 && (
+              <span>{Math.round(prof.would_take_again)}% again</span>
+            )}
+          </div>
+          {prof.rmp_id && (
+            <CompareButton
+              rmpId={prof.rmp_id}
+              slug={prof.slug}
+              name={`${prof.first_name} ${prof.last_name}`}
+              department={null}
+              compact
+            />
           )}
         </div>
-        {prof.rmp_id && (
-          <CompareButton
-            rmpId={prof.rmp_id}
-            slug={prof.slug}
-            name={`${prof.first_name} ${prof.last_name}`}
-            department={null}
-            compact
-          />
-        )}
       </div>
     </div>
   )
@@ -324,6 +343,7 @@ function CourseContent({ slug }: { slug: string }) {
         if (!res.ok) throw new Error('Course not found')
         const json = await res.json()
         setData(json)
+        document.title = `${json.course.course_number} ${json.course.name} | RU Rate`
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -414,7 +434,7 @@ function CourseContent({ slug }: { slug: string }) {
               </h1>
 
               {department && (
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-3">
                   <Link
                     href={`/courses?dept=${department.slug}`}
                     className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
@@ -423,6 +443,12 @@ function CourseContent({ slug }: { slug: string }) {
                       {department.code}
                     </span>
                     <span>{department.name}</span>
+                  </Link>
+                  <Link
+                    href={`/department/${department.slug}`}
+                    className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                  >
+                    View department →
                   </Link>
                 </div>
               )}

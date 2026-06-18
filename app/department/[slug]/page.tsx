@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
+import AppHeader from '@/components/AppHeader'
 
 interface Department {
   id: string
@@ -41,6 +42,7 @@ interface DepartmentDetail {
   department: Department
   professors: ProfessorRow[]
   courses: CourseRow[]
+  related: RelatedDept[]
 }
 
 interface RelatedDept {
@@ -94,30 +96,55 @@ function VerdictBadge({ verdict }: { verdict: string | null }) {
 
 function ProfessorCard({ prof }: { prof: ProfessorRow }) {
   const href = `/professor/${prof.slug}${prof.rmp_id ? `?rmpId=${prof.rmp_id}` : ''}`
+  const qColor = ratingColor(prof.avg_rating)
+  const dColor = prof.avg_difficulty != null
+    ? (prof.avg_difficulty >= 4 ? '#ef4444' : prof.avg_difficulty >= 3 ? '#f59e0b' : '#22c55e')
+    : '#71717a'
 
   return (
     <Link
       href={href}
-      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all group"
+      className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
+
+      <div className="pl-4 pr-4 pt-3 pb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors truncate">
+          <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors leading-tight truncate">
             {prof.first_name} {prof.last_name}
           </div>
-          <div className="text-xs text-zinc-500 mt-0.5">{prof.num_ratings} rating{prof.num_ratings !== 1 ? 's' : ''}</div>
+          <div className="text-xs text-zinc-500 truncate mt-0.5">{prof.department}</div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {prof.avg_rating != null && (
-            <span
-              className="text-xl font-black"
-              style={{ color: ratingColor(prof.avg_rating) }}
-            >
-              {prof.avg_rating.toFixed(1)}
-            </span>
-          )}
+        <div className="flex items-center gap-3 shrink-0 pt-0.5">
+          <div className="flex items-center gap-2.5">
+            {prof.avg_rating != null && (
+              <>
+                <div className="text-center">
+                  <div className="text-xl font-black leading-none" style={{ color: qColor }}>
+                    {prof.avg_rating.toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+                </div>
+                {prof.avg_difficulty != null && (
+                  <>
+                    <div className="h-7 w-px bg-zinc-800" />
+                    <div className="text-center">
+                      <div className="text-xl font-black leading-none" style={{ color: dColor }}>
+                        {prof.avg_difficulty.toFixed(1)}
+                      </div>
+                      <div className="text-[10px] text-zinc-600 mt-0.5">Diff</div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
           <VerdictBadge verdict={prof.verdict} />
         </div>
+      </div>
+
+      <div className="px-4 pb-2">
+        <div className="text-[10px] text-zinc-700">{prof.num_ratings} rating{prof.num_ratings !== 1 ? 's' : ''}</div>
       </div>
     </Link>
   )
@@ -152,16 +179,8 @@ function DepartmentContent({ slug }: { slug: string }) {
         if (!res.ok) throw new Error('Department not found')
         const json: DepartmentDetail = await res.json()
         setData(json)
-
-        // Fetch related departments from same school
-        const allRes = await fetch('/api/departments')
-        if (allRes.ok) {
-          const allDepts: RelatedDept[] = await allRes.json()
-          const others = allDepts.filter(
-            (d) => d.school === json.department.school && d.slug !== slug
-          )
-          setRelated(others.slice(0, 8))
-        }
+        document.title = `${json.department.name} | Departments | RU Rate`
+        setRelated(json.related ?? [])
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -194,30 +213,18 @@ function DepartmentContent({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      {/* Header */}
-      <header className="border-b border-zinc-900 px-6 py-4 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/90">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <Link
-            href="/departments"
-            className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+      <AppHeader />
+
+      {/* Breadcrumb */}
+      <div className="border-b border-zinc-900/60 px-6 py-2">
+        <div className="max-w-5xl mx-auto flex items-center gap-2 text-xs text-zinc-500">
+          <Link href="/departments" className="hover:text-zinc-300 transition-colors">
             Departments
           </Link>
-          <div className="h-4 w-px bg-zinc-800" />
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded flex items-center justify-center font-black text-white text-xs"
-              style={{ backgroundColor: '#CC0033' }}
-            >
-              RU
-            </div>
-            <span className="font-bold text-white text-sm">RU Rate</span>
-          </div>
+          <span>/</span>
+          <span className="text-zinc-400">{department.name}</span>
         </div>
-      </header>
+      </div>
 
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="flex gap-8 items-start">
@@ -266,27 +273,36 @@ function DepartmentContent({ slug }: { slug: string }) {
             {/* Courses */}
             {courses.length > 0 && (
               <section>
-                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
-                  Courses in this Department
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                    Courses in this Department
+                  </h2>
+                  <Link
+                    href={`/courses?dept=${department.slug}`}
+                    className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                  >
+                    Browse with sections →
+                  </Link>
+                </div>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
                   {courses.map((course, i) => (
-                    <div
+                    <Link
                       key={course.id}
-                      className={`flex items-center gap-4 px-5 py-3.5 ${
+                      href={`/course/${course.slug}`}
+                      className={`flex items-center gap-4 px-5 py-3.5 hover:bg-zinc-800/50 hover:text-[#CC0033] transition-colors group ${
                         i < courses.length - 1 ? 'border-b border-zinc-800' : ''
                       }`}
                     >
                       <span className="shrink-0 text-xs font-mono text-zinc-400 w-20">
                         {course.course_number}
                       </span>
-                      <span className="text-sm text-zinc-200 flex-1">{course.name}</span>
+                      <span className="text-sm text-zinc-200 flex-1 group-hover:text-white transition-colors">{course.name}</span>
                       {course.credits != null && (
                         <span className="shrink-0 text-xs text-zinc-600">
                           {course.credits} cr
                         </span>
                       )}
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </section>
