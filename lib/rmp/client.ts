@@ -199,16 +199,24 @@ export async function fetchAllRatings(
   return { ratings: ratings.slice(0, limit), profile }
 }
 
+const RMP_TIMEOUT_MS = 10_000
+
 async function rmpGraphql(query: string, variables: Record<string, unknown>, fetchImpl: RMPFetch): Promise<unknown> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), RMP_TIMEOUT_MS)
+
   let response: Response
   try {
     response = await fetchImpl(RMP_GRAPHQL_URL, {
       method: 'POST',
       headers: RMP_HEADERS,
       body: JSON.stringify({ query, variables }),
+      signal: controller.signal,
     })
   } catch (error) {
     throw new RMPAPIError(`RMP API request failed: ${errorMessage(error)}`)
+  } finally {
+    clearTimeout(timer)
   }
 
   if (!response.ok) {

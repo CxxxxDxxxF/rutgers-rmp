@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
         ? supabase
             .from('professor_cache')
             .select('rmp_id, slug, first_name, last_name, department, school_name, avg_rating, avg_difficulty, would_take_again, num_ratings, ai_analysis')
-            .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`)
+            .or(`first_name.ilike.%${sanitizeFilterValue(q)}%,last_name.ilike.%${sanitizeFilterValue(q)}%`)
             .order('search_count', { ascending: false })
             .limit(5)
         : Promise.resolve({ data: [] }),
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
             .from('professors')
             .select('id, first_name, last_name, slug, professor_departments(is_primary, departments(name))')
             .is('cache_id', null)
-            .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`)
+            .or(`first_name.ilike.%${sanitizeFilterValue(q)}%,last_name.ilike.%${sanitizeFilterValue(q)}%`)
             .limit(8)
         : Promise.resolve({ data: [] }),
       searchProfessors(q),
@@ -153,13 +153,17 @@ export async function GET(req: NextRequest) {
   }
 }
 
+function sanitizeFilterValue(value: string): string {
+  return value.replace(/[%_(),]/g, ' ').trim()
+}
+
 /**
  * Multi-word queries match when every word appears in the title (so
  * "intro to computer" finds "Introduction to Computer Science"), or when
  * the whole query matches the course number.
  */
 function courseSearchFilter(q: string): string {
-  const sanitized = q.replace(/[(),]/g, ' ').trim()
+  const sanitized = sanitizeFilterValue(q)
   const words = sanitized.split(/\s+/).filter(Boolean)
   if (words.length <= 1) {
     return `course_number.ilike.%${sanitized}%,name.ilike.%${sanitized}%`
