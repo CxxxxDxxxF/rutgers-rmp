@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
 import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
+import CompareButton from '@/components/CompareButton'
+import { MAX_COMPARE } from '@/lib/compare'
 import type { AIAnalysis } from '@/lib/supabase'
 import type { ProfessorGrade } from '@/lib/professor-grade'
 
@@ -311,9 +313,19 @@ export default function SchedulePage() {
                   </div>
                 )}
               </div>
-              <button onClick={reset} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
-                Start over
-              </button>
+              <div className="flex items-center gap-3">
+                {results.length > 1 && (
+                  <Link
+                    href={`/compare?ids=${encodeURIComponent(results.slice(0, MAX_COMPARE).map(r => r.id).join(','))}`}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white transition-colors"
+                  >
+                    Compare All →
+                  </Link>
+                )}
+                <button onClick={reset} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+                  Start over
+                </button>
+              </div>
             </div>
 
             {/* Professor cards */}
@@ -383,7 +395,7 @@ export default function SchedulePage() {
                       </div>
                     )}
 
-                    <div className="pl-11 flex items-center gap-3">
+                    <div className="pl-11 flex items-center gap-3 flex-wrap">
                       <Link
                         href={`/professor/${prof.slug}?rmpId=${prof.id}`}
                         className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
@@ -393,6 +405,13 @@ export default function SchedulePage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </Link>
+                      <CompareButton
+                        rmpId={prof.id}
+                        slug={prof.slug}
+                        name={`${prof.firstName} ${prof.lastName}`}
+                        department={prof.department}
+                        compact
+                      />
                       {!prof.ai_analysis && (
                         <span className="text-xs text-zinc-600">Click for full AI analysis</span>
                       )}

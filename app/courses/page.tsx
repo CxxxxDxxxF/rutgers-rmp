@@ -51,6 +51,7 @@ function CoursesContent() {
   const [credits, setCredits] = useState<string>(searchParams.get('credits') ?? '')
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
   const [onlyWithSections, setOnlyWithSections] = useState(searchParams.get('open') === '1')
+  const [onlyWithOpen, setOnlyWithOpen] = useState(searchParams.get('openonly') === '1')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadKey, setLoadKey] = useState(0)
@@ -108,9 +109,10 @@ function CoursesContent() {
     if (credits) params.set('credits', credits)
     if (level) params.set('level', level)
     if (onlyWithSections) params.set('open', '1')
+    if (onlyWithOpen) params.set('openonly', '1')
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, router])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -203,6 +205,9 @@ function CoursesContent() {
     if (onlyWithSections) {
       list = list.filter(c => (c.section_count ?? 0) > 0)
     }
+    if (onlyWithOpen) {
+      list = list.filter(c => (c.open_section_count ?? 0) > 0)
+    }
     if (search.trim() && search.trim() !== serverQuery) {
       const q = search.toLowerCase()
       list = list.filter(
@@ -212,7 +217,7 @@ function CoursesContent() {
       )
     }
     return list
-  }, [courses, search, serverQuery, onlyWithSections])
+  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen])
 
   const levels = useMemo(() => {
     const set = new Set<string>()
@@ -221,7 +226,7 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections)
+  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen)
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -365,10 +370,21 @@ function CoursesContent() {
               Has sections
             </button>
 
+            <button
+              onClick={() => setOnlyWithOpen(v => !v)}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                onlyWithOpen
+                  ? 'bg-green-950 border-green-800 text-green-400'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+              }`}
+            >
+              Open seats
+            </button>
+
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false)
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false)
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -422,7 +438,7 @@ function CoursesContent() {
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false)
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false)
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
