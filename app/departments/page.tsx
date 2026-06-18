@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import AppHeader from '@/components/AppHeader'
 import DepartmentsGrid from '@/components/DepartmentsGrid'
 
 interface DepartmentRow {
@@ -78,30 +78,7 @@ export default async function DepartmentsPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
-      {/* Header */}
-      <header className="border-b border-zinc-900 px-6 py-4 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/90">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </Link>
-          <div className="h-4 w-px bg-zinc-800" />
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded flex items-center justify-center font-black text-white text-xs"
-              style={{ backgroundColor: '#CC0033' }}
-            >
-              RU
-            </div>
-            <span className="font-bold text-white text-sm">RU Rate</span>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
         {/* Page header */}
