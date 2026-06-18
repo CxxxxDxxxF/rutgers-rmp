@@ -49,7 +49,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'HTTP-Referer': 'https://rurate.vercel.app',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://rurate-web-production.up.railway.app',
       'X-Title': 'RU Rate',
     },
     body: JSON.stringify({
