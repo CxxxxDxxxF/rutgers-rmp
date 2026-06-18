@@ -39,6 +39,9 @@ yarn-error.log*
 # oh-my-claudecode session state
 .omc/
 
+# local AI tool config (machine-specific, not project code)
+.claude/
+
 # vercel
 .vercel
 
