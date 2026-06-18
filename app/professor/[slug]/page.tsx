@@ -156,14 +156,20 @@ function ratingColor(r: number) {
 }
 
 function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
+  const qColor = ratingColor(prof.avg_rating)
+  const href = prof.rmp_id
+    ? `/professor/${prof.slug}?rmpId=${prof.rmp_id}`
+    : `/professor/${prof.slug}`
+
   return (
     <Link
-      href={`/professor/${prof.slug}?rmpId=${prof.rmp_id}`}
-      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors"
+      href={href}
+      className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
+      <div className="pl-4 pr-4 py-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white truncate">
+          <p className="text-sm font-semibold text-white group-hover:text-[#CC0033] transition-colors truncate">
             {prof.first_name} {prof.last_name}
           </p>
           {prof.department && (
@@ -172,10 +178,10 @@ function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
         </div>
         {prof.avg_rating != null && (
           <div className="shrink-0 text-center">
-            <div className="text-lg font-black" style={{ color: ratingColor(prof.avg_rating) }}>
+            <div className="text-lg font-black leading-none" style={{ color: qColor }}>
               {prof.avg_rating.toFixed(1)}
             </div>
-            <div className="text-xs text-zinc-600">Quality</div>
+            <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
           </div>
         )}
       </div>

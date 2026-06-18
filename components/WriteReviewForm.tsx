@@ -1,16 +1,20 @@
 'use client'
 
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import type { NativeReview } from './NativeReviewCard'
 
 const GRADE_OPTIONS = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F', 'W', 'N/A']
+const MAX_TAGS = 8
+const MIN_COMMENT = 20
+const MAX_COMMENT = 2000
 
 const TAG_OPTIONS = [
   'Clear grading criteria',
   'Get ready to read',
   'Lots of homework',
   'Participation matters',
-  'Skip class? You won\'t pass',
+  "Skip class? You won't pass",
   'Graded by few things',
   'Test heavy',
   'Would take again',
@@ -30,16 +34,13 @@ interface WriteReviewFormProps {
   onCancel: () => void
 }
 
-function StarSelector({
-  label,
-  value,
-  onChange,
-}: {
+function StarSelector({ label, value, onChange }: {
   label: string
   value: number
   onChange: (v: number) => void
 }) {
   const [hovered, setHovered] = useState(0)
+  const active = hovered || value
 
   return (
     <div className="space-y-1.5">
@@ -54,15 +55,39 @@ function StarSelector({
             onMouseLeave={() => setHovered(0)}
             className="w-9 h-9 rounded-lg border transition-all text-sm font-bold"
             style={{
-              borderColor: (hovered || value) >= star ? '#CC0033' : '#3f3f46',
-              backgroundColor: (hovered || value) >= star ? '#CC003320' : 'transparent',
-              color: (hovered || value) >= star ? '#CC0033' : '#71717a',
+              borderColor: active >= star ? '#CC0033' : '#3f3f46',
+              backgroundColor: active >= star ? '#CC003320' : 'transparent',
+              color: active >= star ? '#CC0033' : '#71717a',
             }}
           >
             {star}
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+function CommentCounter({ length }: { length: number }) {
+  const progress = Math.min(length / MAX_COMMENT, 1)
+  const meetsMin = length >= MIN_COMMENT
+  const nearMax = length > MAX_COMMENT * 0.9
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <div className="flex-1 h-1 rounded-full bg-zinc-800 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-200"
+          style={{
+            width: `${progress * 100}%`,
+            backgroundColor: nearMax ? '#ef4444' : meetsMin ? '#22c55e' : '#CC0033',
+          }}
+        />
+      </div>
+      <span className={`text-xs tabular-nums ${nearMax ? 'text-red-400' : meetsMin ? 'text-zinc-500' : 'text-zinc-600'}`}>
+        {length}/{MAX_COMMENT}
+        {!meetsMin && <span className="text-zinc-700"> (min {MIN_COMMENT})</span>}
+      </span>
     </div>
   )
 }
@@ -78,12 +103,19 @@ export default function WriteReviewForm({ rmpId, onSubmitted, onCancel }: WriteR
   const [comment, setComment] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const commentTrimmed = comment.trim()
+  const tagsRemaining = MAX_TAGS - selectedTags.length
+  const canAddTags = tagsRemaining > 0
+
   function toggleTag(tag: string) {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    )
+    setSelectedTags((prev) => {
+      if (prev.includes(tag)) return prev.filter((t) => t !== tag)
+      if (prev.length >= MAX_TAGS) return prev
+      return [...prev, tag]
+    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -92,7 +124,8 @@ export default function WriteReviewForm({ rmpId, onSubmitted, onCancel }: WriteR
 
     if (!qualityRating) return setError('Please select a quality rating.')
     if (!difficultyRating) return setError('Please select a difficulty rating.')
-    if (comment.trim().length < 20) return setError('Comment must be at least 20 characters.')
+    if (commentTrimmed.length < MIN_COMMENT)
+      return setError(`Comment must be at least ${MIN_COMMENT} characters.`)
 
     setSubmitting(true)
     try {
@@ -106,7 +139,7 @@ export default function WriteReviewForm({ rmpId, onSubmitted, onCancel }: WriteR
           would_take_again: wouldTakeAgain,
           attendance_required: attendanceRequired,
           grade_received: gradeReceived || null,
-          comment: comment.trim(),
+          comment: commentTrimmed,
           tags: selectedTags,
           is_online: isOnline,
           course_number: courseNumber.trim() || null,
@@ -114,13 +147,14 @@ export default function WriteReviewForm({ rmpId, onSubmitted, onCancel }: WriteR
       })
 
       const data = await res.json()
-
       if (!res.ok) {
         setError(data.error ?? 'Failed to submit review.')
         return
       }
 
-      onSubmitted(data as NativeReview)
+      // Show brief success state before calling onSubmitted
+      setSubmitted(true)
+      setTimeout(() => onSubmitted(data as NativeReview), 800)
     } catch {
       setError('Network error. Please try again.')
     } finally {
@@ -129,8 +163,12 @@ export default function WriteReviewForm({ rmpId, onSubmitted, onCancel }: WriteR
   }
 
   return (
-    <form
+    <motion.form
       onSubmit={handleSubmit}
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2 }}
       className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6"
     >
       <div className="flex items-center justify-between">
@@ -144,170 +182,180 @@ export default function WriteReviewForm({ rmpId, onSubmitted, onCancel }: WriteR
         </button>
       </div>
 
-      {/* Ratings */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <StarSelector label="Quality (1-5)" value={qualityRating} onChange={setQualityRating} />
-        <StarSelector label="Difficulty (1-5)" value={difficultyRating} onChange={setDifficultyRating} />
-      </div>
-
-      {/* Would take again */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-          Would take again?
-        </label>
-        <div className="flex gap-2">
-          {[
-            { label: 'Yes', value: true },
-            { label: 'No', value: false },
-          ].map(({ label, value }) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setWouldTakeAgain(value)}
-              className="px-4 py-2 rounded-lg border text-sm font-semibold transition-all"
-              style={{
-                borderColor:
-                  wouldTakeAgain === value
-                    ? value
-                      ? '#22c55e'
-                      : '#ef4444'
-                    : '#3f3f46',
-                backgroundColor:
-                  wouldTakeAgain === value
-                    ? value
-                      ? '#22c55e20'
-                      : '#ef444420'
-                    : 'transparent',
-                color:
-                  wouldTakeAgain === value
-                    ? value
-                      ? '#22c55e'
-                      : '#ef4444'
-                    : '#71717a',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Grade + Course */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-            Grade received
-          </label>
-          <select
-            value={gradeReceived}
-            onChange={(e) => setGradeReceived(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white focus:outline-none focus:border-zinc-500"
+      <AnimatePresence mode="wait">
+        {submitted ? (
+          <motion.div
+            key="success"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="py-8 text-center space-y-2"
           >
-            <option value="">Select grade</option>
-            {GRADE_OPTIONS.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="text-3xl">✅</div>
+            <p className="text-sm font-semibold text-white">Review submitted!</p>
+            <p className="text-xs text-zinc-500">Thanks for helping fellow Rutgers students.</p>
+          </motion.div>
+        ) : (
+          <motion.div key="form" className="space-y-6">
+            {/* Ratings */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <StarSelector label="Quality (1–5)" value={qualityRating} onChange={setQualityRating} />
+              <StarSelector label="Difficulty (1–5)" value={difficultyRating} onChange={setDifficultyRating} />
+            </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-            Course number (optional)
-          </label>
-          <input
-            type="text"
-            value={courseNumber}
-            onChange={(e) => setCourseNumber(e.target.value)}
-            placeholder="e.g. 01:198:111"
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
-      </div>
+            {/* Would take again */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                Would take again?
+              </label>
+              <div className="flex gap-2">
+                {[{ label: 'Yes', value: true }, { label: 'No', value: false }].map(({ label, value }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setWouldTakeAgain(value)}
+                    className="px-4 py-2 rounded-lg border text-sm font-semibold transition-all"
+                    style={{
+                      borderColor: wouldTakeAgain === value ? (value ? '#22c55e' : '#ef4444') : '#3f3f46',
+                      backgroundColor: wouldTakeAgain === value ? (value ? '#22c55e20' : '#ef444420') : 'transparent',
+                      color: wouldTakeAgain === value ? (value ? '#22c55e' : '#ef4444') : '#71717a',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-      {/* Checkboxes */}
-      <div className="flex flex-wrap gap-5">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={attendanceRequired}
-            onChange={(e) => setAttendanceRequired(e.target.checked)}
-            className="w-4 h-4 rounded accent-[#CC0033]"
-          />
-          <span className="text-sm text-zinc-300">Attendance mandatory</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isOnline}
-            onChange={(e) => setIsOnline(e.target.checked)}
-            className="w-4 h-4 rounded accent-[#CC0033]"
-          />
-          <span className="text-sm text-zinc-300">Online class</span>
-        </label>
-      </div>
+            {/* Grade + Course */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                  Grade received
+                </label>
+                <select
+                  value={gradeReceived}
+                  onChange={(e) => setGradeReceived(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white focus:outline-none focus:border-zinc-500"
+                >
+                  <option value="">Select grade</option>
+                  {GRADE_OPTIONS.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
 
-      {/* Comment */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-          Review (min. 20 characters)
-        </label>
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={4}
-          placeholder="Share your experience with this professor..."
-          className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
-        />
-        <div className="text-xs text-zinc-600 text-right">
-          {comment.trim().length}/20 min chars
-        </div>
-      </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                  Course number (optional)
+                </label>
+                <input
+                  type="text"
+                  value={courseNumber}
+                  onChange={(e) => setCourseNumber(e.target.value)}
+                  placeholder="e.g. 01:198:111"
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                />
+              </div>
+            </div>
 
-      {/* Tags */}
-      <div className="space-y-2">
-        <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-          Tags (optional)
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {TAG_OPTIONS.map((tag) => {
-            const active = selectedTags.includes(tag)
-            return (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => toggleTag(tag)}
-                className="text-xs px-2.5 py-1 rounded-full border transition-all"
-                style={{
-                  borderColor: active ? '#CC0033' : '#3f3f46',
-                  backgroundColor: active ? '#CC003320' : 'transparent',
-                  color: active ? '#CC0033' : '#a1a1aa',
-                }}
-              >
-                {tag}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+            {/* Checkboxes */}
+            <div className="flex flex-wrap gap-5">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={attendanceRequired}
+                  onChange={(e) => setAttendanceRequired(e.target.checked)}
+                  className="w-4 h-4 rounded accent-[#CC0033]"
+                />
+                <span className="text-sm text-zinc-300">Attendance mandatory</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isOnline}
+                  onChange={(e) => setIsOnline(e.target.checked)}
+                  className="w-4 h-4 rounded accent-[#CC0033]"
+                />
+                <span className="text-sm text-zinc-300">Online class</span>
+              </label>
+            </div>
 
-      {/* Error */}
-      {error && (
-        <div className="text-sm text-red-400 bg-red-950/30 border border-red-900 rounded-lg px-4 py-2">
-          {error}
-        </div>
-      )}
+            {/* Comment */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                Review
+              </label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={4}
+                maxLength={MAX_COMMENT}
+                placeholder="Share your experience with this professor..."
+                className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+              />
+              <CommentCounter length={commentTrimmed.length} />
+            </div>
 
-      {/* Submit */}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full py-3 rounded-xl text-sm font-bold text-white transition-opacity disabled:opacity-50"
-        style={{ backgroundColor: '#CC0033' }}
-      >
-        {submitting ? 'Submitting...' : 'Submit Review'}
-      </button>
-    </form>
+            {/* Tags */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                  Tags (optional)
+                </label>
+                <span className={`text-xs ${tagsRemaining === 0 ? 'text-amber-400' : 'text-zinc-600'}`}>
+                  {selectedTags.length}/{MAX_TAGS} selected
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {TAG_OPTIONS.map((tag) => {
+                  const active = selectedTags.includes(tag)
+                  const disabled = !active && !canAddTags
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleTag(tag)}
+                      disabled={disabled}
+                      className="text-xs px-2.5 py-1 rounded-full border transition-all disabled:opacity-30"
+                      style={{
+                        borderColor: active ? '#CC0033' : '#3f3f46',
+                        backgroundColor: active ? '#CC003320' : 'transparent',
+                        color: active ? '#CC0033' : '#a1a1aa',
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Error */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="text-sm text-red-400 bg-red-950/30 border border-red-900 rounded-lg px-4 py-2"
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-opacity disabled:opacity-50"
+              style={{ backgroundColor: '#CC0033' }}
+            >
+              {submitting ? 'Submitting…' : 'Submit Review'}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.form>
   )
 }

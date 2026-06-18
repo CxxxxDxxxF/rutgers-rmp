@@ -94,30 +94,55 @@ function VerdictBadge({ verdict }: { verdict: string | null }) {
 
 function ProfessorCard({ prof }: { prof: ProfessorRow }) {
   const href = `/professor/${prof.slug}${prof.rmp_id ? `?rmpId=${prof.rmp_id}` : ''}`
+  const qColor = ratingColor(prof.avg_rating)
+  const dColor = prof.avg_difficulty != null
+    ? (prof.avg_difficulty >= 4 ? '#ef4444' : prof.avg_difficulty >= 3 ? '#f59e0b' : '#22c55e')
+    : '#71717a'
 
   return (
     <Link
       href={href}
-      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all group"
+      className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
+
+      <div className="pl-4 pr-4 pt-3 pb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors truncate">
+          <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors leading-tight truncate">
             {prof.first_name} {prof.last_name}
           </div>
-          <div className="text-xs text-zinc-500 mt-0.5">{prof.num_ratings} rating{prof.num_ratings !== 1 ? 's' : ''}</div>
+          <div className="text-xs text-zinc-500 truncate mt-0.5">{prof.department}</div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {prof.avg_rating != null && (
-            <span
-              className="text-xl font-black"
-              style={{ color: ratingColor(prof.avg_rating) }}
-            >
-              {prof.avg_rating.toFixed(1)}
-            </span>
-          )}
+        <div className="flex items-center gap-3 shrink-0 pt-0.5">
+          <div className="flex items-center gap-2.5">
+            {prof.avg_rating != null && (
+              <>
+                <div className="text-center">
+                  <div className="text-xl font-black leading-none" style={{ color: qColor }}>
+                    {prof.avg_rating.toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+                </div>
+                {prof.avg_difficulty != null && (
+                  <>
+                    <div className="h-7 w-px bg-zinc-800" />
+                    <div className="text-center">
+                      <div className="text-xl font-black leading-none" style={{ color: dColor }}>
+                        {prof.avg_difficulty.toFixed(1)}
+                      </div>
+                      <div className="text-[10px] text-zinc-600 mt-0.5">Diff</div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
           <VerdictBadge verdict={prof.verdict} />
         </div>
+      </div>
+
+      <div className="px-4 pb-2">
+        <div className="text-[10px] text-zinc-700">{prof.num_ratings} rating{prof.num_ratings !== 1 ? 's' : ''}</div>
       </div>
     </Link>
   )
