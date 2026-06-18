@@ -62,7 +62,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
   if (!res.ok) throw new Error(`OpenRouter error: ${res.status} ${await res.text()}`)
 
   const data = await res.json()
-  const text: string = data.choices[0].message.content ?? ''
+  const text: string = data.choices?.[0]?.message?.content ?? ''
 
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('No JSON in AI response')

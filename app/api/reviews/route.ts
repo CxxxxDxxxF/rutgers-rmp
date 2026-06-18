@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
       .from('courses')
       .select('id')
       .eq('course_number', cleanCourseNumber)
-      .single()
+      .maybeSingle()
     course_id = course?.id ?? null
   }
 
