@@ -10,6 +10,7 @@ import CompareButton from '@/components/CompareButton'
 import GradeChart from '@/components/GradeChart'
 import ReviewCard from '@/components/ReviewCard'
 import NativeReviewCard, { type NativeReview } from '@/components/NativeReviewCard'
+import NativeGradeChart from '@/components/NativeGradeChart'
 import WriteReviewForm from '@/components/WriteReviewForm'
 import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import { supabase } from '@/lib/supabase'
@@ -328,11 +329,12 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         <div className="space-y-3">
           {/* Grade summary */}
           {reviews.length > 0 && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-4">
               <ProfessorGradeBadge grade={nativeGrade} />
-              <p className="mt-2 text-xs text-zinc-500">
+              <p className="text-xs text-zinc-500">
                 Based on RU Rate reviews including quality, difficulty, would-take-again, and reported grades.
               </p>
+              <NativeGradeChart reviews={reviews} />
             </div>
           )}
 
@@ -783,23 +785,29 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
         Other professors in {deptName ?? 'this department'}
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {related.map(p => (
-          <Link
-            key={p.id}
-            href={p.rmp_id ? `/professor/${p.slug}?rmpId=${p.rmp_id}` : `/professor/${p.slug}?socId=${p.id}`}
-            className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-semibold text-white truncate min-w-0">{p.first_name} {p.last_name}</p>
-              {p.avg_rating != null && (
-                <div className="shrink-0 text-center">
-                  <div className="text-lg font-black" style={{ color: ratingColor(p.avg_rating) }}>{p.avg_rating.toFixed(1)}</div>
-                  <div className="text-xs text-zinc-600">Quality</div>
-                </div>
-              )}
-            </div>
-          </Link>
-        ))}
+        {related.map(p => {
+          const qColor = p.avg_rating != null ? ratingColor(p.avg_rating) : '#52525b'
+          return (
+            <Link
+              key={p.id}
+              href={p.rmp_id ? `/professor/${p.slug}?rmpId=${p.rmp_id}` : `/professor/${p.slug}?socId=${p.id}`}
+              className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
+            >
+              <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
+              <div className="pl-4 pr-4 py-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-white group-hover:text-[#CC0033] transition-colors truncate min-w-0">
+                  {p.first_name} {p.last_name}
+                </p>
+                {p.avg_rating != null && (
+                  <div className="shrink-0 text-center">
+                    <div className="text-lg font-black leading-none" style={{ color: qColor }}>{p.avg_rating.toFixed(1)}</div>
+                    <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+                  </div>
+                )}
+              </div>
+            </Link>
+          )
+        })}
       </div>
     </div>
   )
