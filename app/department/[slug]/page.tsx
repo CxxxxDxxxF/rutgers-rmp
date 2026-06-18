@@ -273,9 +273,17 @@ function DepartmentContent({ slug }: { slug: string }) {
             {/* Courses */}
             {courses.length > 0 && (
               <section>
-                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
-                  Courses in this Department
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                    Courses in this Department
+                  </h2>
+                  <Link
+                    href={`/courses?dept=${department.slug}`}
+                    className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                  >
+                    Browse with sections →
+                  </Link>
+                </div>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
                   {courses.map((course, i) => (
                     <Link
