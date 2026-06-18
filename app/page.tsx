@@ -146,19 +146,25 @@ export default async function HomePage() {
             </Link>
           ))}
 
-          <div className="bg-zinc-900/50 border border-dashed border-zinc-800 rounded-2xl p-5">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 bg-zinc-800 mb-3">
+          <Link
+            href="/departments"
+            className="group bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all"
+          >
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-white mb-3"
+              style={{ backgroundColor: '#CC0033' }}
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3A6 6 0 006 11v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
               </svg>
             </div>
-            <div className="font-bold text-zinc-400">
-              Rutgers NB Reviews
+            <div className="font-bold text-white group-hover:text-[#ff4d6d] transition-colors">
+              Professor Reviews
             </div>
-            <div className="text-sm text-zinc-600 mt-1 leading-snug">
-              Read RMP-backed summaries and leave RU Rate reviews for teachers you took.
+            <div className="text-sm text-zinc-500 mt-1 leading-snug">
+              Browse by department to find professors, read AI summaries, and leave RU Rate reviews.
             </div>
-          </div>
+          </Link>
         </div>
       </section>
 
