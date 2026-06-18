@@ -43,88 +43,106 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
     ? `/course/${course.slug}?semester=${encodeURIComponent(course.semester.slug)}`
     : `/course/${course.slug}`
 
+  const openCount = course.open_section_count ?? 0
+  const totalSections = course.section_count ?? 0
+  const hasSections = totalSections > 0
+  const hasOpen = openCount > 0
+
+  // Left accent: green = seats available, red = all full, gray = no sections
+  const accentColor = hasOpen ? '#22c55e' : hasSections ? '#ef4444' : '#3f3f46'
+
   return (
     <Link
       href={href}
-      className="group block bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all"
+      className="group relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <span
-            className="inline-block text-xs font-black tracking-wider px-2 py-0.5 rounded mb-2"
-            style={{ backgroundColor: '#CC0033', color: 'white' }}
-          >
-            {course.course_number}
-          </span>
+      {/* Status accent bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: accentColor }} />
 
-          <h2 className="font-semibold text-white group-hover:text-[#ff4d6d] transition-colors leading-snug">
-            {course.name}
-          </h2>
+      <div className="pl-5 pr-5 pt-4 pb-4">
+        {/* Top: course number + availability badge + credits */}
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <span
+              className="shrink-0 text-xs font-black tracking-wider px-2 py-0.5 rounded"
+              style={{ backgroundColor: '#CC0033', color: 'white' }}
+            >
+              {course.course_number}
+            </span>
 
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {course.department && <Badge>{course.department.code}</Badge>}
-            {course.semester && <Badge tone={course.semester.is_current ? 'green' : 'neutral'}>{course.semester.name}</Badge>}
-            {course.academic_level && <Badge>{course.academic_level}</Badge>}
-            {(course.section_count ?? 0) > 0 && (
-              <Badge tone="scarlet">
-                {course.section_count} section{course.section_count !== 1 ? 's' : ''}
-              </Badge>
-            )}
-            {(course.open_section_count ?? 0) > 0 && (
-              <Badge tone="green">
-                {course.open_section_count} open
-              </Badge>
-            )}
-            {(course.professor_count ?? 0) > 0 && (
-              <Badge>
-                {course.professor_count} prof{course.professor_count !== 1 ? 's' : ''}
-              </Badge>
+            {hasSections && (
+              hasOpen ? (
+                <span className="shrink-0 inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-green-950 border border-green-800 text-green-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  {openCount} open
+                </span>
+              ) : (
+                <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full bg-red-950 border border-red-900 text-red-400">
+                  FULL
+                </span>
+              )
             )}
           </div>
 
-          {(topProfessor || (course.buildings?.length ?? 0) > 0) && (
-            <div className="mt-4 space-y-2 text-xs text-zinc-500">
-              {topProfessor && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-zinc-600">Top teacher</span>
-                  <span className="font-semibold text-zinc-300">{topProfessor.name}</span>
-                  {topProfessor.avg_rating != null && (
-                    <span className="font-black" style={{ color: ratingColor(topProfessor.avg_rating) }}>
-                      {Number(topProfessor.avg_rating).toFixed(1)}★
-                    </span>
-                  )}
-                  <ProfessorGradeBadge grade={topProfessor.student_grade} compact />
-                  {topProfessor.verdict && (
-                    <span className="text-[10px] font-black uppercase text-zinc-400">
-                      {topProfessor.verdict}
-                    </span>
-                  )}
-                </div>
-              )}
-              {(course.buildings?.length ?? 0) > 0 && (
-                <div className="truncate">
-                  <span className="text-zinc-600">Buildings </span>
-                  <span>{course.buildings!.join(' · ')}</span>
-                </div>
-              )}
-            </div>
+          <div className="shrink-0 text-right">
+            <div className="text-lg font-black text-white leading-tight">{course.credits ?? '—'}</div>
+            <div className="text-[10px] text-zinc-600 leading-tight">cr</div>
+          </div>
+        </div>
+
+        {/* Course name */}
+        <h2 className="font-semibold text-white group-hover:text-[#ff4d6d] transition-colors leading-snug mb-3">
+          {course.name}
+        </h2>
+
+        {/* Meta badges */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          {course.department && <Badge>{course.department.code}</Badge>}
+          {course.semester && (
+            <Badge tone={course.semester.is_current ? 'green' : 'neutral'}>
+              {course.semester.name}
+            </Badge>
+          )}
+          {course.academic_level && <Badge>{course.academic_level}</Badge>}
+          {totalSections > 0 && (
+            <Badge tone="scarlet">
+              {totalSections} section{totalSections !== 1 ? 's' : ''}
+            </Badge>
+          )}
+          {(course.professor_count ?? 0) > 0 && (
+            <Badge>
+              {course.professor_count} prof{course.professor_count !== 1 ? 's' : ''}
+            </Badge>
           )}
         </div>
 
-        <div className="shrink-0 text-right space-y-1.5">
-          <div>
-            <div className="text-lg font-black text-white">{course.credits ?? '—'}</div>
-            <div className="text-xs text-zinc-600">credits</div>
-          </div>
-          {course.best_rating != null && (
-            <div>
-              <div className="text-sm font-black" style={{ color: ratingColor(course.best_rating) }}>
-                {Number(course.best_rating).toFixed(1)}★
+        {/* Professor + buildings */}
+        {(topProfessor || (course.buildings?.length ?? 0) > 0) && (
+          <div className="space-y-1.5 text-xs text-zinc-500">
+            {topProfessor && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-zinc-600">Top teacher</span>
+                <span className="font-semibold text-zinc-300">{topProfessor.name}</span>
+                {topProfessor.avg_rating != null && (
+                  <span className="font-black" style={{ color: ratingColor(topProfessor.avg_rating) }}>
+                    {Number(topProfessor.avg_rating).toFixed(1)}★
+                  </span>
+                )}
+                <ProfessorGradeBadge grade={topProfessor.student_grade} compact />
+                {topProfessor.verdict && (
+                  <span className="text-[10px] font-black uppercase text-zinc-400">
+                    {topProfessor.verdict}
+                  </span>
+                )}
               </div>
-              <div className="text-[10px] text-zinc-600">best prof</div>
-            </div>
-          )}
-        </div>
+            )}
+            {(course.buildings?.length ?? 0) > 0 && (
+              <div className="truncate text-zinc-600">
+                {course.buildings!.join(' · ')}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   )

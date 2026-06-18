@@ -52,6 +52,9 @@ function CoursesContent() {
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
   const [onlyWithSections, setOnlyWithSections] = useState(searchParams.get('open') === '1')
   const [onlyWithOpen, setOnlyWithOpen] = useState(searchParams.get('openonly') === '1')
+  const [sortBy, setSortBy] = useState<'number' | 'open' | 'rating'>(
+    (searchParams.get('sort') as 'number' | 'open' | 'rating') ?? 'number'
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadKey, setLoadKey] = useState(0)
@@ -110,9 +113,10 @@ function CoursesContent() {
     if (level) params.set('level', level)
     if (onlyWithSections) params.set('open', '1')
     if (onlyWithOpen) params.set('openonly', '1')
+    if (sortBy !== 'number') params.set('sort', sortBy)
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, router])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -199,7 +203,7 @@ function CoursesContent() {
     loadCourses()
   }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
 
-  // Instant client-side narrowing while typing + section filter
+  // Instant client-side narrowing while typing + section filter + sort
   const filtered = useMemo(() => {
     let list = courses
     if (onlyWithSections) {
@@ -216,8 +220,14 @@ function CoursesContent() {
           c.course_number.toLowerCase().includes(q)
       )
     }
+    if (sortBy === 'open') {
+      list = [...list].sort((a, b) => (b.open_section_count ?? 0) - (a.open_section_count ?? 0))
+    } else if (sortBy === 'rating') {
+      list = [...list].sort((a, b) => (b.best_rating ?? 0) - (a.best_rating ?? 0))
+    }
+    // 'number' is the default from the API (already sorted by course_number)
     return list
-  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen])
+  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, sortBy])
 
   const levels = useMemo(() => {
     const set = new Set<string>()
@@ -226,7 +236,7 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen)
+  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -360,6 +370,17 @@ function CoursesContent() {
             </select>
 
             <button
+              onClick={() => setOnlyWithOpen(v => !v)}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                onlyWithOpen
+                  ? 'bg-green-950 border-green-800 text-green-400'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+              }`}
+            >
+              Open seats only
+            </button>
+
+            <button
               onClick={() => setOnlyWithSections(v => !v)}
               className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
                 onlyWithSections
@@ -370,21 +391,24 @@ function CoursesContent() {
               Has sections
             </button>
 
-            <button
-              onClick={() => setOnlyWithOpen(v => !v)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                onlyWithOpen
-                  ? 'bg-green-950 border-green-800 text-green-400'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors focus:outline-none ${
+                sortBy !== 'number'
+                  ? 'bg-zinc-800 border-zinc-600 text-zinc-200'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400'
               }`}
             >
-              Open seats
-            </button>
+              <option value="number">Sort: Course #</option>
+              <option value="open">Sort: Most Open</option>
+              <option value="rating">Sort: Best Prof</option>
+            </select>
 
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false)
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -438,7 +462,7 @@ function CoursesContent() {
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false)
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
