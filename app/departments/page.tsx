@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import DepartmentsGrid from '@/components/DepartmentsGrid'
 
 interface DepartmentRow {
   id: string
@@ -72,66 +73,8 @@ async function getDepartments(): Promise<DepartmentRow[]> {
   }
 }
 
-function ratingColor(rating: number | null): string {
-  if (rating == null) return '#71717a'
-  if (rating >= 4) return '#22c55e'
-  if (rating >= 3) return '#f59e0b'
-  return '#ef4444'
-}
-
-function DepartmentCard({ dept }: { dept: DepartmentRow }) {
-  return (
-    <Link
-      href={`/department/${dept.slug}`}
-      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all group"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-xs font-mono text-zinc-500 mb-1">{dept.code}</div>
-          <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors leading-snug">
-            {dept.name}
-          </div>
-        </div>
-        {dept.avg_rating != null && (
-          <div
-            className="shrink-0 text-lg font-black"
-            style={{ color: ratingColor(dept.avg_rating) }}
-          >
-            {dept.avg_rating.toFixed(1)}
-          </div>
-        )}
-      </div>
-      <div className="mt-3 flex items-center gap-3 text-xs text-zinc-500">
-        <span>
-          {dept.professor_count > 0
-            ? `${dept.professor_count} professor${dept.professor_count !== 1 ? 's' : ''}`
-            : 'No professors yet'}
-        </span>
-        {dept.avg_rating != null && (
-          <>
-            <span className="w-1 h-1 rounded-full bg-zinc-700" />
-            <span style={{ color: ratingColor(dept.avg_rating) }}>
-              avg {dept.avg_rating.toFixed(1)} rating
-            </span>
-          </>
-        )}
-      </div>
-    </Link>
-  )
-}
-
 export default async function DepartmentsPage() {
   const departments = await getDepartments()
-
-  // Group by school
-  const grouped: Record<string, DepartmentRow[]> = {}
-  for (const dept of departments) {
-    const school = dept.school || 'Other'
-    if (!grouped[school]) grouped[school] = []
-    grouped[school].push(dept)
-  }
-
-  const schools = Object.keys(grouped).sort()
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
@@ -182,26 +125,7 @@ export default async function DepartmentsPage() {
             <p className="text-zinc-400">No departments found.</p>
           </div>
         ) : (
-          <div className="space-y-12">
-            {schools.map((school) => (
-              <section key={school}>
-                <div className="flex items-center gap-3 mb-5">
-                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-                    {school}
-                  </h2>
-                  <div className="flex-1 h-px bg-zinc-800" />
-                  <span className="text-xs text-zinc-600">
-                    {grouped[school].length} dept{grouped[school].length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {grouped[school].map((dept) => (
-                    <DepartmentCard key={dept.id} dept={dept} />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+          <DepartmentsGrid departments={departments} />
         )}
       </main>
 

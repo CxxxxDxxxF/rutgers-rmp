@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { supabase } from '@/lib/supabase'
 import type { NativeReview } from './NativeReviewCard'
 
 const GRADE_OPTIONS = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F', 'W', 'N/A']
@@ -99,6 +100,7 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
   const [wouldTakeAgain, setWouldTakeAgain] = useState<boolean | null>(null)
   const [gradeReceived, setGradeReceived] = useState('')
   const [courseNumber, setCourseNumber] = useState('')
+  const [manualCourseNumber, setManualCourseNumber] = useState('')
   const [attendanceRequired, setAttendanceRequired] = useState(false)
   const [isOnline, setIsOnline] = useState(false)
   const [comment, setComment] = useState('')
@@ -106,6 +108,31 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [knownCourses, setKnownCourses] = useState<Array<{ course_number: string; name: string }>>([])
+
+  const effectiveCourseNumber = courseNumber === '__manual__' ? manualCourseNumber : courseNumber
+
+  useEffect(() => {
+    if (!professorId || !supabase) return
+    supabase
+      .from('teaching_assignments')
+      .select('courses(course_number, name)')
+      .eq('professor_id', professorId)
+      .eq('status', 'active')
+      .then(({ data }) => {
+        if (!data) return
+        const seen = new Set<string>()
+        const courses: Array<{ course_number: string; name: string }> = []
+        for (const row of data) {
+          const c = row.courses as { course_number: string; name: string } | null
+          if (c && !seen.has(c.course_number)) {
+            seen.add(c.course_number)
+            courses.push(c)
+          }
+        }
+        setKnownCourses(courses.sort((a, b) => a.course_number.localeCompare(b.course_number)))
+      })
+  }, [professorId])
 
   const commentTrimmed = comment.trim()
   const tagsRemaining = MAX_TAGS - selectedTags.length
@@ -143,7 +170,7 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
           comment: commentTrimmed,
           tags: selectedTags,
           is_online: isOnline,
-          course_number: courseNumber.trim() || null,
+          course_number: effectiveCourseNumber.trim() || null,
         }),
       })
 
@@ -247,15 +274,42 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                  Course number (optional)
+                  Course taken (optional)
                 </label>
-                <input
-                  type="text"
-                  value={courseNumber}
-                  onChange={(e) => setCourseNumber(e.target.value)}
-                  placeholder="e.g. 01:198:111"
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-                />
+                {knownCourses.length > 0 ? (
+                  <div className="space-y-2">
+                    <select
+                      value={courseNumber}
+                      onChange={e => setCourseNumber(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white focus:outline-none focus:border-zinc-500"
+                    >
+                      <option value="">Select a course…</option>
+                      {knownCourses.map(c => (
+                        <option key={c.course_number} value={c.course_number}>
+                          {c.course_number} — {c.name}
+                        </option>
+                      ))}
+                      <option value="__manual__">Other / enter manually</option>
+                    </select>
+                    {courseNumber === '__manual__' && (
+                      <input
+                        type="text"
+                        value={manualCourseNumber}
+                        onChange={e => setManualCourseNumber(e.target.value)}
+                        placeholder="e.g. 01:198:111"
+                        className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={courseNumber}
+                    onChange={e => setCourseNumber(e.target.value)}
+                    placeholder="e.g. 01:198:111"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                  />
+                )}
               </div>
             </div>
 
