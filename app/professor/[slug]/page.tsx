@@ -1,8 +1,9 @@
 'use client'
 
-import { Suspense, use, useEffect, useState } from 'react'
+import { Suspense, use, useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'motion/react'
 import AppHeader from '@/components/AppHeader'
 import Badge from '@/components/Badge'
 import CompareButton from '@/components/CompareButton'
@@ -64,12 +65,18 @@ function TipsList({ tips }: { tips: string[] }) {
   )
 }
 
-function TagCloud({ ratings }: { ratings: Rating[] }) {
-  const tagCounts: Record<string, number> = {}
-  for (const r of ratings) {
-    for (const tag of r.tags ?? []) {
-      if (tag && tag.trim()) tagCounts[tag.trim()] = (tagCounts[tag.trim()] ?? 0) + 1
+function TagCloud({ ratings, tagCounts: precomputed }: { ratings: Rating[]; tagCounts?: Record<string, number> | null }) {
+  let tagCounts: Record<string, number>
+  if (precomputed) {
+    tagCounts = precomputed
+  } else {
+    const counts: Record<string, number> = {}
+    for (const r of ratings) {
+      for (const tag of r.tags ?? []) {
+        if (tag?.trim()) counts[tag.trim()] = (counts[tag.trim()] ?? 0) + 1
+      }
     }
+    tagCounts = counts
   }
   const sorted = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 15)
   if (sorted.length === 0) return null
@@ -180,60 +187,98 @@ function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
 // Native reviews section
 // ---------------------------------------------------------------------------
 
+type ReviewSortMode = 'newest' | 'helpful' | 'quality_desc' | 'quality_asc'
+
+const REVIEW_SORT_OPTIONS: { value: ReviewSortMode; label: string }[] = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'helpful', label: 'Most Helpful' },
+  { value: 'quality_desc', label: 'Best Rating' },
+  { value: 'quality_asc', label: 'Worst Rating' },
+]
+
+const REVIEWS_PER_PAGE = 10
+
 function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: string; professorId?: string }) {
   const [professorId, setProfessorId] = useState<string | null>(initProfId ?? null)
   const [reviews, setReviews] = useState<NativeReview[]>([])
-  const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [sort, setSort] = useState<ReviewSortMode>('newest')
+  const [page, setPage] = useState(1)
+  const [resolving, setResolving] = useState(!initProfId)
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [showForm, setShowForm] = useState(false)
 
+  // Step 1: resolve professor UUID from rmpId if not provided directly
   useEffect(() => {
-    if (!supabase) { setLoading(false); return }
+    if (initProfId) { setProfessorId(initProfId); setResolving(false); return }
+    if (!rmpId || !supabase) { setResolving(false); return }
 
-    async function load() {
-      setLoading(true)
-      try {
-        let pid = initProfId ?? null
-        if (!pid && rmpId) {
-          const { data: prof } = await supabase!
-            .from('professors')
-            .select('id')
-            .eq('rmp_id', rmpId)
-            .single()
-
-          if (!prof) { setLoading(false); return }
-          pid = prof.id
-          setProfessorId(prof.id)
-        }
-        if (!pid) { setLoading(false); return }
-
-        const res = await fetch(`/api/reviews?professor_id=${pid}`)
-        if (res.ok) {
-          const data = await res.json()
-          setReviews(data)
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+    supabase
+      .from('professors')
+      .select('id')
+      .eq('rmp_id', rmpId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setProfessorId(data.id)
+        setResolving(false)
+      })
   }, [rmpId, initProfId])
 
+  // Step 2: load reviews whenever professorId, sort, or page changes
+  const loadReviews = useCallback(async (pid: string, s: ReviewSortMode, p: number, append: boolean) => {
+    if (append) setLoadingMore(true); else setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        professor_id: pid,
+        sort: s,
+        page: String(p),
+        limit: String(REVIEWS_PER_PAGE),
+      })
+      const res = await fetch(`/api/reviews?${params}`)
+      if (!res.ok) return
+      const json = await res.json()
+      setReviews(prev => append ? [...prev, ...json.reviews] : json.reviews)
+      setTotal(json.total ?? 0)
+      setHasMore(json.has_more ?? false)
+    } finally {
+      if (append) setLoadingMore(false); else setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!professorId) return
+    loadReviews(professorId, sort, 1, false)
+    setPage(1)
+  }, [professorId, sort, loadReviews])
+
+  function handleLoadMore() {
+    if (!professorId || !hasMore || loadingMore) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    loadReviews(professorId, sort, nextPage, true)
+  }
+
   function handleReviewSubmitted(review: NativeReview) {
-    setReviews((prev) => [review, ...prev])
+    setReviews(prev => [review, ...prev])
+    setTotal(t => t + 1)
     setShowForm(false)
   }
-  const nativeGrade = buildProfessorGrade({
-    native: summarizeNativeReviews(reviews),
-  })
+
+  const nativeGrade = buildProfessorGrade({ native: summarizeNativeReviews(reviews) })
+
+  if (resolving) return <div className="text-sm text-zinc-600 py-4">Loading reviews...</div>
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
           Student Reviews on RU Rate
-          {!loading && (
-            <span className="ml-1 text-xs font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500">
-              {reviews.length}
+          {total > 0 && (
+            <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500">
+              {total}
             </span>
           )}
         </h3>
@@ -258,12 +303,12 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
 
       {loading ? (
         <div className="text-sm text-zinc-600 py-4">Loading reviews...</div>
-      ) : reviews.length === 0 ? (
+      ) : reviews.length === 0 && !showForm ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center space-y-3">
           <div className="text-2xl">📝</div>
           <p className="text-sm font-semibold text-white">Be the first to review on RU Rate!</p>
           <p className="text-xs text-zinc-500">Share your experience to help fellow Rutgers students.</p>
-          {rmpId && !showForm && (
+          {rmpId && (
             <button
               onClick={() => setShowForm(true)}
               className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-80"
@@ -275,16 +320,61 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <ProfessorGradeBadge grade={nativeGrade} />
-            <p className="mt-2 text-xs text-zinc-500">
-              Based only on RU Rate reviews students left here, including quality, difficulty,
-              would-take-again, and reported grades.
-            </p>
-          </div>
-          {reviews.map((r) => (
-            <NativeReviewCard key={r.id} review={r} />
-          ))}
+          {/* Grade summary */}
+          {reviews.length > 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+              <ProfessorGradeBadge grade={nativeGrade} />
+              <p className="mt-2 text-xs text-zinc-500">
+                Based on RU Rate reviews including quality, difficulty, would-take-again, and reported grades.
+              </p>
+            </div>
+          )}
+
+          {/* Sort bar */}
+          {total > 1 && (
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
+              {REVIEW_SORT_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSort(opt.value)}
+                  className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                    sort === opt.value
+                      ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
+                      : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Reviews list */}
+          <AnimatePresence mode="popLayout">
+            {reviews.map((r, i) => (
+              <motion.div
+                key={r.id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97 }}
+                transition={{ duration: 0.18, delay: i < 3 ? i * 0.04 : 0 }}
+              >
+                <NativeReviewCard review={r} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Load more */}
+          {hasMore && (
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="w-full py-3 rounded-xl border border-zinc-800 text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : `Load more (${total - reviews.length} remaining)`}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -834,37 +924,37 @@ function ProfessorContent() {
   const rmpId = searchParams.get('rmpId')
   const [data, setData] = useState<ProfessorCache | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAllReviews, setShowAllReviews] = useState(false)
   const [staleInfo, setStaleInfo] = useState<{ isStale: boolean; cacheAgeDays: number } | null>(null)
 
-  useEffect(() => {
+  const loadData = useCallback(async (force = false) => {
     if (!rmpId) { setError('No professor ID provided.'); setLoading(false); return }
-
-    async function load() {
-      setLoading(true)
-      try {
-        const res = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rmpId }),
-        })
-        if (!res.ok) throw new Error('Failed to load professor data')
-        const json = await res.json()
-        setData(json)
-        if (json.cached_at) {
-          const ageMs = Date.now() - new Date(json.cached_at).getTime()
-          const days = Math.floor(ageMs / (24 * 60 * 60 * 1000))
-          setStaleInfo({ isStale: days >= 30, cacheAgeDays: days })
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Something went wrong')
-      } finally {
-        setLoading(false)
+    if (force) setRefreshing(true); else setLoading(true)
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rmpId, force }),
+      })
+      if (!res.ok) throw new Error('Failed to load professor data')
+      const json = await res.json()
+      setData(json)
+      if (json.cached_at) {
+        const ageMs = Date.now() - new Date(json.cached_at).getTime()
+        const days = Math.floor(ageMs / (24 * 60 * 60 * 1000))
+        setStaleInfo({ isStale: days >= 30, cacheAgeDays: days })
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    load()
   }, [rmpId])
+
+  useEffect(() => { loadData() }, [loadData])
 
   if (loading) {
     return (
@@ -896,6 +986,7 @@ function ProfessorContent() {
 
   const analysis = data.ai_analysis
   const ratings = (data.ratings ?? []) as Rating[]
+  const tagCounts = (data as ProfessorCache & { tag_counts?: Record<string, number> }).tag_counts ?? null
   const visibleReviews = showAllReviews ? ratings : ratings.slice(0, 8)
 return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -903,7 +994,12 @@ return (
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
         {/* Hero block */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8"
+        >
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div>
               <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{data.department}</div>
@@ -942,18 +1038,29 @@ return (
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Stale cache notice */}
         {staleInfo?.isStale && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50 text-xs text-amber-400">
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50 text-xs text-amber-400">
             <span>⚠</span>
-            <span>RMP data last refreshed {staleInfo.cacheAgeDays} days ago — ratings may be outdated.</span>
+            <span className="flex-1">RMP data last refreshed {staleInfo.cacheAgeDays} days ago — ratings may be outdated.</span>
+            <button
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+              className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-900/40 hover:bg-amber-900/70 transition-colors font-semibold disabled:opacity-50"
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh now'}
+            </button>
           </div>
         )}
 
         {/* Verdict */}
-        {analysis && <VerdictBox analysis={analysis} />}
+        {analysis && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }}>
+            <VerdictBox analysis={analysis} />
+          </motion.div>
+        )}
 
         {/* Analysis grid */}
         {analysis && (
@@ -962,11 +1069,17 @@ return (
               { title: 'Teaching Style', content: analysis.teaching_style },
               { title: 'Workload', content: analysis.workload },
               { title: 'Grading', content: analysis.grading },
-            ].map(({ title, content }) => (
-              <div key={title} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            ].map(({ title, content }, i) => (
+              <motion.div
+                key={title}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: 0.12 + i * 0.05 }}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl p-5"
+              >
                 <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">{title}</h3>
                 <p className="text-sm text-zinc-300 leading-relaxed">{content}</p>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
@@ -1017,7 +1130,7 @@ return (
         {ratings.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
             <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Common Tags</h3>
-            <TagCloud ratings={ratings} />
+            <TagCloud ratings={ratings} tagCounts={tagCounts} />
           </div>
         )}
 

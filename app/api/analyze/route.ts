@@ -20,15 +20,16 @@ function getServiceClient() {
 }
 
 export async function POST(req: NextRequest) {
-  let rmpId: unknown
+  let rmpId: unknown, force: unknown
   try {
-    ;({ rmpId } = await req.json())
+    ;({ rmpId, force } = await req.json())
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
   if (!rmpId || typeof rmpId !== 'string') {
     return NextResponse.json({ error: 'rmpId required' }, { status: 400 })
   }
+  const forceRefresh = force === true
 
   if (!supabase) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
       .eq('rmp_id', rmpId)
       .maybeSingle()
 
-    if (cached) {
+    if (cached && !forceRefresh) {
       const age = Date.now() - new Date(cached.cached_at).getTime()
       // Rows cached without an AI verdict count as stale so they self-heal
       // once an OpenRouter key is configured.
@@ -82,6 +83,14 @@ export async function POST(req: NextRequest) {
 
     const slug = makeSlug(professor.firstName, professor.lastName, professor.id)
 
+    // Pre-aggregate tag counts so the profile page avoids re-scanning all ratings
+    const tagCounts: Record<string, number> = {}
+    for (const r of professor.ratings ?? []) {
+      for (const tag of r.tags ?? []) {
+        if (tag?.trim()) tagCounts[tag.trim()] = (tagCounts[tag.trim()] ?? 0) + 1
+      }
+    }
+
     const record = {
       rmp_id: professor.id,
       slug,
@@ -95,6 +104,7 @@ export async function POST(req: NextRequest) {
       num_ratings: professor.numRatings,
       ratings: professor.ratings,
       ai_analysis,
+      tag_counts: Object.keys(tagCounts).length > 0 ? tagCounts : null,
       cached_at: new Date().toISOString(),
       search_count: (cached?.search_count ?? 0) + 1,
     }
