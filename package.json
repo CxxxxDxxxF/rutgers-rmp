@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "rm -rf .tmp-test-build && tsc -p tsconfig.test.json && node --test .tmp-test-build/lib/rmp/*.test.js",
     "seed": "npx tsx scripts/seed.ts",
     "ingest": "npx tsx scripts/ingest-soc.ts",
     "ingest:dry": "npx tsx scripts/ingest-soc.ts --dry-run",

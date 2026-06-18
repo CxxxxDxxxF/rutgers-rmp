@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "rootDir": ".",
+    "outDir": ".tmp-test-build",
+    "types": ["node"]
+  },
+  "include": ["lib/rmp/**/*.ts"],
+  "exclude": ["node_modules", ".tmp-test-build"]
+}
