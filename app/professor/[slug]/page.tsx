@@ -490,6 +490,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
 function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
   const [related, setRelated] = useState<RelatedProfessor[]>([])
   const [deptName, setDeptName] = useState<string | null>(null)
+  const [deptSlug, setDeptSlug] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -510,16 +511,17 @@ function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
         // 2. Get their primary department
         const { data: deptRow } = await supabase!
           .from('professor_departments')
-          .select('department_id, departments(id, name)')
+          .select('department_id, departments(id, name, slug)')
           .eq('professor_id', prof.id)
           .eq('is_primary', true)
           .single()
 
         if (!deptRow) { setLoading(false); return }
 
-        const dept = deptRow.departments as unknown as { id: string; name: string } | null
+        const dept = deptRow.departments as unknown as { id: string; name: string; slug: string } | null
         if (!dept) { setLoading(false); return }
         setDeptName(dept.name)
+        setDeptSlug(dept.slug)
 
         // 3. Find other professors in same department
         const { data: otherDeptRows } = await supabase!
@@ -579,9 +581,19 @@ function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-zinc-300">
-        Other professors in {deptName ?? 'this department'}
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-zinc-300">
+          Other professors in {deptName ?? 'this department'}
+        </h3>
+        {deptSlug && (
+          <Link
+            href={`/department/${deptSlug}`}
+            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors shrink-0"
+          >
+            View department →
+          </Link>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {related.map((p) => (
           <RelatedProfessorCard key={p.rmp_id} prof={p} />
@@ -805,6 +817,7 @@ interface SocRelatedProf {
 function SocRelatedSection({ professorId }: { professorId: string }) {
   const [related, setRelated] = useState<SocRelatedProf[]>([])
   const [deptName, setDeptName] = useState<string | null>(null)
+  const [deptSlug, setDeptSlug] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -813,15 +826,16 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
     async function load() {
       const { data: deptRows } = await supabase!
         .from('professor_departments')
-        .select('department_id, departments(id, name)')
+        .select('department_id, departments(id, name, slug)')
         .eq('professor_id', professorId)
         .order('is_primary', { ascending: false })
         .limit(1)
 
       if (!deptRows?.length) { setLoading(false); return }
-      const dept = deptRows[0].departments as unknown as { id: string; name: string } | null
+      const dept = deptRows[0].departments as unknown as { id: string; name: string; slug: string } | null
       if (!dept) { setLoading(false); return }
       setDeptName(dept.name)
+      setDeptSlug(dept.slug)
 
       const { data: others } = await supabase!
         .from('professor_departments')
@@ -875,9 +889,19 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-zinc-300">
-        Other professors in {deptName ?? 'this department'}
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-zinc-300">
+          Other professors in {deptName ?? 'this department'}
+        </h3>
+        {deptSlug && (
+          <Link
+            href={`/department/${deptSlug}`}
+            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors shrink-0"
+          >
+            View department →
+          </Link>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {related.map(p => {
           const qColor = p.avg_rating != null ? ratingColor(p.avg_rating) : '#52525b'

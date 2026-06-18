@@ -434,7 +434,7 @@ function CourseContent({ slug }: { slug: string }) {
               </h1>
 
               {department && (
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-3">
                   <Link
                     href={`/courses?dept=${department.slug}`}
                     className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
@@ -443,6 +443,12 @@ function CourseContent({ slug }: { slug: string }) {
                       {department.code}
                     </span>
                     <span>{department.name}</span>
+                  </Link>
+                  <Link
+                    href={`/department/${department.slug}`}
+                    className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                  >
+                    View department →
                   </Link>
                 </div>
               )}
