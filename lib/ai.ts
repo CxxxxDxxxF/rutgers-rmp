@@ -67,5 +67,9 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('No JSON in AI response')
 
-  return JSON.parse(jsonMatch[0]) as AIAnalysis
+  try {
+    return JSON.parse(jsonMatch[0]) as AIAnalysis
+  } catch {
+    throw new Error('Invalid JSON in AI response')
+  }
 }
