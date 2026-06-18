@@ -273,7 +273,8 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
     setShowForm(false)
   }
 
-  const nativeGrade = buildProfessorGrade({ native: summarizeNativeReviews(reviews) })
+  const nativeStats = summarizeNativeReviews(reviews)
+  const nativeGrade = buildProfessorGrade({ native: nativeStats })
 
   if (resolving) return <div className="text-sm text-zinc-600 py-4">Loading reviews...</div>
 
@@ -330,7 +331,52 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
           {/* Grade summary */}
           {reviews.length > 0 && (
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-4">
-              <ProfessorGradeBadge grade={nativeGrade} />
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <ProfessorGradeBadge grade={nativeGrade} />
+                {nativeStats.review_count >= 2 && (
+                  <div className="flex items-center gap-4">
+                    {nativeStats.avg_quality != null && (
+                      <div className="text-center">
+                        <div
+                          className="text-xl font-black leading-none"
+                          style={{ color: nativeStats.avg_quality >= 4 ? '#22c55e' : nativeStats.avg_quality >= 3 ? '#f59e0b' : '#ef4444' }}
+                        >
+                          {nativeStats.avg_quality.toFixed(1)}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">Quality</div>
+                      </div>
+                    )}
+                    {nativeStats.avg_quality != null && nativeStats.avg_difficulty != null && (
+                      <div className="h-7 w-px bg-zinc-800" />
+                    )}
+                    {nativeStats.avg_difficulty != null && (
+                      <div className="text-center">
+                        <div
+                          className="text-xl font-black leading-none"
+                          style={{ color: nativeStats.avg_difficulty >= 4 ? '#ef4444' : nativeStats.avg_difficulty >= 3 ? '#f59e0b' : '#22c55e' }}
+                        >
+                          {nativeStats.avg_difficulty.toFixed(1)}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">Difficulty</div>
+                      </div>
+                    )}
+                    {nativeStats.would_take_again_pct != null && (
+                      <>
+                        <div className="h-7 w-px bg-zinc-800" />
+                        <div className="text-center">
+                          <div
+                            className="text-xl font-black leading-none"
+                            style={{ color: nativeStats.would_take_again_pct >= 70 ? '#22c55e' : nativeStats.would_take_again_pct >= 50 ? '#f59e0b' : '#ef4444' }}
+                          >
+                            {Math.round(nativeStats.would_take_again_pct)}%
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-0.5">Again</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
               <p className="text-xs text-zinc-500">
                 Based on RU Rate reviews including quality, difficulty, would-take-again, and reported grades.
               </p>
@@ -941,6 +987,7 @@ function ProfessorContent() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAllReviews, setShowAllReviews] = useState(false)
+  const [rmpSort, setRmpSort] = useState<'newest' | 'helpful' | 'quality_desc' | 'quality_asc'>('newest')
   const [staleInfo, setStaleInfo] = useState<{ isStale: boolean; cacheAgeDays: number } | null>(null)
 
   const loadData = useCallback(async (force = false) => {
@@ -1001,7 +1048,14 @@ function ProfessorContent() {
   const analysis = data.ai_analysis
   const ratings = (data.ratings ?? []) as Rating[]
   const tagCounts = (data as ProfessorCache & { tag_counts?: Record<string, number> }).tag_counts ?? null
-  const visibleReviews = showAllReviews ? ratings : ratings.slice(0, 8)
+
+  const sortedRatings = [...ratings].sort((a, b) => {
+    if (rmpSort === 'helpful') return (b.thumbsUpTotal ?? 0) - (a.thumbsUpTotal ?? 0)
+    if (rmpSort === 'quality_desc') return (b.qualityRating ?? 0) - (a.qualityRating ?? 0)
+    if (rmpSort === 'quality_asc') return (a.qualityRating ?? 0) - (b.qualityRating ?? 0)
+    return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime()
+  })
+  const visibleReviews = showAllReviews ? sortedRatings : sortedRatings.slice(0, 8)
 return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <AppHeader />
@@ -1164,12 +1218,33 @@ return (
         {/* RMP Reviews */}
         {ratings.length > 0 && (
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-zinc-300">
-                Student Reviews
+                RateMyProfessors Reviews
                 <span className="ml-2 text-zinc-600 font-normal">({ratings.length})</span>
               </h3>
-              <div className="text-xs text-zinc-600">Most recent first</div>
+              {ratings.length > 1 && (
+                <div className="flex items-center gap-1">
+                  {([
+                    { value: 'newest', label: 'Newest' },
+                    { value: 'helpful', label: 'Helpful' },
+                    { value: 'quality_desc', label: 'Best' },
+                    { value: 'quality_asc', label: 'Worst' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setRmpSort(opt.value)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                        rmpSort === opt.value
+                          ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
+                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-3">
               {visibleReviews.map((r) => (
