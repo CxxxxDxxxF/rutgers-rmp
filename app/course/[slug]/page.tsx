@@ -343,6 +343,7 @@ function CourseContent({ slug }: { slug: string }) {
         if (!res.ok) throw new Error('Course not found')
         const json = await res.json()
         setData(json)
+        document.title = `${json.course.course_number} ${json.course.name} | RU Rate`
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {

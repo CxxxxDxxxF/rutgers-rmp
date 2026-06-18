@@ -1,6 +1,12 @@
+import type { Metadata } from 'next'
 import { supabase } from '@/lib/supabase'
 import AppHeader from '@/components/AppHeader'
 import DepartmentsGrid from '@/components/DepartmentsGrid'
+
+export const metadata: Metadata = {
+  title: 'Browse Departments | RU Rate',
+  description: 'Explore Rutgers professors and courses organized by department across all Rutgers schools.',
+}
 
 interface DepartmentRow {
   id: string

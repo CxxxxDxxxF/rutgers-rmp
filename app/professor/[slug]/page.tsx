@@ -940,6 +940,7 @@ function SocProfessorContent({ socId }: { socId: string }) {
           .eq('professor_id', socId)
 
         setProf({ first_name: profRow.first_name, last_name: profRow.last_name, department: deptName, teaching_count: count ?? 0 })
+        document.title = `${profRow.first_name} ${profRow.last_name} | RU Rate`
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -1050,6 +1051,7 @@ function ProfessorContent() {
       if (!res.ok) throw new Error('Failed to load professor data')
       const json = await res.json()
       setData(json)
+      document.title = `${json.first_name} ${json.last_name} | RU Rate`
       if (json.cached_at) {
         const ageMs = Date.now() - new Date(json.cached_at).getTime()
         const days = Math.floor(ageMs / (24 * 60 * 60 * 1000))

@@ -178,6 +178,7 @@ function DepartmentContent({ slug }: { slug: string }) {
         if (!res.ok) throw new Error('Department not found')
         const json: DepartmentDetail = await res.json()
         setData(json)
+        document.title = `${json.department.name} | Departments | RU Rate`
 
         // Fetch related departments from same school
         const allRes = await fetch('/api/departments')

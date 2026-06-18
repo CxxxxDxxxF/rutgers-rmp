@@ -43,6 +43,11 @@ function CompareContent() {
   const searchParams = useSearchParams()
   const trayItems = useCompareItems()
 
+  useEffect(() => {
+    document.title = 'Compare Professors | RU Rate'
+    return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
+  }, [])
+
   // URL ids win (shareable links); otherwise use the tray
   const ids = useMemo(() => {
     const fromUrl = searchParams.get('ids')?.split(',').map(s => s.trim()).filter(Boolean) ?? []

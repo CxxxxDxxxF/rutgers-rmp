@@ -37,6 +37,11 @@ function CoursesContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
+  useEffect(() => {
+    document.title = 'Find Courses | RU Rate'
+    return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
+  }, [])
+
   const [courses, setCourses] = useState<CourseCardData[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
