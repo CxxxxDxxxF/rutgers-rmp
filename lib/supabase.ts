@@ -24,6 +24,7 @@ export interface ProfessorCache {
   ai_analysis: AIAnalysis
   cached_at: string
   search_count: number
+  tag_counts?: Record<string, number> | null
 }
 
 export interface Rating {

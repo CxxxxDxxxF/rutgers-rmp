@@ -211,6 +211,8 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
   const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [sort, setSort] = useState<ReviewSortMode>('newest')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [allTagCounts, setAllTagCounts] = useState<[string, number][]>([])
   const [page, setPage] = useState(1)
   const [resolving, setResolving] = useState(!initProfId)
   const [loading, setLoading] = useState(false)
@@ -233,8 +235,8 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
       })
   }, [rmpId, initProfId])
 
-  // Step 2: load reviews whenever professorId, sort, or page changes
-  const loadReviews = useCallback(async (pid: string, s: ReviewSortMode, p: number, append: boolean) => {
+  // Step 2: load reviews whenever professorId, sort, activeTag, or page changes
+  const loadReviews = useCallback(async (pid: string, s: ReviewSortMode, p: number, append: boolean, tag: string | null) => {
     if (append) setLoadingMore(true); else setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -243,12 +245,25 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         page: String(p),
         limit: String(REVIEWS_PER_PAGE),
       })
+      if (tag) params.set('tag', tag)
       const res = await fetch(`/api/reviews?${params}`)
       if (!res.ok) return
       const json = await res.json()
-      setReviews(prev => append ? [...prev, ...json.reviews] : json.reviews)
+      const incoming: NativeReview[] = json.reviews ?? []
+      setReviews(prev => append ? [...prev, ...incoming] : incoming)
       setTotal(json.total ?? 0)
       setHasMore(json.has_more ?? false)
+      // Cache tag counts from the first unfiltered page to power filter chips
+      if (!tag && !append) {
+        const counts: Record<string, number> = {}
+        for (const r of incoming) {
+          for (const t of r.tags ?? []) {
+            if (t) counts[t] = (counts[t] ?? 0) + 1
+          }
+        }
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
+        if (sorted.length > 0) setAllTagCounts(sorted)
+      }
     } finally {
       if (append) setLoadingMore(false); else setLoading(false)
     }
@@ -256,15 +271,19 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
 
   useEffect(() => {
     if (!professorId) return
-    loadReviews(professorId, sort, 1, false)
+    loadReviews(professorId, sort, 1, false, activeTag)
     setPage(1)
-  }, [professorId, sort, loadReviews])
+  }, [professorId, sort, activeTag, loadReviews])
 
   function handleLoadMore() {
     if (!professorId || !hasMore || loadingMore) return
     const nextPage = page + 1
     setPage(nextPage)
-    loadReviews(professorId, sort, nextPage, true)
+    loadReviews(professorId, sort, nextPage, true, activeTag)
+  }
+
+  function handleTagClick(tag: string) {
+    setActiveTag(prev => (prev === tag ? null : tag))
   }
 
   function handleReviewSubmitted(review: NativeReview) {
@@ -384,22 +403,50 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
             </div>
           )}
 
-          {/* Sort bar */}
+          {/* Sort + tag filter bar */}
           {total > 1 && (
-            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
-              {REVIEW_SORT_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setSort(opt.value)}
-                  className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition-all ${
-                    sort === opt.value
-                      ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
-                      : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
+                {REVIEW_SORT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSort(opt.value)}
+                    className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                      sort === opt.value
+                        ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
+                        : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {allTagCounts.length > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+                  {activeTag && (
+                    <button
+                      onClick={() => setActiveTag(null)}
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:text-white transition-all flex items-center gap-1"
+                    >
+                      ✕ Clear
+                    </button>
+                  )}
+                  {allTagCounts.map(([tag, count]) => (
+                    <button
+                      key={tag}
+                      onClick={() => handleTagClick(tag)}
+                      className={`shrink-0 text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                        activeTag === tag
+                          ? 'border-[#CC0033] bg-[#CC003320] text-[#CC0033] font-semibold'
+                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      }`}
+                    >
+                      {tag}
+                      <span className="ml-1 opacity-50">{count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1047,7 +1094,7 @@ function ProfessorContent() {
 
   const analysis = data.ai_analysis
   const ratings = (data.ratings ?? []) as Rating[]
-  const tagCounts = (data as ProfessorCache & { tag_counts?: Record<string, number> }).tag_counts ?? null
+  const tagCounts = data.tag_counts ?? null
 
   const sortedRatings = [...ratings].sort((a, b) => {
     if (rmpSort === 'helpful') return (b.thumbsUpTotal ?? 0) - (a.thumbsUpTotal ?? 0)

@@ -296,22 +296,23 @@ function DepartmentContent({ slug }: { slug: string }) {
                 </h2>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
                   {courses.map((course, i) => (
-                    <div
+                    <Link
                       key={course.id}
-                      className={`flex items-center gap-4 px-5 py-3.5 ${
+                      href={`/course/${course.slug}`}
+                      className={`flex items-center gap-4 px-5 py-3.5 hover:bg-zinc-800/50 hover:text-[#CC0033] transition-colors group ${
                         i < courses.length - 1 ? 'border-b border-zinc-800' : ''
                       }`}
                     >
                       <span className="shrink-0 text-xs font-mono text-zinc-400 w-20">
                         {course.course_number}
                       </span>
-                      <span className="text-sm text-zinc-200 flex-1">{course.name}</span>
+                      <span className="text-sm text-zinc-200 flex-1 group-hover:text-white transition-colors">{course.name}</span>
                       {course.credits != null && (
                         <span className="shrink-0 text-xs text-zinc-600">
                           {course.credits} cr
                         </span>
                       )}
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </section>
