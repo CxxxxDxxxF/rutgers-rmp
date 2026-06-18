@@ -251,6 +251,7 @@ async function loadNativeReviewStats(professorIds: string[]) {
     .select('professor_id, quality_rating, difficulty_rating, would_take_again, grade_received')
     .in('professor_id', professorIds)
     .eq('source', 'native')
+    .eq('is_removed', false)
 
   if (error) {
     log.error('Course detail native review stats error:', error)
