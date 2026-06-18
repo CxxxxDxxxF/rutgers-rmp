@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { log } from '@/lib/logger'
 import type { AIAnalysis } from '@/lib/supabase'
+import {
+  buildProfessorGrade,
+  summarizeNativeReviews,
+  type NativeReviewStats,
+} from '@/lib/professor-grade'
 
 const MAX_COMPARE = 4
 
@@ -38,6 +43,7 @@ export async function GET(req: NextRequest) {
 
     // Courses taught: professor_cache → professors (cache_id) → teaching_assignments
     const coursesByRmpId = new Map<string, { course_number: string; name: string; slug: string }[]>()
+    const profIdByRmpId = new Map<string, string>()
     if (rows.length > 0) {
       const { data: profs } = await supabase
         .from('professors')
@@ -45,6 +51,7 @@ export async function GET(req: NextRequest) {
         .in('rmp_id', rows.map(r => r.rmp_id))
 
       if (profs && profs.length > 0) {
+        for (const prof of profs) profIdByRmpId.set(prof.rmp_id, prof.id)
         const { data: tas } = await supabase
           .from('teaching_assignments')
           .select('professor_id, courses(course_number, name, slug)')
@@ -66,6 +73,7 @@ export async function GET(req: NextRequest) {
         }
       }
     }
+    const nativeStats = await loadNativeReviewStats([...profIdByRmpId.values()])
 
     const professors = rows.map(r => ({
       rmp_id: r.rmp_id,
@@ -78,6 +86,13 @@ export async function GET(req: NextRequest) {
       would_take_again: r.would_take_again != null ? Number(r.would_take_again) : null,
       num_ratings: r.num_ratings ?? 0,
       ai_analysis: (r.ai_analysis as AIAnalysis | null) ?? null,
+      student_grade: buildProfessorGrade({
+        rmpAvgRating: r.avg_rating != null ? Number(r.avg_rating) : null,
+        rmpAvgDifficulty: r.avg_difficulty != null ? Number(r.avg_difficulty) : null,
+        rmpWouldTakeAgainPct: r.would_take_again != null ? Number(r.would_take_again) : null,
+        rmpNumRatings: r.num_ratings ?? 0,
+        native: nativeStats.get(profIdByRmpId.get(r.rmp_id) ?? '') ?? null,
+      }),
       courses: coursesByRmpId.get(r.rmp_id) ?? [],
     }))
 
@@ -89,4 +104,40 @@ export async function GET(req: NextRequest) {
     log.error('Compare error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+async function loadNativeReviewStats(professorIds: string[]) {
+  const stats = new Map<string, NativeReviewStats>()
+  if (!supabase || professorIds.length === 0) return stats
+
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('professor_id, quality_rating, difficulty_rating, would_take_again, grade_received')
+    .in('professor_id', professorIds)
+    .eq('source', 'native')
+
+  if (error) {
+    log.error('Compare native review stats error:', error)
+    return stats
+  }
+
+  const grouped = new Map<string, NativeReviewStatRow[]>()
+  for (const row of (data ?? []) as NativeReviewStatRow[]) {
+    const rows = grouped.get(row.professor_id) ?? []
+    rows.push(row)
+    grouped.set(row.professor_id, rows)
+  }
+
+  for (const [professorId, rows] of grouped) {
+    stats.set(professorId, summarizeNativeReviews(rows))
+  }
+  return stats
+}
+
+interface NativeReviewStatRow {
+  professor_id: string
+  quality_rating: number | null
+  difficulty_rating: number | null
+  would_take_again: boolean | null
+  grade_received: string | null
 }

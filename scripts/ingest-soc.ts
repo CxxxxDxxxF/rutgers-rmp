@@ -9,11 +9,12 @@
  *   npx tsx scripts/ingest-soc.ts
  *   npx tsx scripts/ingest-soc.ts --year 2025 --term 9 --subjects 198
  *   npx tsx scripts/ingest-soc.ts --dry-run --limit 5
+ *   npx tsx scripts/ingest-soc.ts --dry-run --campus all
  *
  * Options:
  *   --year        Academic year (default: 2025)
  *   --term        Term code: 1=Spring, 7=Summer, 9=Fall (default: 9)
- *   --campus      Campus code (default: NB)
+ *   --campus      Campus code, comma list, or all=NB,NK,CM (default: NB)
  *   --subjects    Comma-separated subject codes (default: all NB)
  *   --dry-run     Log actions without writing to DB
  *   --limit       Max courses to process
@@ -22,18 +23,6 @@
 import { createClient } from '@supabase/supabase-js'
 import * as fs from 'fs'
 import * as path from 'path'
-
-// ── Env / Config ──────────────────────────────────────────────────────────
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL in env')
-  process.exit(1)
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ── CLI args ──────────────────────────────────────────────────────────────
 
@@ -59,10 +48,25 @@ for (let i = 2; i < process.argv.length; i++) {
 
 const YEAR = parseInt((args['year'] as string) ?? '2025', 10)
 const TERM = (args['term'] as string) ?? '9'
-const CAMPUS = (args['campus'] as string) ?? 'NB'
+const CAMPUS_ARG = ((args['campus'] as string) ?? 'NB').trim()
 const SUBJECTS_FILTER = args['subjects'] ? (args['subjects'] as string).split(',').map(s => s.trim()) : null
 const DRY_RUN = args['dry-run'] === true || args['dry-run'] === 'true'
 const LIMIT = args['limit'] ? parseInt(args['limit'] as string, 10) : null
+
+// ── Env / Config ──────────────────────────────────────────────────────────
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if ((!SUPABASE_URL || !SUPABASE_KEY) && !DRY_RUN) {
+  console.error('Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL in env')
+  process.exit(1)
+}
+
+const supabase = createClient(
+  SUPABASE_URL || 'https://dry-run.supabase.co',
+  SUPABASE_KEY || 'dry-run'
+)
 
 // ── Term helpers ──────────────────────────────────────────────────────────
 
@@ -76,6 +80,13 @@ const TERM_NAME: Record<string, string> = {
   '1': 'Spring',
   '7': 'Summer',
   '9': 'Fall',
+}
+
+const ALL_CAMPUSES = ['NB', 'NK', 'CM'] as const
+
+function parseCampuses(value: string): string[] {
+  if (value.toLowerCase() === 'all') return [...ALL_CAMPUSES]
+  return [...new Set(value.split(',').map(c => c.trim().toUpperCase()).filter(Boolean))]
 }
 
 function buildSemesterCode(year: number, term: string): string {
@@ -133,7 +144,7 @@ const SUBJECT_TO_DEPT_SLUG: Record<string, string> = {
 // ── Stats ─────────────────────────────────────────────────────────────────
 
 const stats = {
-  courses_fetched: 0,
+  sections_processed: 0,
   courses_created: 0,
   courses_skipped: 0,
   professors_created: 0,
@@ -147,6 +158,7 @@ const stats = {
 let deptCache: Record<string, string> | null = null
 
 async function loadDeptCache(): Promise<Record<string, string>> {
+  if (DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) return {}
   if (deptCache) return deptCache
   const { data, error } = await supabase.from('departments').select('id, slug')
   if (error) throw new Error(`Failed to load departments: ${error.message}`)
@@ -205,6 +217,34 @@ function courseSlug(courseString: string): string {
   return parts.slice(-2).join('-').toLowerCase()
 }
 
+interface CampusCourse {
+  campus: string
+  course: any
+}
+
+async function fetchCourses(campuses: string[]): Promise<CampusCourse[]> {
+  const rows: CampusCourse[] = []
+
+  for (const campus of campuses) {
+    // classes.rutgers.edu is the canonical host; sis.rutgers.edu now 302-redirects.
+    // Rutgers does not return all campuses for campus=ALL, so full Rutgers coverage
+    // fans out across explicit campus codes.
+    const url = `https://classes.rutgers.edu/soc/api/courses.json?year=${YEAR}&term=${TERM}&campus=${campus}`
+    const resp = await fetch(url, { headers: { 'Accept-Encoding': 'gzip' } })
+    if (!resp.ok) {
+      console.error(`  FAILED ${campus}: HTTP ${resp.status} - ${resp.statusText}`)
+      process.exit(1)
+    }
+
+    const campusCourses: any[] = await resp.json()
+    const sections = campusCourses.reduce((sum, course) => sum + ((course.sections as any[] | undefined)?.length ?? 0), 0)
+    console.log(`  ${campus}: ${campusCourses.length} courses, ${sections} sections`)
+    rows.push(...campusCourses.map(course => ({ campus, course })))
+  }
+
+  return rows
+}
+
 // ── Meeting-time helpers ──────────────────────────────────────────────────
 
 function formatMeetingDays(mts: any[]): string {
@@ -238,33 +278,32 @@ function formatCampusName(mts: any[]): string {
 // ── Main ──────────────────────────────────────────────────────────────────
 
 async function main() {
+  const campuses = parseCampuses(CAMPUS_ARG)
+
   console.log('╔══════════════════════════════════════════════════╗')
   console.log('║       SOC Ingestion Pipeline                     ║')
   console.log('╚══════════════════════════════════════════════════╝')
   console.log()
   console.log(`  Year:       ${YEAR}`)
   console.log(`  Term:       ${TERM} (${TERM_NAME[TERM] ?? 'Unknown'})`)
-  console.log(`  Campus:     ${CAMPUS}`)
-  console.log(`  Subjects:   ${SUBJECTS_FILTER?.join(', ') ?? 'ALL NB'}`)
+  console.log(`  Campus:     ${campuses.join(', ')}`)
+  console.log(`  Subjects:   ${SUBJECTS_FILTER?.join(', ') ?? 'ALL'}`)
   console.log(`  Dry-run:    ${DRY_RUN}`)
   console.log(`  Limit:      ${LIMIT ?? 'none'}`)
   console.log()
 
   // 1. Fetch SOC data
   console.log('─ Fetching SOC data …')
-  // classes.rutgers.edu is the canonical host; sis.rutgers.edu now 302-redirects
-  const url = `https://classes.rutgers.edu/soc/api/courses.json?year=${YEAR}&term=${TERM}&campus=${CAMPUS}`
-  const resp = await fetch(url, { headers: { 'Accept-Encoding': 'gzip' } })
-  if (!resp.ok) {
-    console.error(`  FAILED: HTTP ${resp.status} – ${resp.statusText}`)
-    process.exit(1)
-  }
-  const allCourses: any[] = await resp.json()
-  console.log(`  Fetched ${allCourses.length} courses total (NB ${CAMPUS})`)
+  const allCourses = await fetchCourses(campuses)
+  const totalSections = allCourses.reduce((sum, row) => sum + ((row.course.sections as any[] | undefined)?.length ?? 0), 0)
+  const totalSubjects = new Set(allCourses.map(row => row.course.subject)).size
+  console.log(`  Fetched ${allCourses.length} courses total across ${campuses.length} campus request(s)`)
+  console.log(`  Source subjects: ${totalSubjects}`)
+  console.log(`  Source sections: ${totalSections}`)
 
   let courses = allCourses
   if (SUBJECTS_FILTER) {
-    courses = allCourses.filter((c: any) => SUBJECTS_FILTER!.includes(c.subject))
+    courses = allCourses.filter(row => SUBJECTS_FILTER!.includes(row.course.subject))
   }
   if (LIMIT) {
     courses = courses.slice(0, LIMIT)
@@ -312,12 +351,16 @@ async function main() {
   }
 
   const deptMap = await loadDeptCache()
-  console.log(`  Loaded ${Object.keys(deptMap).length} departments`)
+  if (Object.keys(deptMap).length > 0) {
+    console.log(`  Loaded ${Object.keys(deptMap).length} departments`)
+  } else if (DRY_RUN) {
+    console.log('  Skipped department cache (dry-run without Supabase credentials)')
+  }
   console.log()
 
   // 3. Process each course
   for (let i = 0; i < courses.length; i++) {
-    const course = courses[i]
+    const { campus, course } = courses[i]
     const courseNum = course.courseString
     const title = course.title
     const subject = course.subject
@@ -388,7 +431,7 @@ async function main() {
       const indexNum = section.index
       const instructorsRaw = section.instructors ?? []
       const instructorsText = section.instructorsText ?? ''
-      const campusCode = section.campusCode ?? ''
+      const campusCode = section.campusCode ?? campus
       const openStatus: boolean | null = typeof section.openStatus === 'boolean' ? section.openStatus : null
       const openStatusText: string | null = section.openStatusText ?? null
       const mt = section.meetingTimes ?? []
@@ -398,9 +441,9 @@ async function main() {
       const locations = [...new Set(mt.map((m: any) => formatLocation(m)).filter(Boolean))].join('; ')
 
       // Build source URL
-      const sourceUrl = `https://sis.rutgers.edu/soc/#courses?subject=${subject}&semester=${YEAR}${TERM}&campus=${CAMPUS}`
+      const sourceUrl = `https://sis.rutgers.edu/soc/#courses?subject=${subject}&semester=${YEAR}${TERM}&campus=${campus}`
 
-      stats.courses_fetched++
+      stats.sections_processed++
 
       if (instructorsRaw.length === 0) {
         stats.sections_no_instructor++
@@ -531,7 +574,7 @@ async function main() {
   console.log('║       Ingestion Complete                        ║')
   console.log('╚══════════════════════════════════════════════════╝')
   console.log()
-  console.log(`  Courses fetched:           ${stats.courses_fetched}`)
+  console.log(`  Sections processed:        ${stats.sections_processed}`)
   console.log(`  Courses created:           ${stats.courses_created}`)
   console.log(`  Courses skipped (exists):  ${stats.courses_skipped}`)
   console.log(`  Professors created:        ${stats.professors_created}`)

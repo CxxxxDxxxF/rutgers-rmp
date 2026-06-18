@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import type { AIAnalysis } from '@/lib/supabase'
+import type { ProfessorGrade } from '@/lib/professor-grade'
 
 interface ProfResult {
   searchedName: string
@@ -16,6 +18,7 @@ interface ProfResult {
   numRatings: number
   slug: string
   ai_analysis: AIAnalysis | null
+  student_grade: ProfessorGrade | null
 }
 
 function parseScheduleText(text: string): string[] {
@@ -372,6 +375,12 @@ export default function SchedulePage() {
                         )}
                       </div>
                     </div>
+
+                    {prof.student_grade && (
+                      <div className="pl-11">
+                        <ProfessorGradeBadge grade={prof.student_grade} />
+                      </div>
+                    )}
 
                     {prof.ai_analysis?.verdict_reason && (
                       <p className="text-sm text-zinc-300 pl-11">{prof.ai_analysis.verdict_reason}</p>

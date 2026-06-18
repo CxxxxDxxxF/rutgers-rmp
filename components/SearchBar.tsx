@@ -142,7 +142,7 @@ export default function SearchBar() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKey}
           onFocus={() => items.length > 0 && setOpen(true)}
-          placeholder="Search professors, courses, or course numbers..."
+          placeholder="Search courses first — number, title, or Rutgers NB professor..."
           className="w-full pl-12 pr-4 py-4 bg-zinc-900 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 text-base sm:text-lg focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] transition-colors"
           autoComplete="off"
         />

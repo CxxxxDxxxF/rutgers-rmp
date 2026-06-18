@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { log } from '@/lib/logger'
+import {
+  buildProfessorGrade,
+  summarizeNativeReviews,
+  type NativeReviewStats,
+} from '@/lib/professor-grade'
 
 export async function GET(
   _req: NextRequest,
@@ -82,6 +87,7 @@ export async function GET(
           id,
           name,
           code,
+          slug,
           is_current
         ),
         professors (
@@ -110,7 +116,7 @@ export async function GET(
       slug: string
       cache_id: string | null
     }
-    type Sem = { id: string; name: string; code: string | null; is_current: boolean }
+    type Sem = { id: string; name: string; code: string | null; slug: string | null; is_current: boolean }
 
     const rows = (assignments ?? []).map(a => ({
       ...a,
@@ -138,6 +144,7 @@ export async function GET(
         cacheMap.set(c.id, c)
       }
     }
+    const nativeStats = await loadNativeReviewStats(profList.map(p => p.id))
 
     const professors = profList
       .map(prof => {
@@ -153,15 +160,26 @@ export async function GET(
           would_take_again: cache?.would_take_again ?? null,
           num_ratings: cache?.num_ratings ?? null,
           verdict: (cache?.ai_analysis as { verdict?: string } | null)?.verdict ?? null,
+          student_grade: buildProfessorGrade({
+            rmpAvgRating: cache?.avg_rating ?? null,
+            rmpAvgDifficulty: cache?.avg_difficulty ?? null,
+            rmpWouldTakeAgainPct: cache?.would_take_again ?? null,
+            rmpNumRatings: cache?.num_ratings ?? null,
+            native: nativeStats.get(prof.id) ?? null,
+          }),
         }
       })
-      .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+      .sort((a, b) =>
+        (b.student_grade?.score ?? b.avg_rating ?? 0) -
+        (a.student_grade?.score ?? a.avg_rating ?? 0)
+      )
 
     // Group sections by semester, current first then newest name
     const semMap = new Map<string, {
       id: string
       name: string
       code: string | null
+      slug: string | null
       is_current: boolean
       sections: SectionPayload[]
     }>()
@@ -173,6 +191,7 @@ export async function GET(
           id: r.semester.id,
           name: r.semester.name,
           code: r.semester.code ?? null,
+          slug: r.semester.slug ?? null,
           is_current: r.semester.is_current,
           sections: [],
         })
@@ -223,6 +242,34 @@ export async function GET(
   }
 }
 
+async function loadNativeReviewStats(professorIds: string[]) {
+  const stats = new Map<string, NativeReviewStats>()
+  if (!supabase || professorIds.length === 0) return stats
+
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('professor_id, quality_rating, difficulty_rating, would_take_again, grade_received')
+    .in('professor_id', professorIds)
+    .eq('source', 'native')
+
+  if (error) {
+    log.error('Course detail native review stats error:', error)
+    return stats
+  }
+
+  const grouped = new Map<string, NativeReviewStatRow[]>()
+  for (const row of (data ?? []) as NativeReviewStatRow[]) {
+    const rows = grouped.get(row.professor_id) ?? []
+    rows.push(row)
+    grouped.set(row.professor_id, rows)
+  }
+
+  for (const [professorId, rows] of grouped) {
+    stats.set(professorId, summarizeNativeReviews(rows))
+  }
+  return stats
+}
+
 interface SectionPayload {
   id: string
   index_number: string | null
@@ -255,4 +302,12 @@ interface ProfessorCacheRow {
   would_take_again: number | null
   num_ratings: number
   ai_analysis: unknown
+}
+
+interface NativeReviewStatRow {
+  professor_id: string
+  quality_rating: number | null
+  difficulty_rating: number | null
+  would_take_again: boolean | null
+  grade_received: string | null
 }

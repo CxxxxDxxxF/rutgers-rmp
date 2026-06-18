@@ -30,6 +30,14 @@ export interface WatchedSection {
   teaching_assignment_id: string | null
   index_number: string | null
   last_seen_status: string | null
+  notification_settings: {
+    email: string | null
+    phone_e164: string | null
+    email_enabled: boolean
+    sms_enabled: boolean
+    notify_on_open: boolean
+    notify_on_close: boolean
+  }
   created_at: string
   course: {
     course_number: string
@@ -77,6 +85,7 @@ export async function addWatch(params: {
   courseId: string
   teachingAssignmentId?: string | null
   indexNumber?: string | null
+  notificationSettings?: NotificationSettingsInput
 }): Promise<boolean> {
   const watcher = getWatcherId()
   if (!watcher) return false
@@ -88,10 +97,39 @@ export async function addWatch(params: {
       course_id: params.courseId,
       teaching_assignment_id: params.teachingAssignmentId ?? null,
       index_number: params.indexNumber ?? null,
+      notification_settings: params.notificationSettings,
     }),
   })
   if (res.ok) notifyChange()
   return res.ok
+}
+
+export async function addWatchByIndex(params: {
+  indexNumber: string
+  semesterSlug?: string | null
+  notificationSettings?: NotificationSettingsInput
+}): Promise<{ ok: boolean; duplicate?: boolean; error?: string }> {
+  const watcher = getWatcherId()
+  if (!watcher) return { ok: false, error: 'Watchlist storage is blocked in this browser' }
+  const res = await fetch('/api/watchlist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      watcher_id: watcher,
+      index_number: params.indexNumber,
+      semester_slug: params.semesterSlug ?? null,
+      notification_settings: params.notificationSettings,
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (res.ok) {
+    notifyChange()
+    return { ok: true, duplicate: Boolean(data.duplicate) }
+  }
+  return {
+    ok: false,
+    error: typeof data.error === 'string' ? data.error : 'Could not add that snipe',
+  }
 }
 
 export async function removeWatch(watchId: string): Promise<boolean> {
@@ -103,6 +141,88 @@ export async function removeWatch(watchId: string): Promise<boolean> {
   )
   if (res.ok) notifyChange()
   return res.ok
+}
+
+export async function markWatchStatusSeen(watchIds: string[], status: string | null): Promise<boolean> {
+  const watcher = getWatcherId()
+  if (!watcher || watchIds.length === 0) return false
+  const res = await fetch('/api/watchlist', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      watcher_id: watcher,
+      ids: watchIds,
+      last_seen_status: status,
+    }),
+  })
+  if (res.ok) notifyChange()
+  return res.ok
+}
+
+export interface NotificationSettingsInput {
+  email?: string | null
+  phone_e164?: string | null
+  email_enabled?: boolean
+  sms_enabled?: boolean
+  notify_on_open?: boolean
+  notify_on_close?: boolean
+}
+
+export async function updateWatchNotifications(settings: NotificationSettingsInput, watchIds?: string[]): Promise<boolean> {
+  const watcher = getWatcherId()
+  if (!watcher) return false
+  const res = await fetch('/api/watchlist', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      watcher_id: watcher,
+      ids: watchIds,
+      notification_settings: settings,
+    }),
+  })
+  if (res.ok) notifyChange()
+  return res.ok
+}
+
+export async function updateWatchNotificationsDetailed(
+  settings: NotificationSettingsInput,
+  watchIds?: string[]
+): Promise<{ ok: boolean; error?: string }> {
+  const watcher = getWatcherId()
+  if (!watcher) return { ok: false, error: 'Watchlist storage is blocked in this browser' }
+  const res = await fetch('/api/watchlist', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      watcher_id: watcher,
+      ids: watchIds,
+      notification_settings: settings,
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (res.ok) {
+    notifyChange()
+    return { ok: true }
+  }
+  return {
+    ok: false,
+    error: typeof data.error === 'string' ? data.error : 'Failed to save alert settings',
+  }
+}
+
+export function currentSectionStatus(watch: WatchedSection): string | null {
+  const section = watch.section
+  if (!section) return null
+  return section.open_status_text ?? (section.open_status === true ? 'OPEN' : section.open_status === false ? 'CLOSED' : null)
+}
+
+export function isNewlyOpen(watch: WatchedSection): boolean {
+  const current = currentSectionStatus(watch)
+  return watch.section?.open_status === true && normalizeStatus(watch.last_seen_status) !== normalizeStatus(current)
+}
+
+function normalizeStatus(status: string | null | undefined) {
+  return status?.trim().toUpperCase() || null
 }
 
 /**

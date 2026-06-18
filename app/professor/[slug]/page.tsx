@@ -10,8 +10,10 @@ import GradeChart from '@/components/GradeChart'
 import ReviewCard from '@/components/ReviewCard'
 import NativeReviewCard, { type NativeReview } from '@/components/NativeReviewCard'
 import WriteReviewForm from '@/components/WriteReviewForm'
+import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import { supabase } from '@/lib/supabase'
 import type { ProfessorCache, AIAnalysis, Rating } from '@/lib/supabase'
+import { buildProfessorGrade, summarizeNativeReviews } from '@/lib/professor-grade'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -220,6 +222,9 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
     setReviews((prev) => [review, ...prev])
     setShowForm(false)
   }
+  const nativeGrade = buildProfessorGrade({
+    native: summarizeNativeReviews(reviews),
+  })
 
   return (
     <div className="space-y-4">
@@ -270,6 +275,13 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         </div>
       ) : (
         <div className="space-y-3">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <ProfessorGradeBadge grade={nativeGrade} />
+            <p className="mt-2 text-xs text-zinc-500">
+              Based only on RU Rate reviews students left here, including quality, difficulty,
+              would-take-again, and reported grades.
+            </p>
+          </div>
           {reviews.map((r) => (
             <NativeReviewCard key={r.id} review={r} />
           ))}

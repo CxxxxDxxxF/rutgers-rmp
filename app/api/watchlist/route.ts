@@ -8,6 +8,7 @@ import { log } from '@/lib/logger'
 // Rutgers systems and never performs any registration action.
 
 const MAX_WATCHES_PER_WATCHER = 50
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 function isValidWatcherId(id: string | null): id is string {
   return !!id && /^[0-9a-fA-F-]{8,64}$/.test(id)
@@ -27,6 +28,12 @@ const WATCH_SELECT = `
   teaching_assignment_id,
   index_number,
   last_seen_status,
+  notify_email,
+  notify_phone_e164,
+  notify_email_enabled,
+  notify_sms_enabled,
+  notify_on_open,
+  notify_on_close,
   created_at,
   courses (
     course_number,
@@ -75,6 +82,14 @@ function mapRow(row: any) {
     teaching_assignment_id: row.teaching_assignment_id,
     index_number: row.index_number ?? ta?.index_number ?? null,
     last_seen_status: row.last_seen_status,
+    notification_settings: {
+      email: row.notify_email ?? null,
+      phone_e164: row.notify_phone_e164 ?? null,
+      email_enabled: row.notify_email_enabled ?? false,
+      sms_enabled: row.notify_sms_enabled ?? false,
+      notify_on_open: row.notify_on_open ?? true,
+      notify_on_close: row.notify_on_close ?? true,
+    },
     created_at: row.created_at,
     course: course
       ? {
@@ -148,6 +163,8 @@ export async function POST(req: NextRequest) {
     course_id?: string
     teaching_assignment_id?: string | null
     index_number?: string | null
+    semester_slug?: string | null
+    notification_settings?: NotificationSettingsInput
   }
   try {
     body = await req.json()
@@ -159,7 +176,17 @@ export async function POST(req: NextRequest) {
   if (!isValidWatcherId(watcher)) {
     return NextResponse.json({ error: 'Invalid watcher id' }, { status: 400 })
   }
-  if (!body.course_id || typeof body.course_id !== 'string') {
+  const indexNumber = sanitizeIndexNumber(body.index_number)
+  let courseId = typeof body.course_id === 'string' ? body.course_id : null
+  let teachingAssignmentId = typeof body.teaching_assignment_id === 'string'
+    ? body.teaching_assignment_id
+    : null
+  const notificationError = validateNotificationSettings(body.notification_settings)
+  if (notificationError) {
+    return NextResponse.json({ error: notificationError }, { status: 400 })
+  }
+
+  if (!courseId && !indexNumber) {
     return NextResponse.json({ error: 'course_id required' }, { status: 400 })
   }
 
@@ -181,15 +208,28 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!courseId && indexNumber) {
+      const resolved = await resolveSectionByIndex(supabase, indexNumber, body.semester_slug)
+      if (!resolved.ok) {
+        return NextResponse.json({ error: resolved.error }, { status: resolved.status })
+      }
+      courseId = resolved.course_id
+      teachingAssignmentId = resolved.teaching_assignment_id
+    }
+
+    if (!courseId) {
+      return NextResponse.json({ error: 'course_id required' }, { status: 400 })
+    }
+
     // Postgres UNIQUE treats NULLs as distinct, so course-level watches
     // (teaching_assignment_id = null) need an explicit duplicate check.
     let dupQuery = supabase
       .from('watched_sections')
       .select('id')
       .eq('watcher_id', watcher)
-      .eq('course_id', body.course_id)
-    dupQuery = body.teaching_assignment_id
-      ? dupQuery.eq('teaching_assignment_id', body.teaching_assignment_id)
+      .eq('course_id', courseId)
+    dupQuery = teachingAssignmentId
+      ? dupQuery.eq('teaching_assignment_id', teachingAssignmentId)
       : dupQuery.is('teaching_assignment_id', null)
     const { data: existing } = await dupQuery.maybeSingle()
 
@@ -199,11 +239,11 @@ export async function POST(req: NextRequest) {
 
     // Snapshot the section's current status so a future notifier can diff it.
     let lastSeenStatus: string | null = null
-    if (body.teaching_assignment_id) {
+    if (teachingAssignmentId) {
       const { data: ta } = await supabase
         .from('teaching_assignments')
         .select('open_status, open_status_text')
-        .eq('id', body.teaching_assignment_id)
+        .eq('id', teachingAssignmentId)
         .maybeSingle()
       if (ta) {
         lastSeenStatus =
@@ -216,10 +256,11 @@ export async function POST(req: NextRequest) {
       .from('watched_sections')
       .insert({
         watcher_id: watcher,
-        course_id: body.course_id,
-        teaching_assignment_id: body.teaching_assignment_id ?? null,
-        index_number: body.index_number ?? null,
+        course_id: courseId,
+        teaching_assignment_id: teachingAssignmentId,
+        index_number: indexNumber ?? body.index_number ?? null,
         last_seen_status: lastSeenStatus,
+        ...notificationUpdate(body.notification_settings),
       })
       .select('id')
       .single()
@@ -265,4 +306,199 @@ export async function DELETE(req: NextRequest) {
     log.error('Watchlist DELETE error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+export async function PATCH(req: NextRequest) {
+  let body: {
+    watcher_id?: string
+    ids?: string[]
+    last_seen_status?: string | null
+    notification_settings?: NotificationSettingsInput
+  }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const watcher = body.watcher_id ?? null
+  if (!isValidWatcherId(watcher)) {
+    return NextResponse.json({ error: 'Invalid watcher id' }, { status: 400 })
+  }
+  const hasIds = Array.isArray(body.ids) && body.ids.length > 0
+  if (hasIds && body.ids!.some(id => typeof id !== 'string')) {
+    return NextResponse.json({ error: 'ids must be strings' }, { status: 400 })
+  }
+  if ((body.ids?.length ?? 0) > MAX_WATCHES_PER_WATCHER) {
+    return NextResponse.json({ error: 'Too many watch ids' }, { status: 400 })
+  }
+
+  const updatingNotifications = body.notification_settings != null
+  if (!updatingNotifications && !hasIds) {
+    return NextResponse.json({ error: 'ids required' }, { status: 400 })
+  }
+  const notificationError = validateNotificationSettings(body.notification_settings)
+  if (notificationError) {
+    return NextResponse.json({ error: notificationError }, { status: 400 })
+  }
+
+  const update = updatingNotifications
+    ? notificationUpdate(body.notification_settings)
+    : { last_seen_status: sanitizeStatus(body.last_seen_status) }
+
+  try {
+    const supabase = getServiceClient()
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+    }
+
+    let query = supabase
+      .from('watched_sections')
+      .update(update)
+      .eq('watcher_id', watcher)
+
+    if (hasIds) {
+      query = query.in('id', body.ids!)
+    }
+
+    const { error } = await query
+
+    if (error) {
+      log.error('Watchlist status update error:', error)
+      return NextResponse.json({ error: 'Failed to update alerts' }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    log.error('Watchlist PATCH error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+function sanitizeStatus(status: string | null | undefined) {
+  if (typeof status !== 'string') return null
+  const trimmed = status.trim().toUpperCase()
+  if (!trimmed) return null
+  return trimmed.slice(0, 80)
+}
+
+function sanitizeIndexNumber(value: string | null | undefined) {
+  if (typeof value !== 'string') return null
+  const digits = value.replace(/\D/g, '')
+  return /^\d{5}$/.test(digits) ? digits : null
+}
+
+async function resolveSectionByIndex(
+  supabase: NonNullable<ReturnType<typeof getServiceClient>>,
+  indexNumber: string,
+  semesterSlug: string | null | undefined
+): Promise<
+  | { ok: true; course_id: string; teaching_assignment_id: string }
+  | { ok: false; error: string; status: number }
+> {
+  let query = supabase
+    .from('teaching_assignments')
+    .select(`
+      id,
+      course_id,
+      semesters!inner (
+        slug,
+        is_current
+      )
+    `)
+    .eq('index_number', indexNumber)
+    .eq('status', 'active')
+
+  if (semesterSlug) {
+    query = query.eq('semesters.slug', semesterSlug)
+  } else {
+    query = query.eq('semesters.is_current', true)
+  }
+
+  const { data, error } = await query.limit(2)
+  if (error) {
+    log.error('Watchlist index lookup error:', error)
+    return { ok: false, error: 'Could not validate that index number', status: 500 }
+  }
+
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: semesterSlug
+        ? 'No active section found for that index in the selected semester'
+        : 'No active section found for that index in the current semester',
+      status: 404,
+    }
+  }
+
+  if (data.length > 1) {
+    return {
+      ok: false,
+      error: 'That index matched more than one section. Add it from the course page instead.',
+      status: 409,
+    }
+  }
+
+  return {
+    ok: true,
+    course_id: data[0].course_id as string,
+    teaching_assignment_id: data[0].id as string,
+  }
+}
+
+type NotificationSettingsInput = {
+  email?: string | null
+  phone_e164?: string | null
+  email_enabled?: boolean
+  sms_enabled?: boolean
+  notify_on_open?: boolean
+  notify_on_close?: boolean
+} | null | undefined
+
+function notificationUpdate(settings: NotificationSettingsInput) {
+  const email = sanitizeEmail(settings?.email)
+  const phone = sanitizePhone(settings?.phone_e164)
+
+  return {
+    notify_email: email,
+    notify_phone_e164: phone,
+    notify_email_enabled: Boolean(settings?.email_enabled && email),
+    notify_sms_enabled: Boolean(settings?.sms_enabled && phone),
+    notify_on_open: settings?.notify_on_open !== false,
+    notify_on_close: settings?.notify_on_close !== false,
+  }
+}
+
+function validateNotificationSettings(settings: NotificationSettingsInput) {
+  if (!settings) return null
+  if (settings.email_enabled && !sanitizeEmail(settings.email)) {
+    return 'Enter a valid email address or turn off email alerts'
+  }
+  if (settings.sms_enabled && !sanitizePhone(settings.phone_e164)) {
+    return 'Enter a valid phone number or turn off SMS alerts'
+  }
+  return null
+}
+
+function sanitizeEmail(email: string | null | undefined) {
+  if (typeof email !== 'string') return null
+  const trimmed = email.trim().toLowerCase()
+  if (!trimmed) return null
+  if (trimmed.length > 254 || !EMAIL_RE.test(trimmed)) return null
+  return trimmed
+}
+
+function sanitizePhone(phone: string | null | undefined) {
+  if (typeof phone !== 'string') return null
+  const trimmed = phone.trim()
+  if (!trimmed) return null
+
+  const digits = trimmed.replace(/\D/g, '')
+  const e164 = trimmed.startsWith('+')
+    ? `+${digits}`
+    : digits.length === 10
+      ? `+1${digits}`
+      : `+${digits}`
+
+  return /^\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null
 }

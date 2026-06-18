@@ -13,6 +13,14 @@ interface Department {
   slug: string
 }
 
+interface Semester {
+  id: string
+  name: string
+  code: string | null
+  slug: string | null
+  is_current: boolean
+}
+
 const CREDIT_OPTIONS = ['', '1', '2', '3', '4', '5', '6']
 
 function CoursesContent() {
@@ -21,7 +29,9 @@ function CoursesContent() {
 
   const [courses, setCourses] = useState<CourseCardData[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
+  const [semesters, setSemesters] = useState<Semester[]>([])
   const [selectedDept, setSelectedDept] = useState<string>(searchParams.get('dept') ?? '')
+  const [selectedSemester, setSelectedSemester] = useState<string>(searchParams.get('semester') ?? '')
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [credits, setCredits] = useState<string>(searchParams.get('credits') ?? '')
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
@@ -32,21 +42,33 @@ function CoursesContent() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [serverQuery, setServerQuery] = useState(searchParams.get('q') ?? '')
 
-  // Fetch departments for the dropdown filter
+  // Fetch departments and semesters for filters.
   useEffect(() => {
-    async function loadDepts() {
+    async function loadFilters() {
       try {
-        const res = await fetch('/api/departments')
-        if (res.ok) {
-          const data = await res.json()
-          setDepartments(data)
+        const [deptRes, semRes] = await Promise.all([
+          fetch('/api/departments'),
+          fetch('/api/semesters'),
+        ])
+        if (deptRes.ok) {
+          const data = await deptRes.json()
+          setDepartments(Array.isArray(data) ? data : [])
+        }
+        if (semRes.ok) {
+          const data = await semRes.json()
+          const list = Array.isArray(data) ? data : []
+          setSemesters(list)
+          if (!searchParams.get('semester')) {
+            const current = list.find((s: Semester) => s.is_current && s.slug)
+            if (current?.slug) setSelectedSemester(current.slug)
+          }
         }
       } catch {
-        // non-fatal — filter just won't populate
+        // non-fatal — filters just won't populate
       }
     }
-    loadDepts()
-  }, [])
+    loadFilters()
+  }, [searchParams])
 
   // Debounce the text search before hitting the server
   useEffect(() => {
@@ -59,13 +81,14 @@ function CoursesContent() {
   useEffect(() => {
     const params = new URLSearchParams()
     if (selectedDept) params.set('dept', selectedDept)
+    if (selectedSemester) params.set('semester', selectedSemester)
     if (serverQuery) params.set('q', serverQuery)
     if (credits) params.set('credits', credits)
     if (level) params.set('level', level)
     if (onlyWithSections) params.set('open', '1')
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, serverQuery, credits, level, onlyWithSections, router])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, router])
 
   // Fetch courses whenever server-side filters or loadKey change
   useEffect(() => {
@@ -75,6 +98,7 @@ function CoursesContent() {
       try {
         const params = new URLSearchParams()
         if (selectedDept) params.set('dept', selectedDept)
+        if (selectedSemester) params.set('semester', selectedSemester)
         if (serverQuery.length >= 2) params.set('q', serverQuery)
         if (credits) params.set('credits', credits)
         if (level) params.set('level', level)
@@ -90,7 +114,7 @@ function CoursesContent() {
       }
     }
     loadCourses()
-  }, [selectedDept, serverQuery, credits, level, loadKey])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
 
   // Instant client-side narrowing while typing + section filter
   const filtered = useMemo(() => {
@@ -116,7 +140,7 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || selectedDept || credits || level || onlyWithSections)
+  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections)
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -126,10 +150,10 @@ function CoursesContent() {
         {/* Page heading */}
         <div className="mb-8">
           <h1 className="text-3xl font-black text-white tracking-tight">
-            Course Browser
+            Find Rutgers Courses
           </h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Real Rutgers courses and sections — find the best professor + section combo
+            Search by course number, title, department, semester, credits, teacher, building, and open seats.
           </p>
         </div>
 
@@ -156,6 +180,19 @@ function CoursesContent() {
             </div>
 
             {/* Department dropdown */}
+            <select
+              value={selectedSemester}
+              onChange={e => setSelectedSemester(e.target.value)}
+              className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] sm:min-w-[160px]"
+            >
+              <option value="">All Semesters</option>
+              {semesters.map(s => (
+                <option key={s.id} value={s.slug ?? ''}>
+                  {s.name}{s.is_current ? ' — current' : ''}
+                </option>
+              ))}
+            </select>
+
             <select
               value={selectedDept}
               onChange={e => setSelectedDept(e.target.value)}
@@ -206,7 +243,7 @@ function CoursesContent() {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setCredits(''); setLevel(''); setOnlyWithSections(false)
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false)
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -218,9 +255,15 @@ function CoursesContent() {
 
         {/* Result count */}
         {!loading && !error && (
-          <p className="text-xs text-zinc-600 mb-4">
-            {filtered.length} course{filtered.length !== 1 ? 's' : ''} found
-          </p>
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
+            <span>{filtered.length} course{filtered.length !== 1 ? 's' : ''} found</span>
+            {selectedSemester && (
+              <span>
+                · scoped to {semesters.find(s => s.slug === selectedSemester)?.name ?? selectedSemester}
+              </span>
+            )}
+            <span>· cards show buildings and top rated teachers when available</span>
+          </div>
         )}
 
         {/* Loading state */}
@@ -254,8 +297,8 @@ function CoursesContent() {
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                    setSearch(''); setSelectedDept(''); setCredits(''); setLevel(''); setOnlyWithSections(false)
-                  }}
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false)
+                }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
                   Clear filters

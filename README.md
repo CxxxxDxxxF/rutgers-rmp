@@ -1,101 +1,194 @@
-# RU Rate — Rutgers Registration Command Center
+# RU Rate
 
-Pick better Rutgers classes. Professor reviews + Claude AI analysis, real Rutgers course
-sections from the Schedule of Classes, professor comparison, and a registration watchlist
-with WebReg-ready index numbers.
+RU Rate is a Rutgers New Brunswick course search, professor review, schedule
+ranking, and course-sniper app. It helps students find classes, compare
+professors, track open seats, and jump to WebReg with the right index number.
+
+RU Rate is registration prep only. It never stores NetID credentials, never
+calls WebReg on a student's behalf, and never auto-registers.
+
+## Current Production
+
+Production runs on Railway under project `rurate-production`.
+
+| Service | Purpose | Status |
+| --- | --- | --- |
+| `rurate-web` | Next.js web app | Public site |
+| `rurate-sniper-worker` | Always-on course sniper | Background worker |
+
+Public URL:
+
+```text
+https://rurate-web-production.up.railway.app
+```
+
+Deployment details and runbooks live in
+[`docs/deployment.md`](docs/deployment.md).
 
 ## Features
 
-- **Professor search & AI analysis** — RMP reviews summarized into a take/avoid/depends verdict
-- **Global search** — professors, course numbers, and course titles in one box
-- **Course browser** (`/courses`) — filter by department, credits, level; deep-linkable URLs
-- **Course pages** (`/course/[slug]`) — per-semester section tables (index number, instructor,
-  meeting times, campus, open/closed status) + registration helper with copy-paste index numbers
-- **Compare professors** (`/compare`) — 2–4 side by side: rating, difficulty, would-take-again,
-  AI verdict, workload, grading, courses taught
-- **Watchlist** (`/watchlist`) — track sections per browser (no account needed), copy index
-  numbers, see open/closed status from the last SOC sync
-
-**Hard boundary:** RU Rate is registration *prep* only. It never auto-registers, never submits
-anything to WebReg, and never polls Rutgers endpoints aggressively. Section status is synced by
-the batch ingest script, not live. Open-section notifications are planned but not implemented.
+- Course search by title, course number, department, credits, and level.
+- Semester-aware course pages with sections, buildings, meeting times, credits,
+  instructors, index numbers, and open/closed status.
+- Rutgers New Brunswick professor search with RateMyProfessors data, cached AI
+  summaries, and native RU Rate reviews.
+- Professor comparison for ratings, difficulty, would-take-again, workload,
+  grading, courses taught, and student review signals.
+- Schedule ranking from pasted instructor names.
+- Course sniper watchlist with email/SMS-ready alert preferences and WebReg
+  index numbers.
+- Pro interest capture for future paid alert and schedule-planning features.
 
 ## Stack
 
-- **Next.js 16** (App Router)
-- **TypeScript**
-- **Tailwind CSS**
-- **Supabase** (cache + SOC course/section data + watchlist)
-- **Claude Haiku** (`anthropic/claude-haiku-4-5` via OpenRouter) for AI analysis
-- **RateMyProfessors GraphQL API**
-- **Rutgers SOC API** (batch ingestion via `npm run ingest`)
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS
+- Supabase for cached professor data, Rutgers course data, watchlists, native
+  reviews, submissions, and Pro interest
+- RateMyProfessors GraphQL for professor search/review source data
+- OpenRouter for Claude Haiku review summaries
+- Rutgers Schedule of Classes API for courses and section status
+- Railway for the web service and always-on sniper worker
 
-## Setup
+## Local Setup
 
-### 1. Install dependencies
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-### 2. Environment variables
+Copy `.env.local.example` to `.env.local` and fill in the values you need.
 
-Copy `.env.local.example` to `.env.local` and fill in:
+Minimum useful local read setup:
 
-```
-NEXT_PUBLIC_SUPABASE_URL=       # Supabase project settings → API
-NEXT_PUBLIC_SUPABASE_ANON_KEY=  # Supabase project settings → API
-SUPABASE_SERVICE_ROLE_KEY=      # server-only; required for watchlist, submissions, votes
-OPENROUTER_API_KEY=             # openrouter.ai/keys; required for AI analysis
-ADMIN_SECRET=                   # server-only; protects /admin/submissions
-VOTE_FINGERPRINT_SALT=          # server-only; salts review-vote fingerprints
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
 
-The app degrades gracefully when secrets are missing: pages and read APIs work with just
-the two public Supabase keys; watchlist/submissions/votes return 503 and AI analysis is
-skipped until the corresponding secret is set.
+Server-side features also need:
 
-### 3. Supabase database
-
-Run the migrations in `supabase/migrations/` in order in your Supabase SQL editor, or:
-
-```bash
-supabase db push
+```text
+SUPABASE_SERVICE_ROLE_KEY
+OPENROUTER_API_KEY
+ADMIN_SECRET
+VOTE_FINGERPRINT_SALT
 ```
 
-> **Note:** migration `009_watchlist_section_status.sql` is required for the watchlist and
-> section open/closed status. After applying it, re-run `npm run ingest` so sections pick up
-> their `open_status` from the SOC API.
-
-### 4. Run locally
+Run the app:
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open:
 
-## How it works
-
-1. User searches a professor name → `/api/search` → RMP GraphQL
-2. User selects a professor → `/api/analyze` with their RMP ID
-3. Server checks Supabase cache (< 30 days = return cached, bump search count)
-4. Cache miss: fetches up to 100 reviews from RMP, runs Claude Haiku analysis, stores result
-5. Returns full profile: stats, AI verdict, teaching style, workload, grading, tips, grade distribution, tags, reviews
-
-## Deploy to Vercel
-
-```bash
-npx vercel
+```text
+http://localhost:3000
 ```
 
-Add the same environment variables from `.env.local.example` in Vercel → Project →
-Settings → Environment Variables. `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`,
-`ADMIN_SECRET`, and `VOTE_FINGERPRINT_SALT` are server-side secrets — do not prefix
-them with `NEXT_PUBLIC_`.
+## Database
+
+Apply migrations in `supabase/migrations/` in numeric order. Current important
+groups:
+
+| Migration | Purpose |
+| --- | --- |
+| `001`-`008` | Core professor cache, reviews, teaching assignments, RLS, review votes |
+| `009` | Section open-status tracking and anonymous watchlist |
+| `010` | Course browser stats RPC |
+| `011` | RLS hardening |
+| `012` | Email/SMS watchlist notification fields and constraints |
+| `013` | Watchlist course index |
+| `014` | Pro interest capture |
+
+Typical Supabase CLI flow:
+
+```bash
+supabase db push
+```
+
+Project script fallback:
+
+```bash
+npm run migrate -- --file supabase/migrations/014_pro_interest.sql
+```
+
+The fallback script needs either `SUPABASE_DB_PASSWORD` or `DATABASE_URL`.
+
+## Data Ingest
+
+Run a no-write coverage check before writing:
+
+```bash
+npm run ingest -- --dry-run --campus all --limit 3
+```
+
+Run a focused Rutgers CS dry-run:
+
+```bash
+npm run ingest -- --dry-run --year 2025 --term 9 --campus NB --subjects 198 --limit 25
+```
+
+Run a full write only after reviewing the dry-run and confirming Supabase
+server credentials are present:
+
+```bash
+npm run ingest -- --year 2025 --term 9 --campus all
+```
+
+More detail is in [`docs/rutgers-class-data.md`](docs/rutgers-class-data.md).
+
+## Course Sniper
+
+The sniper is an always-on Railway worker that reads Rutgers SOC data, compares
+watched section status by index number, updates Supabase, and sends configured
+alerts when provider credentials are available.
+
+Default active polling is `500ms`, with adaptive backoff up to `15000ms` when
+Rutgers fetches fail.
+
+Full worker docs are in [`docs/sniper-worker.md`](docs/sniper-worker.md), and
+the research notes are in
+[`docs/course-sniper-research.md`](docs/course-sniper-research.md).
+
+## Verification
+
+Useful checks:
+
+```bash
+npm run lint
+npm test
+npm run build
+node --check worker/sniper-worker.mjs
+```
+
+Data audit:
+
+```bash
+npm run audit:data
+```
+
+`npm run audit:data` needs local Supabase service credentials. If they are not
+present, it should fail before touching data.
+
+## Safety Boundaries
+
+- RU Rate does not auto-register.
+- RU Rate does not submit WebReg actions.
+- RU Rate does not store NetID credentials.
+- User-facing pages do not aggressively poll Rutgers.
+- Service-role Supabase keys stay server-side only.
+- Logs must not include secrets, auth headers, raw provider payloads, email
+  addresses, or phone numbers.
 
 ## Notes
 
-- Rutgers School ID: `U2Nob29sLTgyNQ==` (Rutgers University–New Brunswick, School-825)
-- Cache TTL: 30 days (configurable in `app/api/analyze/route.ts`)
-- AI model: `anthropic/claude-haiku-4-5` via OpenRouter (fast, cheap, good enough for review analysis)
+- Rutgers New Brunswick RateMyProfessors school ID:
+  `U2Nob29sLTgyNQ==` (`School-825`).
+- RMP cache TTL is 30 days in `app/api/analyze/route.ts`.
+- The package name remains `rmp-web` for local development history, but the
+  Railway project and services use RU Rate names to avoid dashboard confusion.

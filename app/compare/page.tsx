@@ -7,8 +7,10 @@ import AppHeader from '@/components/AppHeader'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import { SkeletonBlock } from '@/components/LoadingSkeleton'
+import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import { useCompareItems, removeCompareItem } from '@/lib/compare'
 import type { AIAnalysis } from '@/lib/supabase'
+import type { ProfessorGrade } from '@/lib/professor-grade'
 
 interface CompareProfessor {
   rmp_id: string
@@ -21,6 +23,7 @@ interface CompareProfessor {
   would_take_again: number | null
   num_ratings: number
   ai_analysis: AIAnalysis | null
+  student_grade: ProfessorGrade | null
   courses: { course_number: string; name: string; slug: string }[]
 }
 
@@ -84,6 +87,7 @@ function CompareContent() {
   const bestRating = Math.max(...professors.map(p => p.avg_rating ?? -1))
   const bestDifficulty = Math.min(...professors.map(p => p.avg_difficulty ?? 99))
   const bestWta = Math.max(...professors.map(p => p.would_take_again ?? -1))
+  const bestGrade = Math.max(...professors.map(p => p.student_grade?.score ?? -1))
 
   const missingFromTray = missing
     .map(id => trayItems.find(t => t.rmpId === id))
@@ -195,6 +199,20 @@ function CompareContent() {
                               <span className="ml-1.5 text-[10px] align-middle text-green-500">BEST</span>
                             )}
                           </span>
+                        ) : '—'}
+                      </td>
+                    ))}
+                  </Row>
+                  <Row label="Teacher grade">
+                    {professors.map(p => (
+                      <td key={p.rmp_id} className="px-4 py-3">
+                        {p.student_grade ? (
+                          <div className="flex items-center gap-2">
+                            <ProfessorGradeBadge grade={p.student_grade} compact />
+                            {p.student_grade.score === bestGrade && professors.length > 1 && (
+                              <span className="text-[10px] text-green-500">BEST</span>
+                            )}
+                          </div>
                         ) : '—'}
                       </td>
                     ))}

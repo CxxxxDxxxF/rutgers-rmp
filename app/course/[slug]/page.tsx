@@ -2,13 +2,16 @@
 
 import { Suspense, use, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import CompareButton from '@/components/CompareButton'
+import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import SectionTable, { CopyButton, type SectionRow } from '@/components/SectionTable'
 import { SkeletonBlock, RowListSkeleton } from '@/components/LoadingSkeleton'
 import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
+import type { ProfessorGrade } from '@/lib/professor-grade'
 
 interface Department {
   id: string
@@ -40,12 +43,14 @@ interface Professor {
   would_take_again: number | null
   num_ratings: number | null
   verdict: string | null
+  student_grade: ProfessorGrade | null
 }
 
 interface SemesterGroup {
   id: string
   name: string
   code: string | null
+  slug: string | null
   is_current: boolean
   sections: SectionRow[]
 }
@@ -108,7 +113,8 @@ function ProfessorOptionCard({ prof }: { prof: Professor }) {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="text-xs text-zinc-500">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+          <ProfessorGradeBadge grade={prof.student_grade} compact />
           {prof.would_take_again != null && prof.would_take_again >= 0 && (
             <span>{Math.round(prof.would_take_again)}% would take again</span>
           )}
@@ -165,24 +171,22 @@ function WatchCourseButton({ courseId }: { courseId: string }) {
 
 function RegistrationHelper({
   course,
-  semesters,
+  semester,
 }: {
   course: Course
-  semesters: SemesterGroup[]
+  semester: SemesterGroup | null
 }) {
-  const sourceUrl = semesters.flatMap(s => s.sections).find(s => s.source_url)?.source_url ?? null
-  const openSections = semesters
-    .filter(s => s.is_current)
-    .flatMap(s => s.sections)
+  const sourceUrl = semester?.sections.find(s => s.source_url)?.source_url ?? null
+  const openSections = (semester?.sections ?? [])
     .filter(s => s.open_status === true && s.index_number)
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
       <div>
-        <h2 className="font-semibold text-white">Registration helper</h2>
-        <p className="text-sm text-zinc-500 mt-1">
-          Grab what you need for WebReg. RU Rate shows you the data — you register yourself.
-        </p>
+          <h2 className="font-semibold text-white">Registration helper</h2>
+          <p className="text-sm text-zinc-500 mt-1">
+          Grab what you need for {semester?.name ?? 'the selected term'}. RU Rate shows you the data — you register yourself.
+          </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -305,9 +309,12 @@ function SubmissionForm({ courseId }: { courseId: string }) {
 }
 
 function CourseContent({ slug }: { slug: string }) {
+  const searchParams = useSearchParams()
+  const selectedSemesterSlug = searchParams.get('semester')
   const [data, setData] = useState<CourseData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedSemesterId, setSelectedSemesterId] = useState<string>('')
 
   useEffect(() => {
     async function load() {
@@ -325,6 +332,15 @@ function CourseContent({ slug }: { slug: string }) {
     }
     load()
   }, [slug])
+
+  useEffect(() => {
+    if (!data || selectedSemesterId) return
+    const requested = selectedSemesterSlug
+      ? data.semesters.find(sem => sem.slug === selectedSemesterSlug)
+      : null
+    const current = requested ?? data.semesters.find(sem => sem.is_current) ?? data.semesters[0]
+    if (current) setSelectedSemesterId(current.id)
+  }, [data, selectedSemesterId, selectedSemesterSlug])
 
   if (loading) {
     return (
@@ -365,6 +381,12 @@ function CourseContent({ slug }: { slug: string }) {
   const { course, professors, department, semesters } = data
   const ratedProfessors = professors.filter(p => p.avg_rating != null)
   const totalSections = semesters.reduce((n, s) => n + s.sections.length, 0)
+  const selectedSemester = semesters.find(sem => sem.id === selectedSemesterId) ?? semesters.find(sem => sem.is_current) ?? semesters[0]
+  const visibleSemesters = selectedSemester ? [selectedSemester] : semesters
+  const visibleSections = visibleSemesters.flatMap(sem => sem.sections)
+  const visibleOpen = visibleSections.filter(section => section.open_status === true).length
+  const visibleBuildings = Array.from(new Set(visibleSections.map(section => section.location || section.campus).filter(Boolean))).slice(0, 5)
+  const topProfessor = ratedProfessors[0]
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -384,6 +406,7 @@ function CourseContent({ slug }: { slug: string }) {
                 </span>
                 {course.academic_level && <Badge>{course.academic_level}</Badge>}
                 <Badge tone="scarlet">Rutgers SOC data</Badge>
+                {selectedSemester && <Badge tone={selectedSemester.is_current ? 'green' : 'neutral'}>{selectedSemester.name}</Badge>}
               </div>
 
               <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight leading-tight">
@@ -406,6 +429,33 @@ function CourseContent({ slug }: { slug: string }) {
 
               <div className="mt-4">
                 <WatchCourseButton courseId={course.id} />
+              </div>
+
+              <div className="mt-5 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
+                <div>
+                  <span className="block text-zinc-600">Top rated teacher</span>
+                  <span className="text-zinc-300">
+                    {topProfessor ? `${topProfessor.first_name} ${topProfessor.last_name}` : 'Not rated yet'}
+                  </span>
+                  {topProfessor?.avg_rating != null && (
+                    <span className="ml-1 font-black" style={{ color: ratingColor(topProfessor.avg_rating) }}>
+                      {Number(topProfessor.avg_rating).toFixed(1)}★
+                    </span>
+                  )}
+                  {topProfessor?.student_grade && (
+                    <span className="ml-2">
+                      <ProfessorGradeBadge grade={topProfessor.student_grade} compact />
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className="block text-zinc-600">Open sections</span>
+                  <span className="text-zinc-300">{visibleOpen} open in {selectedSemester?.name ?? 'selected term'}</span>
+                </div>
+                <div>
+                  <span className="block text-zinc-600">Buildings</span>
+                  <span className="text-zinc-300">{visibleBuildings.length > 0 ? visibleBuildings.join(' · ') : 'TBA'}</span>
+                </div>
               </div>
             </div>
 
@@ -441,15 +491,33 @@ function CourseContent({ slug }: { slug: string }) {
         </div>
 
         {/* Registration helper */}
-        {totalSections > 0 && <RegistrationHelper course={course} semesters={semesters} />}
+        {totalSections > 0 && <RegistrationHelper course={course} semester={selectedSemester ?? null} />}
 
         {/* Sections by semester */}
         {semesters.length > 0 && (
           <div className="space-y-6">
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-              Sections
-            </h2>
-            {semesters.map(sem => (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                Sections
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {semesters.map(sem => (
+                  <button
+                    key={sem.id}
+                    onClick={() => setSelectedSemesterId(sem.id)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      selectedSemester?.id === sem.id
+                        ? 'border-[#CC0033]/60 bg-[#CC0033]/15 text-[#ff4d6d]'
+                        : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {sem.name}
+                    {sem.is_current ? ' · current' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {visibleSemesters.map(sem => (
               <div key={sem.id} className="space-y-3">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-white text-sm">{sem.name}</h3>

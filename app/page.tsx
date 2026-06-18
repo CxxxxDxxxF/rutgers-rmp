@@ -27,8 +27,8 @@ const TOOLS: {
 }[] = [
   {
     href: '/courses',
-    title: 'Course Browser',
-    description: 'Browse real Rutgers courses with sections, professors, and credits',
+    title: 'Find Courses',
+    description: 'Search by semester, credits, building, section status, and top rated teachers',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
@@ -37,8 +37,8 @@ const TOOLS: {
   },
   {
     href: '/watchlist',
-    title: 'Course Watchlist',
-    description: 'Track sections you want — index numbers ready for WebReg',
+    title: 'Course Sniper',
+    description: 'Track open and closed sections with index numbers ready for WebReg',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -49,7 +49,7 @@ const TOOLS: {
   {
     href: '/compare',
     title: 'Compare Professors',
-    description: 'Stack 2–4 professors side by side — ratings, difficulty, AI verdicts',
+    description: 'Stack Rutgers NB teachers by ratings, difficulty, reviews, and AI verdicts',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 4v16M15 4v16M4 9h5M4 15h5M15 9h5M15 15h5" />
@@ -59,7 +59,7 @@ const TOOLS: {
   {
     href: '/schedule',
     title: 'Schedule Ranker',
-    description: 'Paste your schedule — we rank every professor on it for you',
+    description: 'Rank possible schedules by professor quality and section fit',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3M5 11h14M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
@@ -69,7 +69,7 @@ const TOOLS: {
   {
     href: '/departments',
     title: 'Departments',
-    description: 'Browse all departments and find the best-rated professors in each',
+    description: 'Browse Rutgers departments and drill into courses by subject',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 21V8l8-5 8 5v13M9 21v-6h6v6M4 21h16" />
@@ -87,27 +87,38 @@ export default async function HomePage() {
 
       {/* Hero */}
       <section className="flex flex-col items-center px-4 sm:px-6 pt-16 sm:pt-24 pb-12 text-center">
-        <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          Built for Rutgers registration
-        </div>
-
         <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight mb-4">
-          <span className="text-white">Pick better</span>
+          <span className="text-white">Find the right</span>
           <br />
-          <span style={{ color: '#CC0033' }}>Rutgers classes.</span>
+          <span style={{ color: '#CC0033' }}>Rutgers class.</span>
         </h1>
 
         <p className="text-zinc-400 text-base sm:text-lg mb-10 max-w-lg">
-          Real professor reviews, AI verdicts, live course sections, and a registration
-          watchlist — everything you need before you touch WebReg.
+          Search Rutgers New Brunswick courses by semester, credits, building, open seats,
+          and teacher quality. Then read professor reviews, compare schedules, and track seats.
         </p>
 
         <SearchBar />
 
         <p className="mt-4 text-xs text-zinc-600">
-          Try a professor&apos;s name, a course number like 198:111, or a course title
+          Try a course number like 198:111, a title like Data Structures, or a Rutgers NB professor
         </p>
+
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Link
+            href="/courses"
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+            style={{ backgroundColor: '#CC0033' }}
+          >
+            Browse courses
+          </Link>
+          <Link
+            href="/watchlist"
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500"
+          >
+            Track a section
+          </Link>
+        </div>
       </section>
 
       {/* Tool cards */}
@@ -142,10 +153,10 @@ export default async function HomePage() {
               </svg>
             </div>
             <div className="font-bold text-zinc-400">
-              Open-Section Alerts <span className="ml-1 text-[10px] font-black px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 align-middle">SOON</span>
+              Rutgers NB Reviews
             </div>
             <div className="text-sm text-zinc-600 mt-1 leading-snug">
-              Get notified when a watched section opens. Watchlist works today — alerts are next.
+              Read RMP-backed summaries and leave RU Rate reviews for teachers you took.
             </div>
           </div>
         </div>

@@ -13,6 +13,7 @@
     "ingest:dry": "npx tsx scripts/ingest-soc.ts --dry-run",
     "ingest:cs": "npx tsx scripts/ingest-soc.ts --subjects 198",
     "ingest:all": "npx tsx scripts/ingest-soc.ts",
+    "worker:sniper": "node worker/sniper-worker.mjs",
     "migrate": "npx tsx scripts/apply-migration.ts",
     "enrich:rmp": "npx tsx scripts/enrich-rmp.ts",
     "audit:data": "npx tsx scripts/audit-data.ts"
