@@ -115,7 +115,10 @@ export default function SearchBar() {
     if (!open) return
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s + 1, items.length - 1)) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(s => Math.max(s - 1, -1)) }
-    if (e.key === 'Enter' && selected >= 0) handleSelect(items[selected])
+    if (e.key === 'Enter') {
+      if (selected >= 0) handleSelect(items[selected])
+      else if (items.length > 0) handleSelect(items[0])
+    }
     if (e.key === 'Escape') { setOpen(false); setSelected(-1) }
   }
 
