@@ -1051,6 +1051,11 @@ export default function WatchlistPage() {
   const [sort, setSort] = useState<SortMode>('status')
   const prevItemIds = useRef(new Set<string>())
 
+  useEffect(() => {
+    document.title = 'Course Sniper | RU Rate'
+    return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
+  }, [])
+
   const openCount = items.filter(w => openStatus(w) === 'open').length
   const closedCount = items.filter(w => openStatus(w) === 'closed').length
   const newlyOpen = useMemo(() => items.filter(isNewlyOpen), [items])
