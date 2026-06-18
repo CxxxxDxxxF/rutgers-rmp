@@ -133,7 +133,22 @@ export async function GET(
       })
       .sort((a, b) => a.course_number.localeCompare(b.course_number))
 
-    return NextResponse.json({ department, professors, courses })
+    // Related departments from the same school (up to 8)
+    const { data: relatedRows } = await supabase
+      .from('departments')
+      .select('id, name, slug, school')
+      .eq('school', department.school)
+      .neq('id', department.id)
+      .order('name')
+      .limit(8)
+    const related = (relatedRows ?? []).map(d => ({
+      id: d.id,
+      name: d.name,
+      slug: d.slug,
+      school: d.school,
+    }))
+
+    return NextResponse.json({ department, professors, courses, related })
   } catch (err) {
     log.error('Department detail API error:', err)
     return NextResponse.json({ error: 'Failed to load department' }, { status: 500 })

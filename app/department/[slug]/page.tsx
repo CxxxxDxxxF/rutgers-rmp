@@ -42,6 +42,7 @@ interface DepartmentDetail {
   department: Department
   professors: ProfessorRow[]
   courses: CourseRow[]
+  related: RelatedDept[]
 }
 
 interface RelatedDept {
@@ -179,16 +180,7 @@ function DepartmentContent({ slug }: { slug: string }) {
         const json: DepartmentDetail = await res.json()
         setData(json)
         document.title = `${json.department.name} | Departments | RU Rate`
-
-        // Fetch related departments from same school
-        const allRes = await fetch('/api/departments')
-        if (allRes.ok) {
-          const allDepts: RelatedDept[] = await allRes.json()
-          const others = allDepts.filter(
-            (d) => d.school === json.department.school && d.slug !== slug
-          )
-          setRelated(others.slice(0, 8))
-        }
+        setRelated(json.related ?? [])
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
