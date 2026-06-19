@@ -29,6 +29,7 @@ export interface ProfessorCache {
 
 export interface Rating {
   id: string
+  class?: string | null
   comment: string
   qualityRating: number
   difficultyRatingRounded: number
