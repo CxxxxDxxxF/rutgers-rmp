@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, useMemo, use } from 'react'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
 
@@ -165,11 +165,14 @@ function LoadingSpinner() {
   )
 }
 
+type ProfSortMode = 'rating' | 'difficulty' | 'name'
+
 function DepartmentContent({ slug }: { slug: string }) {
   const [data, setData] = useState<DepartmentDetail | null>(null)
   const [related, setRelated] = useState<RelatedDept[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [profSort, setProfSort] = useState<ProfSortMode>('rating')
 
   useEffect(() => {
     async function load() {
@@ -189,6 +192,19 @@ function DepartmentContent({ slug }: { slug: string }) {
     }
     load()
   }, [slug])
+
+  const sortedProfessors = useMemo(() => {
+    const list = data?.professors ?? []
+    if (profSort === 'difficulty') {
+      return [...list].sort((a, b) => (a.avg_difficulty ?? 99) - (b.avg_difficulty ?? 99))
+    }
+    if (profSort === 'name') {
+      return [...list].sort((a, b) =>
+        `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
+      )
+    }
+    return [...list].sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+  }, [data, profSort])
 
   if (loading) return <LoadingSpinner />
 
@@ -252,18 +268,37 @@ function DepartmentContent({ slug }: { slug: string }) {
               </div>
             </div>
 
-            {/* Top professors */}
+            {/* Professors */}
             <section>
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
-                Top Professors
-              </h2>
-              {professors.length === 0 ? (
+              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                  Professors
+                </h2>
+                {professors.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    {(['rating', 'difficulty', 'name'] as ProfSortMode[]).map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => setProfSort(mode)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                          profSort === mode
+                            ? 'bg-zinc-700 text-white'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {mode === 'rating' ? 'Best rated' : mode === 'difficulty' ? 'Easiest' : 'A–Z'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {sortedProfessors.length === 0 ? (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500 text-sm">
                   No professors found for this department yet.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {professors.map((prof) => (
+                  {sortedProfessors.map((prof) => (
                     <ProfessorCard key={prof.slug} prof={prof} />
                   ))}
                 </div>
@@ -271,19 +306,29 @@ function DepartmentContent({ slug }: { slug: string }) {
             </section>
 
             {/* Courses */}
-            {courses.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-                    Courses in this Department
-                  </h2>
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                  Courses in this Department
+                </h2>
+                <Link
+                  href={`/courses?dept=${department.slug}`}
+                  className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  Browse with sections →
+                </Link>
+              </div>
+              {courses.length === 0 ? (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-zinc-500 text-sm">
+                  <p>No courses indexed for this department yet.</p>
                   <Link
                     href={`/courses?dept=${department.slug}`}
-                    className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                    className="mt-2 inline-block text-xs text-[#CC0033] hover:underline"
                   >
-                    Browse with sections →
+                    Search the course browser →
                   </Link>
                 </div>
+              ) : (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
                   {courses.map((course, i) => (
                     <Link
@@ -305,8 +350,8 @@ function DepartmentContent({ slug }: { slug: string }) {
                     </Link>
                   ))}
                 </div>
-              </section>
-            )}
+              )}
+            </section>
           </div>
 
           {/* Sidebar — related departments */}

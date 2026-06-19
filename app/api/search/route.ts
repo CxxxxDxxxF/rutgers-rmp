@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       supabase
         ? supabase
             .from('professors')
-            .select('id, first_name, last_name, slug, professor_departments(is_primary, departments(name))')
+            .select('id, rmp_id, first_name, last_name, slug, professor_departments(is_primary, departments(name))')
             .is('cache_id', null)
             .or(`first_name.ilike.%${sanitizeFilterValue(q)}%,last_name.ilike.%${sanitizeFilterValue(q)}%`)
             .limit(8)
@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
     }
 
     for (const p of socRaw) {
+      if (p.rmp_id) seenRmpIds.add(p.rmp_id)
       const primaryDept = p.professor_departments?.find((pd: ProfDept) => pd.is_primary) ?? p.professor_departments?.[0]
       const deptName = (primaryDept?.departments as { name: string } | null)?.name ?? null
       results.push({
@@ -187,6 +188,7 @@ interface CourseRow {
 
 interface SocProf {
   id: string
+  rmp_id: string | null
   first_name: string
   last_name: string
   slug: string
