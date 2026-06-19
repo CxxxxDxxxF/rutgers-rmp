@@ -79,7 +79,9 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json(result)
+    return NextResponse.json(result, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
+    })
   } catch (err) {
     log.error('Departments API error:', err)
     return NextResponse.json({ error: 'Failed to load departments' }, { status: 500 })
