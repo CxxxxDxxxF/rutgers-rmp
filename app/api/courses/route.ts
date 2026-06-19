@@ -161,6 +161,8 @@ export async function GET(req: NextRequest) {
       hasMore: courses.length === PAGE_SIZE,
       offset,
       pageSize: PAGE_SIZE,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=60' },
     })
   } catch (err) {
     log.error('Courses error:', err)

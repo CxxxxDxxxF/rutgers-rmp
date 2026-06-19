@@ -102,7 +102,9 @@ export async function GET(req: NextRequest) {
     const foundIds = new Set(professors.map(p => p.rmp_id))
     const missing = ids.filter(id => !foundIds.has(id))
 
-    return NextResponse.json({ professors, missing })
+    return NextResponse.json({ professors, missing }, {
+      headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=120' },
+    })
   } catch (err) {
     log.error('Compare error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

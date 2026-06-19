@@ -147,6 +147,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       professors: results.slice(0, 8),
       courses,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30' },
     })
   } catch (err) {
     log.error('Search error:', err)

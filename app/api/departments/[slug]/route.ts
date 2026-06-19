@@ -148,7 +148,9 @@ export async function GET(
       school: d.school,
     }))
 
-    return NextResponse.json({ department, professors, courses, related })
+    return NextResponse.json({ department, professors, courses, related }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
+    })
   } catch (err) {
     log.error('Department detail API error:', err)
     return NextResponse.json({ error: 'Failed to load department' }, { status: 500 })
