@@ -86,6 +86,7 @@ export async function getProfessorById(id: string) {
             edges {
               node {
                 id
+                class
                 comment
                 qualityRating
                 difficultyRatingRounded
@@ -112,6 +113,7 @@ export async function getProfessorById(id: string) {
   function parseEdges(edges: { node: RMPRatingNode }[]) {
     return edges.map(e => ({
       id: e.node.id,
+      class: e.node.class ?? null,
       comment: e.node.comment,
       qualityRating: e.node.qualityRating,
       difficultyRatingRounded: e.node.difficultyRatingRounded,
@@ -156,6 +158,7 @@ export async function getProfessorById(id: string) {
 
 interface RMPRatingNode {
   id: string
+  class: string | null
   comment: string
   qualityRating: number
   difficultyRatingRounded: number

@@ -1061,6 +1061,7 @@ function ProfessorContent() {
   const [error, setError] = useState<string | null>(null)
   const [showAllReviews, setShowAllReviews] = useState(false)
   const [rmpSort, setRmpSort] = useState<'newest' | 'helpful' | 'quality_desc' | 'quality_asc'>('newest')
+  const [rmpCourseFilter, setRmpCourseFilter] = useState<string | null>(null)
   const [staleInfo, setStaleInfo] = useState<{ isStale: boolean; cacheAgeDays: number } | null>(null)
 
   const loadData = useCallback(async (force = false) => {
@@ -1123,7 +1124,14 @@ function ProfessorContent() {
   const ratings = (data.ratings ?? []) as Rating[]
   const tagCounts = data.tag_counts ?? null
 
-  const sortedRatings = [...ratings].sort((a, b) => {
+  const rmpCourses = [...new Set(ratings.map(r => r.class).filter((c): c is string => !!c?.trim()))]
+    .sort()
+
+  const filteredRatings = rmpCourseFilter
+    ? ratings.filter(r => r.class === rmpCourseFilter)
+    : ratings
+
+  const sortedRatings = [...filteredRatings].sort((a, b) => {
     if (rmpSort === 'helpful') return (b.thumbsUpTotal ?? 0) - (a.thumbsUpTotal ?? 0)
     if (rmpSort === 'quality_desc') return (b.qualityRating ?? 0) - (a.qualityRating ?? 0)
     if (rmpSort === 'quality_asc') return (a.qualityRating ?? 0) - (b.qualityRating ?? 0)
@@ -1295,7 +1303,9 @@ return (
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-zinc-300">
                 RateMyProfessors Reviews
-                <span className="ml-2 text-zinc-600 font-normal">({ratings.length})</span>
+                <span className="ml-2 text-zinc-600 font-normal">
+                  ({rmpCourseFilter ? `${sortedRatings.length} of ${ratings.length}` : ratings.length})
+                </span>
               </h3>
               {ratings.length > 1 && (
                 <div className="flex items-center gap-1">
@@ -1320,17 +1330,47 @@ return (
                 </div>
               )}
             </div>
+
+            {/* Course filter chips */}
+            {rmpCourses.length > 1 && (
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                <button
+                  onClick={() => { setRmpCourseFilter(null); setShowAllReviews(false) }}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-all font-mono ${
+                    rmpCourseFilter === null
+                      ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d] font-semibold'
+                      : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                  }`}
+                >
+                  All
+                </button>
+                {rmpCourses.map(course => (
+                  <button
+                    key={course}
+                    onClick={() => { setRmpCourseFilter(prev => prev === course ? null : course); setShowAllReviews(false) }}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-all font-mono ${
+                      rmpCourseFilter === course
+                        ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d] font-semibold'
+                        : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    {course}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="space-y-3">
               {visibleReviews.map((r) => (
                 <ReviewCard key={r.id} rating={r} />
               ))}
             </div>
-            {ratings.length > 8 && !showAllReviews && (
+            {sortedRatings.length > 8 && !showAllReviews && (
               <button
                 onClick={() => setShowAllReviews(true)}
                 className="mt-4 w-full py-3 rounded-xl border border-zinc-800 text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
               >
-                Show all {ratings.length} reviews
+                Show all {sortedRatings.length} reviews
               </button>
             )}
           </div>
