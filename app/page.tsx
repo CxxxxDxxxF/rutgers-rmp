@@ -227,9 +227,9 @@ export default async function HomePage() {
               <Link
                 key={course.id}
                 href={`/course/${course.slug}`}
-                className="group bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-green-800/60 hover:bg-zinc-800/50 transition-all"
+                className="group relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-green-800/60 hover:bg-zinc-800/50 transition-all"
               >
-                <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-green-500 rounded-l-xl" />
+                <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-green-500" />
                 <div className="relative pl-5 pr-4 pt-3 pb-3">
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <span

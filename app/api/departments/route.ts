@@ -25,7 +25,7 @@ export async function GET() {
         department_id,
         professors!inner(
           rmp_id,
-          professor_cache!inner(avg_rating)
+          professor_cache(avg_rating)
         )
       `)
 
