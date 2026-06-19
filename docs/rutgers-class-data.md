@@ -77,7 +77,7 @@ SUPABASE_SERVICE_ROLE_KEY
 | Course-department mapping for known subject codes | `course_departments` |
 
 Unknown subject codes still ingest courses and sections. They skip the
-department join until `SUBJECT_TO_DEPT_SLUG` is extended.
+department join until `lib/rutgers-subject-map.ts` is extended.
 
 ## Course Sniper Data Flow
 
