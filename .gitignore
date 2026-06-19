@@ -42,6 +42,10 @@ yarn-error.log*
 # local AI tool config (machine-specific, not project code)
 .claude/
 
+# local deployment tool state
+.vercel/
+.railway-config-pull-*/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
