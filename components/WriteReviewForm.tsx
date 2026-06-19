@@ -124,7 +124,8 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
         const seen = new Set<string>()
         const courses: Array<{ course_number: string; name: string }> = []
         for (const row of data) {
-          const c = row.courses as { course_number: string; name: string } | null
+          const raw = row.courses as { course_number: string; name: string } | { course_number: string; name: string }[] | null
+          const c = Array.isArray(raw) ? (raw[0] ?? null) : raw
           if (c && !seen.has(c.course_number)) {
             seen.add(c.course_number)
             courses.push(c)

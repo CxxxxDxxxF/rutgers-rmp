@@ -14,6 +14,9 @@ export async function GET(req: NextRequest) {
   const credits = req.nextUrl.searchParams.get('credits')?.trim()
   const level = req.nextUrl.searchParams.get('level')?.trim()
   const semester = req.nextUrl.searchParams.get('semester')?.trim()
+  const offsetParam = req.nextUrl.searchParams.get('offset')?.trim()
+  const PAGE_SIZE = 160
+  const offset = Math.max(0, parseInt(offsetParam ?? '0', 10) || 0)
 
   if (!supabase) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
@@ -69,7 +72,7 @@ export async function GET(req: NextRequest) {
     if (level) {
       query = query.eq('academic_level', level)
     }
-    query = query.limit(160)
+    query = query.range(offset, offset + PAGE_SIZE - 1)
 
     const { data, error } = await query
 
@@ -134,7 +137,12 @@ export async function GET(req: NextRequest) {
       ? courses.filter(course => course.semester != null)
       : courses
 
-    return NextResponse.json(visibleCourses)
+    return NextResponse.json({
+      courses: visibleCourses,
+      hasMore: courses.length === PAGE_SIZE,
+      offset,
+      pageSize: PAGE_SIZE,
+    })
   } catch (err) {
     log.error('Courses error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
