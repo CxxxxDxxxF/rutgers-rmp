@@ -1,18 +1,36 @@
 const RMP_GRAPHQL_URL = 'https://www.ratemyprofessors.com/graphql'
 const RMP_AUTH = 'Basic dGVzdDp0ZXN0'
 const RUTGERS_SCHOOL_ID = 'U2Nob29sLTgyNQ=='
+const RMP_TIMEOUT_MS = 5000
 
 async function rmpFetch(query: string, variables: Record<string, unknown>) {
-  const res = await fetch(RMP_GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: RMP_AUTH,
-    },
-    body: JSON.stringify({ query, variables }),
-  })
-  if (!res.ok) throw new Error(`RMP API error: ${res.status}`)
-  return res.json()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), RMP_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(RMP_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: RMP_AUTH,
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`RMP API error: ${res.status}`)
+    const data = await res.json()
+    const errors = Array.isArray(data?.errors) ? data.errors : []
+    if (errors.length > 0) {
+      const message = typeof errors[0]?.message === 'string' ? errors[0].message : 'unknown GraphQL error'
+      throw new Error(`RMP API error: ${message}`)
+    }
+    return data
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('RMP API timeout')
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export async function searchProfessors(name: string, schoolId = RUTGERS_SCHOOL_ID) {

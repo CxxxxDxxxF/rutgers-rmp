@@ -10,6 +10,7 @@ const MAX_BACKOFF_MS = parseInterval(process.env.SNIPER_MAX_BACKOFF_MS, 15000, 1
 const DEFAULT_YEAR = parseInt(process.env.SNIPER_DEFAULT_YEAR ?? '2025', 10)
 const DEFAULT_TERM = process.env.SNIPER_DEFAULT_TERM ?? '9'
 const DEFAULT_CAMPUS = process.env.SNIPER_DEFAULT_CAMPUS ?? 'NB'
+const SOC_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_SOC_FETCH_TIMEOUT_MS, 10000, 1000)
 const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.RAILWAY_PUBLIC_DOMAIN
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const NOTIFY_EMAIL_FROM = process.env.NOTIFY_EMAIL_FROM
@@ -18,9 +19,27 @@ const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+  console.error(JSON.stringify({
+    event: 'sniper_config_error',
+    message: 'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY',
+  }))
   process.exit(1)
 }
+
+process.on('unhandledRejection', error => {
+  console.error(JSON.stringify({
+    event: 'sniper_unhandled_rejection',
+    message: errorMessage(error),
+  }))
+})
+
+process.on('uncaughtException', error => {
+  console.error(JSON.stringify({
+    event: 'sniper_uncaught_exception',
+    message: errorMessage(error),
+  }))
+  process.exitCode = 1
+})
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -32,7 +51,10 @@ let loopCount = 0
 let backoffMs = 0
 
 main().catch(error => {
-  console.error('sniper fatal error', error)
+  console.error(JSON.stringify({
+    event: 'sniper_fatal_error',
+    message: errorMessage(error),
+  }))
   process.exit(1)
 })
 
@@ -42,6 +64,7 @@ async function main() {
     poll_interval_ms: POLL_INTERVAL_MS,
     watchlist_refresh_ms: WATCHLIST_REFRESH_MS,
     max_backoff_ms: MAX_BACKOFF_MS,
+    soc_fetch_timeout_ms: SOC_FETCH_TIMEOUT_MS,
     default_year: DEFAULT_YEAR,
     default_term: DEFAULT_TERM,
     default_campus: DEFAULT_CAMPUS,
@@ -185,7 +208,7 @@ async function pollOnce(activeWatches) {
   const snapshots = new Map()
   let sectionsMatched = 0
 
-  await Promise.all(
+  const sourceResults = await Promise.allSettled(
     [...sourceGroups].map(async ([key, groupedWatches]) => {
       const source = groupedWatches[0].source
       const watchedIndexes = new Set(groupedWatches.map(watch => watch.indexNumber))
@@ -195,6 +218,17 @@ async function pollOnce(activeWatches) {
       snapshots.set(key, sectionsByIndex)
     })
   )
+
+  const sourceFailures = sourceResults.filter(result => result.status === 'rejected')
+  for (const failure of sourceFailures) {
+    console.error(JSON.stringify({
+      event: 'sniper_source_fetch_error',
+      message: errorMessage(failure.reason),
+    }))
+  }
+  if (sourceFailures.length === sourceResults.length) {
+    throw new Error(`All ${sourceFailures.length} source fetches failed`)
+  }
 
   const fetchMs = Date.now() - startedFetch
   let statusChanges = 0
@@ -250,12 +284,12 @@ async function fetchSocCourses(source) {
   url.searchParams.set('campus', source.campus)
 
   const started = Date.now()
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       'Accept-Encoding': 'gzip',
       'User-Agent': 'RU-Rate-sniper-worker/1.0',
     },
-  })
+  }, SOC_FETCH_TIMEOUT_MS)
 
   if (!response.ok) {
     const err = new Error(`Rutgers SOC ${sourceKey(source)} failed: HTTP ${response.status}`)
@@ -263,7 +297,12 @@ async function fetchSocCourses(source) {
     throw err
   }
 
-  const courses = await response.json()
+  let courses
+  try {
+    courses = await response.json()
+  } catch {
+    throw new Error(`Rutgers SOC ${sourceKey(source)} returned invalid JSON`)
+  }
   console.log(JSON.stringify({
     event: 'soc_fetch',
     source: sourceKey(source),
@@ -554,6 +593,24 @@ function groupBy(items, keyFn) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function fetchWithTimeout(url, init, timeoutMs) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Request timed out after ${timeoutMs}ms`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 function parseInterval(value, fallback, minimum) {

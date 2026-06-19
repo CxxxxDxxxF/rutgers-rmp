@@ -55,6 +55,8 @@ export default function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchRequestRef = useRef(0)
+  const searchAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -67,29 +69,50 @@ export default function SearchBar() {
   }, [])
 
   const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setItems([]); setOpen(false); return }
+    const trimmed = q.trim()
+    const requestId = searchRequestRef.current + 1
+    searchRequestRef.current = requestId
+    if (trimmed.length < 1) {
+      searchAbortRef.current?.abort()
+      setItems([])
+      setOpen(false)
+      setSelected(-1)
+      setSearchError(null)
+      return
+    }
+    searchAbortRef.current?.abort()
+    const controller = new AbortController()
+    searchAbortRef.current = controller
     setLoading(true)
     setSearchError(null)
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, {
+        signal: controller.signal,
+      })
       if (!res.ok) throw new Error('Search failed')
       const data = await res.json()
+      if (requestId !== searchRequestRef.current) return
       const professors: ProfessorResult[] = Array.isArray(data?.professors) ? data.professors : []
       const courses: CourseResult[] = Array.isArray(data?.courses) ? data.courses : []
       // If query looks like a course number (digits, colons, or starts with digits),
       // put courses first so they're immediately visible
-      const looksCourseNumber = /^\d|^\d{2}:\d|:\d{3}/.test(q.trim())
+      const looksCourseNumber = /^\d|^\d{2}:\d|:\d{3}/.test(trimmed)
       const courseItems = courses.map(c => ({ kind: 'course' as const, course: c }))
       const profItems = professors.map(p => ({ kind: 'professor' as const, professor: p }))
       setItems(looksCourseNumber ? [...courseItems, ...profItems] : [...profItems, ...courseItems])
       setOpen(true)
       setSelected(-1)
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (requestId !== searchRequestRef.current) return
       setItems([])
       setOpen(false)
       setSearchError('Search is unavailable right now. Try again in a moment.')
     } finally {
-      setLoading(false)
+      if (requestId === searchRequestRef.current) {
+        setLoading(false)
+        if (searchAbortRef.current === controller) searchAbortRef.current = null
+      }
     }
   }, [])
 
@@ -98,6 +121,10 @@ export default function SearchBar() {
     debounceRef.current = setTimeout(() => search(query), 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query, search])
+
+  useEffect(() => {
+    return () => searchAbortRef.current?.abort()
+  }, [])
 
   function handleSelect(item: SearchItem) {
     setOpen(false)
@@ -238,7 +265,7 @@ export default function SearchBar() {
         </div>
       )}
 
-      {open && query.length >= 2 && items.length === 0 && !loading && (
+      {open && query.trim().length >= 1 && items.length === 0 && !loading && (
         <div className="absolute top-full mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-6 text-center text-zinc-500 shadow-2xl z-50">
           No professors or courses found for &ldquo;{query}&rdquo;
         </div>

@@ -5,7 +5,9 @@ import { log } from '@/lib/logger'
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim()
-  if (!q || q.length < 2) return NextResponse.json([])
+  if (!q) return NextResponse.json({ professors: [], courses: [] })
+  const sanitized = sanitizeFilterValue(q)
+  if (!sanitized) return NextResponse.json({ professors: [], courses: [] })
 
   try {
     const [cachedResult, socResult, rmpProfessors, courseResult] = await Promise.allSettled([
@@ -13,7 +15,7 @@ export async function GET(req: NextRequest) {
         ? supabase
             .from('professor_cache')
             .select('rmp_id, slug, first_name, last_name, department, school_name, avg_rating, avg_difficulty, would_take_again, num_ratings, ai_analysis')
-            .or(`first_name.ilike.%${sanitizeFilterValue(q)}%,last_name.ilike.%${sanitizeFilterValue(q)}%`)
+            .or(`first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%`)
             .order('search_count', { ascending: false })
             .limit(5)
         : Promise.resolve({ data: [] }),
@@ -22,7 +24,7 @@ export async function GET(req: NextRequest) {
             .from('professors')
             .select('id, first_name, last_name, slug, professor_departments(is_primary, departments(name))')
             .is('cache_id', null)
-            .or(`first_name.ilike.%${sanitizeFilterValue(q)}%,last_name.ilike.%${sanitizeFilterValue(q)}%`)
+            .or(`first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%`)
             .limit(8)
         : Promise.resolve({ data: [] }),
       searchProfessors(q),

@@ -131,7 +131,7 @@ function CoursesContent() {
 
   // Fetch course suggestions as user types
   const fetchSuggestions = useCallback(async (q: string) => {
-    if (q.trim().length < 2) {
+    if (q.trim().length < 1) {
       setSuggestions([])
       setDropdownOpen(false)
       return

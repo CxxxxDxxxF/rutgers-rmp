@@ -21,7 +21,7 @@ The worker service uses:
 
 | File | Purpose |
 | --- | --- |
-| `railway.json` | Worker service Railway config |
+| `railway.worker.json` | Worker service Railway config |
 | `Dockerfile.worker` | Production container for the worker |
 | `worker/sniper-worker.mjs` | Polling, diffing, Supabase updates, notifications |
 | `package.json` | `npm run worker:sniper` start script |
@@ -32,8 +32,8 @@ Start command:
 npm run worker:sniper
 ```
 
-`railway.json` intentionally points at `Dockerfile.worker`. The web service is
-deployed separately with `Dockerfile.web`.
+`railway.worker.json` intentionally points at `Dockerfile.worker`. The root
+`railway.json` is reserved for the web service and points at `Dockerfile.web`.
 
 ## Required Environment Variables
 
@@ -144,7 +144,12 @@ Rutgers exposes it through the endpoint.
 Deploy the worker service to Railway service `rurate-sniper-worker`:
 
 ```bash
-railway up --service rurate-sniper-worker --environment production --detach -m "Deploy sniper worker"
+tmp_dir="$(mktemp -d)"
+cp package.json package-lock.json Dockerfile.worker "$tmp_dir/"
+cp railway.worker.json "$tmp_dir/railway.json"
+cp -R worker "$tmp_dir/worker"
+railway up "$tmp_dir" --path-as-root --service rurate-sniper-worker --environment production --detach -m "Deploy sniper worker"
+rm -rf "$tmp_dir"
 ```
 
 Detached deploys only confirm the build was queued. Verify the newest

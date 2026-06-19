@@ -19,11 +19,12 @@ the Railway names above when operating production.
 
 | Service | Runtime | Config |
 | --- | --- | --- |
-| `rurate-web` | Next.js standalone server | `Dockerfile.web` |
-| `rurate-sniper-worker` | `npm run worker:sniper` | `railway.json` + `Dockerfile.worker` |
+| `rurate-web` | Next.js standalone server | `railway.json` + `Dockerfile.web` |
+| `rurate-sniper-worker` | `npm run worker:sniper` | `railway.worker.json` + `Dockerfile.worker` |
 
-The checked-in `railway.json` is worker-specific on purpose. When deploying the
-web service from the local checkout, use `Dockerfile.web` for that service.
+The checked-in root `railway.json` is web-specific on purpose. The worker has a
+separate `railway.worker.json` because Railway CLI reads `railway.json` from the
+upload root.
 
 ## Required Variables
 
@@ -72,9 +73,8 @@ Do not print or paste secret values into logs, issues, docs, or chat.
 
 The web service should be deployed to `rurate-web` with `Dockerfile.web`.
 
-Do not run a plain `railway up --service rurate-web` from the repo root without
-overriding the config. The checked-in `railway.json` is worker-specific and
-points to `Dockerfile.worker`.
+The root `railway.json` points to `Dockerfile.web`, so a repo-root web deploy is
+safe when the service and environment are explicit.
 
 If deploying through Railway dashboard, set:
 
@@ -85,9 +85,7 @@ If deploying through Railway dashboard, set:
 | Healthcheck path | `/` |
 | Restart policy | On failure |
 
-If deploying from the CLI, use a temporary deploy snapshot whose
-`railway.json` points to `Dockerfile.web`, or update the service config in the
-Railway dashboard before deploying. The deployed web manifest should include:
+The deployed web manifest should include:
 
 ```json
 {
@@ -120,10 +118,20 @@ HTTP status: 200
 ## Deploy Worker Service
 
 The worker service should be deployed to `rurate-sniper-worker` with the
-checked-in `railway.json`.
+worker-specific `railway.worker.json`.
+
+Do not run a plain repo-root `railway up --service rurate-sniper-worker`. The
+CLI will read the root web `railway.json` and can deploy the wrong Dockerfile.
+Use a temporary deploy snapshot that copies `railway.worker.json` to
+`railway.json`:
 
 ```bash
-railway up --service rurate-sniper-worker --environment production --detach -m "Deploy sniper worker"
+tmp_dir="$(mktemp -d)"
+cp package.json package-lock.json Dockerfile.worker "$tmp_dir/"
+cp railway.worker.json "$tmp_dir/railway.json"
+cp -R worker "$tmp_dir/worker"
+railway up "$tmp_dir" --path-as-root --service rurate-sniper-worker --environment production --detach -m "Deploy sniper worker"
+rm -rf "$tmp_dir"
 ```
 
 Detached deploys are only queued. Verify the terminal status:
