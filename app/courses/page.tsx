@@ -12,6 +12,7 @@ interface Department {
   name: string
   slug: string
   school?: string
+  course_count?: number
 }
 
 interface Semester {
@@ -470,14 +471,19 @@ function CoursesContent() {
                             setDeptInputValue(d.code ? `${d.code} — ${d.name}` : d.name)
                             setDeptOpen(false)
                           }}
-                          className={`w-full text-left px-4 py-2 text-sm border-b border-zinc-800/40 last:border-0 transition-colors ${
+                          className={`w-full text-left px-4 py-2 text-sm border-b border-zinc-800/40 last:border-0 transition-colors flex items-center justify-between gap-2 ${
                             selectedDept === d.slug
                               ? 'bg-[#CC0033]/15 text-[#ff4d6d]'
                               : 'text-zinc-300 hover:bg-zinc-800'
                           }`}
                         >
-                          {d.code && <span className="text-zinc-500 text-xs mr-1.5">{d.code}</span>}
-                          {d.name}
+                          <span className="min-w-0 truncate">
+                            {d.code && <span className="text-zinc-500 text-xs mr-1.5">{d.code}</span>}
+                            {d.name}
+                          </span>
+                          {(d.course_count ?? 0) > 0 && (
+                            <span className="shrink-0 text-[10px] text-zinc-600">{d.course_count}</span>
+                          )}
                         </button>
                       ))}
                     </div>
