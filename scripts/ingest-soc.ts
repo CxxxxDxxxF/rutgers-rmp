@@ -12,7 +12,7 @@
  *   npx tsx scripts/ingest-soc.ts --dry-run --campus all
  *
  * Options:
- *   --year        Academic year (default: 2025)
+ *   --year        Academic year (default: 2026)
  *   --term        Term code: 1=Spring, 7=Summer, 9=Fall (default: 9)
  *   --campus      Campus code, comma list, or all=NB,NK,CM (default: NB)
  *   --subjects    Comma-separated subject codes (default: all NB)
@@ -47,7 +47,7 @@ for (let i = 2; i < process.argv.length; i++) {
   }
 }
 
-const YEAR = parseInt((args['year'] as string) ?? '2025', 10)
+const YEAR = parseInt((args['year'] as string) ?? '2026', 10)
 const TERM = (args['term'] as string) ?? '9'
 const CAMPUS_ARG = ((args['campus'] as string) ?? 'NB').trim()
 const SUBJECTS_FILTER = args['subjects'] ? (args['subjects'] as string).split(',').map(s => s.trim()) : null

@@ -27,16 +27,18 @@ Run a single test file by compiling it manually with `tsc -p tsconfig.test.json`
 ### Data ingest
 
 ```bash
-npm run ingest -- --dry-run --campus all --limit 3          # no-write coverage check
-npm run ingest -- --dry-run --year 2025 --term 9 --campus NB --subjects 198 --limit 25
-npm run ingest -- --year 2025 --term 9 --campus all         # full write (review dry-run first)
+npm run ingest -- --dry-run --campus all --limit 3                      # no-write coverage check
+npm run ingest -- --dry-run --year 2026 --term 9 --campus NB --subjects 198 --limit 25
+npm run ingest -- --year 2026 --term 9 --campus all                     # Fall 2026 full write
+npm run ingest -- --year 2026 --term 7 --campus all                     # Summer 2026 full write
+npm run ingest -- --year 2026 --term 1 --campus all                     # Spring 2026 full write
 ```
 
 ### Database migrations
 
 ```bash
 supabase db push                                                    # preferred
-npm run migrate -- --file supabase/migrations/014_pro_interest.sql # fallback (needs SUPABASE_DB_PASSWORD or DATABASE_URL)
+npm run migrate -- --file supabase/migrations/019_expand_subject_map_coverage.sql # fallback (needs SUPABASE_DB_PASSWORD or DATABASE_URL)
 ```
 
 ## Architecture
