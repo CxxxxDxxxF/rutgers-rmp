@@ -41,8 +41,8 @@ names. Production should use the RU Rate names above.
 | Migration helper | `scripts/apply-migration.ts` |
 | Sniper worker | `worker/sniper-worker.mjs` |
 | Database migrations | `supabase/migrations/` |
-| Web container | `Dockerfile.web` |
-| Worker container | `Dockerfile.worker`, `railway.json` |
+| Web container | `Dockerfile.web`, `railway.json` |
+| Worker container | `Dockerfile.worker`, `railway.worker.json` |
 
 ## Working Rules
 
@@ -144,8 +144,13 @@ The fallback helper needs either `SUPABASE_DB_PASSWORD` or `DATABASE_URL`.
 
 ## Railway Deployment
 
-The checked-in `railway.json` is for the worker service. Do not use a plain
-repo-root deploy for the web service without overriding the web config.
+The checked-in root `railway.json` is for the web service. Do not use a plain
+repo-root deploy for the worker service unless the deploy snapshot maps
+`railway.worker.json` to `railway.json`.
+
+Production web can auto-deploy from GitHub `main`. Production worker should stay
+disconnected from GitHub auto-deploys and be deployed with a worker-specific
+snapshot.
 
 Web service:
 
@@ -157,7 +162,7 @@ Worker service:
 
 - Service: `rurate-sniper-worker`
 - Dockerfile: `Dockerfile.worker`
-- Config: checked-in `railway.json`
+- Config: `railway.worker.json`
 - Start command: `npm run worker:sniper`
 
 After any detached Railway deploy, poll the newest deployment until it reaches

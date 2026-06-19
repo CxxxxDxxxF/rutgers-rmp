@@ -8,11 +8,9 @@ import EmptyState from '@/components/EmptyState'
 import { CourseGridSkeleton } from '@/components/LoadingSkeleton'
 
 interface Department {
-  code: string | null
+  code: string
   name: string
   slug: string
-  school?: string | null
-  professor_count?: number
 }
 
 interface Semester {
@@ -60,16 +58,8 @@ function CoursesContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadKey, setLoadKey] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadMoreOffset, setLoadMoreOffset] = useState(0)
-  const [loadingMore, setLoadingMore] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [serverQuery, setServerQuery] = useState(searchParams.get('q') ?? '')
-
-  // Department searchable combobox state
-  const [deptInputValue, setDeptInputValue] = useState('')
-  const [deptOpen, setDeptOpen] = useState(false)
-  const deptComboRef = useRef<HTMLDivElement>(null)
 
   // Autocomplete dropdown
   const [suggestions, setSuggestions] = useState<CourseSuggestion[]>([])
@@ -128,7 +118,7 @@ function CoursesContent() {
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
   }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
 
-  // Close search dropdown on click outside
+  // Close dropdown on click outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -139,30 +129,9 @@ function CoursesContent() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Close dept combobox on click outside
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (deptComboRef.current && !deptComboRef.current.contains(e.target as Node)) {
-        setDeptOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  // Keep dept input text in sync with selectedDept
-  useEffect(() => {
-    if (!selectedDept) {
-      setDeptInputValue('')
-      return
-    }
-    const match = departments.find(d => d.slug === selectedDept)
-    if (match) setDeptInputValue(match.code ? `${match.code} — ${match.name}` : match.name)
-  }, [selectedDept, departments])
-
   // Fetch course suggestions as user types
   const fetchSuggestions = useCallback(async (q: string) => {
-    if (q.trim().length < 2) {
+    if (q.trim().length < 1) {
       setSuggestions([])
       setDropdownOpen(false)
       return
@@ -208,35 +177,11 @@ function CoursesContent() {
     }
   }
 
-  // Filtered dept list for combobox dropdown
-  const filteredDepts = useMemo(() => {
-    const q = deptInputValue.toLowerCase().trim()
-    if (!q || selectedDept) return departments
-    return departments.filter(
-      d =>
-        d.name.toLowerCase().includes(q) ||
-        (d.code ?? '').toLowerCase().includes(q)
-    )
-  }, [departments, deptInputValue, selectedDept])
-
-  const groupedDepts = useMemo(() => {
-    const map = new Map<string, Department[]>()
-    for (const d of filteredDepts) {
-      const school = d.school ?? 'Other'
-      const list = map.get(school) ?? []
-      list.push(d)
-      map.set(school, list)
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-  }, [filteredDepts])
-
   // Fetch courses whenever server-side filters or loadKey change
   useEffect(() => {
     async function loadCourses() {
       setLoading(true)
       setError(null)
-      setHasMore(false)
-      setLoadMoreOffset(0)
       try {
         const params = new URLSearchParams()
         if (selectedDept) params.set('dept', selectedDept)
@@ -244,15 +189,11 @@ function CoursesContent() {
         if (serverQuery.length >= 2) params.set('q', serverQuery)
         if (credits) params.set('credits', credits)
         if (level) params.set('level', level)
-        if (onlyWithOpen) params.set('openonly', '1')
         const qs = params.toString()
         const res = await fetch(qs ? `/api/courses?${qs}` : '/api/courses')
         if (!res.ok) throw new Error('Failed to load courses')
         const data = await res.json()
-        const list = Array.isArray(data) ? data : (data?.courses ?? [])
-        setCourses(list)
-        setHasMore(data?.hasMore ?? false)
-        setLoadMoreOffset(data?.pageSize ?? 160)
+        setCourses(Array.isArray(data) ? data : [])
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -260,31 +201,7 @@ function CoursesContent() {
       }
     }
     loadCourses()
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithOpen, loadKey])
-
-  async function handleLoadMore() {
-    if (loadingMore) return
-    setLoadingMore(true)
-    try {
-      const params = new URLSearchParams()
-      if (selectedDept) params.set('dept', selectedDept)
-      if (selectedSemester) params.set('semester', selectedSemester)
-      if (serverQuery.length >= 2) params.set('q', serverQuery)
-      if (credits) params.set('credits', credits)
-      if (level) params.set('level', level)
-      if (onlyWithOpen) params.set('openonly', '1')
-      params.set('offset', String(loadMoreOffset))
-      const res = await fetch(`/api/courses?${params.toString()}`)
-      if (!res.ok) return
-      const data = await res.json()
-      const list = Array.isArray(data) ? data : (data?.courses ?? [])
-      setCourses(prev => [...prev, ...list])
-      setHasMore(data?.hasMore ?? false)
-      setLoadMoreOffset(prev => prev + (data?.pageSize ?? 160))
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
 
   // Instant client-side narrowing while typing + section filter + sort
   const filtered = useMemo(() => {
@@ -402,7 +319,7 @@ function CoursesContent() {
               )}
             </div>
 
-            {/* Semester dropdown */}
+            {/* Department dropdown */}
             <select
               value={selectedSemester}
               onChange={e => setSelectedSemester(e.target.value)}
@@ -416,79 +333,18 @@ function CoursesContent() {
               ))}
             </select>
 
-            {/* Department searchable combobox */}
-            <div ref={deptComboRef} className="relative sm:min-w-[220px]">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={deptInputValue}
-                  onChange={e => {
-                    setDeptInputValue(e.target.value)
-                    if (selectedDept) setSelectedDept('')
-                    setDeptOpen(true)
-                  }}
-                  onFocus={() => setDeptOpen(true)}
-                  placeholder="All Departments"
-                  className="w-full px-4 py-2.5 pr-8 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
-                />
-                {selectedDept ? (
-                  <button
-                    onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    aria-label="Clear department"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                ) : (
-                  <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                )}
-              </div>
-              {deptOpen && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto">
-                  <button
-                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${!selectedDept ? 'text-white bg-zinc-800' : 'text-zinc-400 hover:bg-zinc-800/60'}`}
-                    onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
-                  >
-                    All Departments
-                  </button>
-                  {groupedDepts.map(([school, depts]) => (
-                    <div key={school}>
-                      <div className="px-4 pt-2 pb-1 text-[10px] font-black uppercase tracking-widest text-zinc-600 sticky top-0 bg-zinc-900">
-                        {school}
-                      </div>
-                      {depts.map(d => (
-                        <button
-                          key={d.slug}
-                          className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between gap-2 transition-colors ${
-                            selectedDept === d.slug ? 'bg-zinc-800 text-white' : 'text-zinc-300 hover:bg-zinc-800/60'
-                          }`}
-                          onClick={() => {
-                            setSelectedDept(d.slug)
-                            setDeptInputValue(d.code ? `${d.code} — ${d.name}` : d.name)
-                            setDeptOpen(false)
-                          }}
-                        >
-                          <span className="truncate">
-                            {d.code && <span className="font-mono text-xs text-zinc-500 mr-1.5">{d.code}</span>}
-                            {d.name}
-                          </span>
-                          {(d.professor_count ?? 0) > 0 && (
-                            <span className="shrink-0 text-[10px] text-zinc-600">{d.professor_count} prof{(d.professor_count ?? 0) !== 1 ? 's' : ''}</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                  {groupedDepts.length === 0 && (
-                    <div className="px-4 py-3 text-sm text-zinc-600">No departments found</div>
-                  )}
-                </div>
-              )}
-            </div>
+            <select
+              value={selectedDept}
+              onChange={e => setSelectedDept(e.target.value)}
+              className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] sm:min-w-[200px]"
+            >
+              <option value="">All Departments</option>
+              {departments.map(d => (
+                <option key={d.slug} value={d.slug}>
+                  {d.code} — {d.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -552,7 +408,7 @@ function CoursesContent() {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setDeptInputValue(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -606,7 +462,7 @@ function CoursesContent() {
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setSelectedDept(''); setDeptInputValue(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
@@ -623,22 +479,6 @@ function CoursesContent() {
             {filtered.map(course => (
               <CourseCard key={course.id} course={course} />
             ))}
-          </div>
-        )}
-
-        {/* Load more */}
-        {!loading && !error && hasMore && (
-          <div className="mt-6 flex flex-col items-center gap-2">
-            {filtered.length === 0 && (
-              <p className="text-xs text-zinc-600">All courses on this page were filtered out — there may be more.</p>
-            )}
-            <button
-              onClick={handleLoadMore}
-              disabled={loadingMore}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors disabled:opacity-50"
-            >
-              {loadingMore ? 'Loading…' : 'Load more courses'}
-            </button>
           </div>
         )}
       </main>

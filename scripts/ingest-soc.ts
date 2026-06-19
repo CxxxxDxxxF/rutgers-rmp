@@ -12,7 +12,7 @@
  *   npx tsx scripts/ingest-soc.ts --dry-run --campus all
  *
  * Options:
- *   --year        Academic year (default: 2025)
+ *   --year        Academic year (default: 2026)
  *   --term        Term code: 1=Spring, 7=Summer, 9=Fall (default: 9)
  *   --campus      Campus code, comma list, or all=NB,NK,CM (default: NB)
  *   --subjects    Comma-separated subject codes (default: all NB)
@@ -23,6 +23,7 @@
 import { createClient } from '@supabase/supabase-js'
 import * as fs from 'fs'
 import * as path from 'path'
+import { RUTGERS_SUBJECT_TO_DEPT_SLUG } from '../lib/rutgers-subject-map'
 
 // ── CLI args ──────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ for (let i = 2; i < process.argv.length; i++) {
   }
 }
 
-const YEAR = parseInt((args['year'] as string) ?? '2025', 10)
+const YEAR = parseInt((args['year'] as string) ?? '2026', 10)
 const TERM = (args['term'] as string) ?? '9'
 const CAMPUS_ARG = ((args['campus'] as string) ?? 'NB').trim()
 const SUBJECTS_FILTER = args['subjects'] ? (args['subjects'] as string).split(',').map(s => s.trim()) : null
@@ -91,54 +92,6 @@ function parseCampuses(value: string): string[] {
 
 function buildSemesterCode(year: number, term: string): string {
   return `${TERM_MAP[term] ?? term}${year}`
-}
-
-// ── SOC subject → department mapping ──────────────────────────────────────
-// Maps SOC numeric subject codes to existing department slugs.
-// Unknown subjects => no department link created.
-
-const SUBJECT_TO_DEPT_SLUG: Record<string, string> = {
-  '198': 'computer-science',
-  '640': 'mathematics',
-  '750': 'physics',
-  '160': 'chemistry',
-  '119': 'biological-sciences',
-  '447': 'genetics',
-  '830': 'psychology',
-  '220': 'economics',
-  '790': 'political-science',
-  '510': 'history',
-  '350': 'english',
-  '920': 'sociology',
-  '730': 'philosophy',
-  '615': 'linguistics',
-  '960': 'statistics',
-  '082': 'art-history',
-  '700': 'music',
-  '965': 'theater',
-  '192': 'communication',
-  '988': 'women-gender-studies',
-  '014': 'africana-studies',
-  '595': 'latino-studies',
-  '567': 'journalism-media-studies',
-  '332': 'electrical-engineering',
-  '650': 'mechanical-engineering',
-  '180': 'civil-engineering',
-  '155': 'chemical-engineering',
-  '125': 'biomedical-engineering',
-  '540': 'industrial-engineering',
-  '390': 'finance',
-  '010': 'accounting',
-  '630': 'marketing',
-  '620': 'management',
-  '799': 'supply-chain',
-  '400': 'food-science',
-  '709': 'nutritional-sciences',
-  '202': 'criminal-justice',
-  '910': 'social-work',
-  '300': 'education',
-  '833': 'public-policy',
-  '832': 'public-health',
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────
@@ -411,7 +364,7 @@ async function main() {
         console.log(`    CREATED course`)
 
         // Link course to department if we have a mapping
-        const deptSlug = SUBJECT_TO_DEPT_SLUG[subject]
+        const deptSlug = RUTGERS_SUBJECT_TO_DEPT_SLUG[subject]
         if (deptSlug && deptMap[deptSlug]) {
           const deptId = deptMap[deptSlug]
           const { error: linkErr } = await supabase
@@ -531,7 +484,7 @@ async function main() {
               stats.professors_created++
 
               // Link professor to department
-              const deptSlug = SUBJECT_TO_DEPT_SLUG[subject]
+              const deptSlug = RUTGERS_SUBJECT_TO_DEPT_SLUG[subject]
               if (deptSlug && deptMap[deptSlug]) {
                 const deptId = deptMap[deptSlug]
                 const { error: linkErr } = await supabase

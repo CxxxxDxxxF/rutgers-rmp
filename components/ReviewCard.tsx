@@ -133,6 +133,9 @@ export default function ReviewCard({ rating }: { rating: Rating }) {
           <span className="px-2 py-0.5 rounded-full text-xs font-semibold border text-zinc-500 border-zinc-700/50 bg-zinc-800/50">
             RateMyProfessors
           </span>
+          {rating.class && (
+            <span className="font-mono text-zinc-400">{rating.class}</span>
+          )}
           {rating.attendanceMandatory && rating.attendanceMandatory !== 'N/A' && (
             <span className="text-zinc-500">Attendance: {rating.attendanceMandatory}</span>
           )}

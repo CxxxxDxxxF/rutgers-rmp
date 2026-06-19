@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, use } from 'react'
+import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
 
@@ -38,11 +38,27 @@ interface CourseRow {
   slug: string
 }
 
+interface CourseProfEntry {
+  slug: string
+  first_name: string
+  last_name: string
+  rmp_id: string | null
+  avg_rating: number | null
+  verdict: string | null
+}
+
+interface CourseSectionEntry {
+  total: number
+  open: number
+  professors: CourseProfEntry[]
+}
+
 interface DepartmentDetail {
   department: Department
   professors: ProfessorRow[]
   courses: CourseRow[]
   related: RelatedDept[]
+  courseSectionMap: Record<string, CourseSectionEntry>
 }
 
 interface RelatedDept {
@@ -62,33 +78,16 @@ function ratingColor(rating: number | null): string {
 type Verdict = 'take' | 'avoid' | 'depends'
 
 const verdictConfig: Record<Verdict, { bg: string; border: string; text: string; label: string }> = {
-  take: {
-    bg: 'bg-green-950',
-    border: 'border-green-800',
-    text: 'text-green-400',
-    label: 'TAKE',
-  },
-  avoid: {
-    bg: 'bg-red-950',
-    border: 'border-red-900',
-    text: 'text-red-400',
-    label: 'AVOID',
-  },
-  depends: {
-    bg: 'bg-amber-950',
-    border: 'border-amber-800',
-    text: 'text-amber-400',
-    label: 'DEPENDS',
-  },
+  take: { bg: 'bg-green-950', border: 'border-green-800', text: 'text-green-400', label: 'TAKE' },
+  avoid: { bg: 'bg-red-950', border: 'border-red-900', text: 'text-red-400', label: 'AVOID' },
+  depends: { bg: 'bg-amber-950', border: 'border-amber-800', text: 'text-amber-400', label: 'DEPENDS' },
 }
 
 function VerdictBadge({ verdict }: { verdict: string | null }) {
   if (!verdict || !(verdict in verdictConfig)) return null
   const vc = verdictConfig[verdict as Verdict]
   return (
-    <span
-      className={`shrink-0 text-xs font-bold px-2 py-1 rounded-md border ${vc.bg} ${vc.border} ${vc.text}`}
-    >
+    <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${vc.bg} ${vc.border} ${vc.text}`}>
       {vc.label}
     </span>
   )
@@ -116,36 +115,104 @@ function ProfessorCard({ prof }: { prof: ProfessorRow }) {
           <div className="text-xs text-zinc-500 truncate mt-0.5">{prof.department}</div>
         </div>
         <div className="flex items-center gap-3 shrink-0 pt-0.5">
-          <div className="flex items-center gap-2.5">
-            {prof.avg_rating != null && (
-              <>
-                <div className="text-center">
-                  <div className="text-xl font-black leading-none" style={{ color: qColor }}>
-                    {prof.avg_rating.toFixed(1)}
-                  </div>
-                  <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+          {prof.avg_rating != null && (
+            <div className="flex items-center gap-2.5">
+              <div className="text-center">
+                <div className="text-xl font-black leading-none" style={{ color: qColor }}>
+                  {prof.avg_rating.toFixed(1)}
                 </div>
-                {prof.avg_difficulty != null && (
-                  <>
-                    <div className="h-7 w-px bg-zinc-800" />
-                    <div className="text-center">
-                      <div className="text-xl font-black leading-none" style={{ color: dColor }}>
-                        {prof.avg_difficulty.toFixed(1)}
-                      </div>
-                      <div className="text-[10px] text-zinc-600 mt-0.5">Diff</div>
+                <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+              </div>
+              {prof.avg_difficulty != null && (
+                <>
+                  <div className="h-7 w-px bg-zinc-800" />
+                  <div className="text-center">
+                    <div className="text-xl font-black leading-none" style={{ color: dColor }}>
+                      {prof.avg_difficulty.toFixed(1)}
                     </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
+                    <div className="text-[10px] text-zinc-600 mt-0.5">Diff</div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <VerdictBadge verdict={prof.verdict} />
         </div>
       </div>
-
       <div className="px-4 pb-2">
         <div className="text-[10px] text-zinc-700">{prof.num_ratings} rating{prof.num_ratings !== 1 ? 's' : ''}</div>
       </div>
+    </Link>
+  )
+}
+
+function CourseRow({
+  course,
+  section,
+}: {
+  course: CourseRow
+  section: CourseSectionEntry | undefined
+  isLast: boolean
+}) {
+  const hasOpen = (section?.open ?? 0) > 0
+  const hasTotal = (section?.total ?? 0) > 0
+  const topProfs = section?.professors.slice(0, 2) ?? []
+
+  return (
+    <Link
+      href={`/course/${course.slug}`}
+      className="flex flex-col gap-2 px-5 py-3.5 hover:bg-zinc-800/50 transition-colors group border-b border-zinc-800 last:border-b-0"
+    >
+      <div className="flex items-center gap-3">
+        {/* Availability dot */}
+        {hasTotal && (
+          <div
+            className="shrink-0 w-2 h-2 rounded-full"
+            style={{ backgroundColor: hasOpen ? '#22c55e' : '#ef4444' }}
+            title={hasOpen ? `${section!.open} open` : 'All full'}
+          />
+        )}
+
+        <span className="shrink-0 text-xs font-mono text-zinc-400 w-20">{course.course_number}</span>
+        <span className="text-sm text-zinc-200 flex-1 min-w-0 truncate group-hover:text-white transition-colors">
+          {course.name}
+        </span>
+
+        <div className="shrink-0 flex items-center gap-3">
+          {hasTotal && (
+            hasOpen ? (
+              <span className="text-xs font-bold text-green-400">{section!.open} open</span>
+            ) : (
+              <span className="text-xs font-bold text-red-400">FULL</span>
+            )
+          )}
+          {course.credits != null && (
+            <span className="text-xs text-zinc-600 w-8 text-right">{course.credits} cr</span>
+          )}
+        </div>
+      </div>
+
+      {topProfs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-5">
+          {topProfs.map((p) => (
+            <span
+              key={p.slug}
+              className="flex items-center gap-1.5 text-xs text-zinc-500"
+            >
+              <span className="text-zinc-400">{p.first_name} {p.last_name}</span>
+              {p.avg_rating != null && (
+                <span className="font-bold tabular-nums" style={{ color: ratingColor(p.avg_rating) }}>
+                  {p.avg_rating.toFixed(1)}★
+                </span>
+              )}
+              <VerdictBadge verdict={p.verdict} />
+            </span>
+          ))}
+          {(section?.professors.length ?? 0) > 2 && (
+            <span className="text-xs text-zinc-700">+{section!.professors.length - 2} more</span>
+          )}
+        </div>
+      )}
     </Link>
   )
 }
@@ -165,14 +232,12 @@ function LoadingSpinner() {
   )
 }
 
-type ProfSortMode = 'rating' | 'difficulty' | 'name'
-
 function DepartmentContent({ slug }: { slug: string }) {
   const [data, setData] = useState<DepartmentDetail | null>(null)
   const [related, setRelated] = useState<RelatedDept[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [profSort, setProfSort] = useState<ProfSortMode>('rating')
+  const [courseSearch, setCourseSearch] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -193,19 +258,6 @@ function DepartmentContent({ slug }: { slug: string }) {
     load()
   }, [slug])
 
-  const sortedProfessors = useMemo(() => {
-    const list = data?.professors ?? []
-    if (profSort === 'difficulty') {
-      return [...list].sort((a, b) => (a.avg_difficulty ?? 99) - (b.avg_difficulty ?? 99))
-    }
-    if (profSort === 'name') {
-      return [...list].sort((a, b) =>
-        `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
-      )
-    }
-    return [...list].sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
-  }, [data, profSort])
-
   if (loading) return <LoadingSpinner />
 
   if (error || !data) {
@@ -225,13 +277,22 @@ function DepartmentContent({ slug }: { slug: string }) {
     )
   }
 
-  const { department, professors, courses } = data
+  const { department, professors, courses, courseSectionMap = {} } = data
+
+  const filteredCourses = courseSearch.trim()
+    ? courses.filter(c =>
+        c.course_number.toLowerCase().includes(courseSearch.toLowerCase()) ||
+        c.name.toLowerCase().includes(courseSearch.toLowerCase())
+      )
+    : courses
+
+  const totalOpen = Object.values(courseSectionMap).reduce((sum, s) => sum + s.open, 0)
+  const totalSections = Object.values(courseSectionMap).reduce((sum, s) => sum + s.total, 0)
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <AppHeader />
 
-      {/* Breadcrumb */}
       <div className="border-b border-zinc-900/60 px-6 py-2">
         <div className="max-w-5xl mx-auto flex items-center gap-2 text-xs text-zinc-500">
           <Link href="/departments" className="hover:text-zinc-300 transition-colors">
@@ -244,9 +305,8 @@ function DepartmentContent({ slug }: { slug: string }) {
 
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="flex gap-8 items-start">
-          {/* Main content */}
           <div className="flex-1 min-w-0 space-y-8">
-            {/* Department hero */}
+            {/* Hero */}
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
               <div className="text-xs font-mono text-zinc-500 mb-1 uppercase tracking-wider">
                 {department.code}
@@ -261,100 +321,92 @@ function DepartmentContent({ slug }: { slug: string }) {
               {department.description && (
                 <p className="text-zinc-400 text-sm mt-4 leading-relaxed">{department.description}</p>
               )}
-              <div className="mt-5 flex items-center gap-4 text-sm text-zinc-500">
+              <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-500">
                 <span>{professors.length} professor{professors.length !== 1 ? 's' : ''}</span>
                 <span className="w-1 h-1 rounded-full bg-zinc-700" />
                 <span>{courses.length} course{courses.length !== 1 ? 's' : ''}</span>
+                {totalSections > 0 && (
+                  <>
+                    <span className="w-1 h-1 rounded-full bg-zinc-700" />
+                    <span>
+                      <span className="font-semibold" style={{ color: totalOpen > 0 ? '#22c55e' : '#ef4444' }}>
+                        {totalOpen}
+                      </span>
+                      <span className="text-zinc-600"> / {totalSections} sections open</span>
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Professors */}
+            {/* Top professors */}
             <section>
-              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-                  Professors
-                </h2>
-                {professors.length > 1 && (
-                  <div className="flex items-center gap-1">
-                    {(['rating', 'difficulty', 'name'] as ProfSortMode[]).map(mode => (
-                      <button
-                        key={mode}
-                        onClick={() => setProfSort(mode)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                          profSort === mode
-                            ? 'bg-zinc-700 text-white'
-                            : 'text-zinc-500 hover:text-zinc-300'
-                        }`}
-                      >
-                        {mode === 'rating' ? 'Best rated' : mode === 'difficulty' ? 'Easiest' : 'A–Z'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {sortedProfessors.length === 0 ? (
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
+                Top Professors
+              </h2>
+              {professors.length === 0 ? (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500 text-sm">
                   No professors found for this department yet.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {sortedProfessors.map((prof) => (
+                  {professors.slice(0, 12).map((prof) => (
                     <ProfessorCard key={prof.slug} prof={prof} />
                   ))}
                 </div>
               )}
+              {professors.length > 12 && (
+                <p className="mt-3 text-xs text-zinc-600 text-center">
+                  Showing top 12 of {professors.length} professors
+                </p>
+              )}
             </section>
 
             {/* Courses */}
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-                  Courses in this Department
-                </h2>
-                <Link
-                  href={`/courses?dept=${department.slug}`}
-                  className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-                >
-                  Browse with sections →
-                </Link>
-              </div>
-              {courses.length === 0 ? (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-zinc-500 text-sm">
-                  <p>No courses indexed for this department yet.</p>
-                  <Link
-                    href={`/courses?dept=${department.slug}`}
-                    className="mt-2 inline-block text-xs text-[#CC0033] hover:underline"
-                  >
-                    Search the course browser →
-                  </Link>
-                </div>
-              ) : (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                  {courses.map((course, i) => (
+            {courses.length > 0 && (
+              <section>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                    Courses
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      placeholder="Filter courses…"
+                      value={courseSearch}
+                      onChange={e => setCourseSearch(e.target.value)}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-44"
+                    />
                     <Link
-                      key={course.id}
-                      href={`/course/${course.slug}`}
-                      className={`flex items-center gap-4 px-5 py-3.5 hover:bg-zinc-800/50 hover:text-[#CC0033] transition-colors group ${
-                        i < courses.length - 1 ? 'border-b border-zinc-800' : ''
-                      }`}
+                      href={`/courses?dept=${department.slug}`}
+                      className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors whitespace-nowrap"
                     >
-                      <span className="shrink-0 text-xs font-mono text-zinc-400 w-20">
-                        {course.course_number}
-                      </span>
-                      <span className="text-sm text-zinc-200 flex-1 group-hover:text-white transition-colors">{course.name}</span>
-                      {course.credits != null && (
-                        <span className="shrink-0 text-xs text-zinc-600">
-                          {course.credits} cr
-                        </span>
-                      )}
+                      Browse with sections →
                     </Link>
-                  ))}
+                  </div>
                 </div>
-              )}
-            </section>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                  {filteredCourses.length === 0 ? (
+                    <div className="px-5 py-8 text-center text-zinc-500 text-sm">
+                      No courses match &ldquo;{courseSearch}&rdquo;
+                    </div>
+                  ) : (
+                    filteredCourses.map((course, i) => (
+                      <CourseRow
+                        key={course.id}
+                        course={course}
+                        section={courseSectionMap[course.id]}
+                        isLast={i === filteredCourses.length - 1}
+                      />
+                    ))
+                  )}
+                </div>
+              </section>
+            )}
           </div>
 
-          {/* Sidebar — related departments */}
+          {/* Sidebar */}
           {related.length > 0 && (
             <aside className="hidden lg:block w-64 shrink-0 space-y-3 sticky top-24">
               <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
