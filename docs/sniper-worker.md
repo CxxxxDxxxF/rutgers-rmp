@@ -34,6 +34,8 @@ npm run worker:sniper
 
 `railway.worker.json` intentionally points at `Dockerfile.worker`. The root
 `railway.json` is reserved for the web service and points at `Dockerfile.web`.
+The worker service is intentionally disconnected from GitHub auto-deploys so a
+repo-root push cannot deploy the web config to the worker.
 
 ## Required Environment Variables
 

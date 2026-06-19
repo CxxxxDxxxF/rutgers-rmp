@@ -148,6 +148,10 @@ The checked-in root `railway.json` is for the web service. Do not use a plain
 repo-root deploy for the worker service unless the deploy snapshot maps
 `railway.worker.json` to `railway.json`.
 
+Production web can auto-deploy from GitHub `main`. Production worker should stay
+disconnected from GitHub auto-deploys and be deployed with a worker-specific
+snapshot.
+
 Web service:
 
 - Service: `rurate-web`

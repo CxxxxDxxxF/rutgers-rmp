@@ -26,6 +26,10 @@ The checked-in root `railway.json` is web-specific on purpose. The worker has a
 separate `railway.worker.json` because Railway CLI reads `railway.json` from the
 upload root.
 
+The web service is connected to GitHub `main` for automatic deploys. The worker
+service is intentionally not connected to the GitHub source because a repo-root
+auto-deploy would read the web `railway.json`.
+
 ## Required Variables
 
 Shared web/worker variables:
