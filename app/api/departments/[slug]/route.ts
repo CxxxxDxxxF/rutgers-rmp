@@ -205,7 +205,9 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ department, professors, courses, related, courseSectionMap })
+    return NextResponse.json({ department, professors, courses, related, courseSectionMap }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
+    })
   } catch (err) {
     log.error('Department detail API error:', err)
     return NextResponse.json({ error: 'Failed to load department' }, { status: 500 })

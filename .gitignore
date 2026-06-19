@@ -46,6 +46,7 @@ yarn-error.log*
 .vercel/
 .railway-config-pull-*/
 
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

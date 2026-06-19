@@ -139,6 +139,15 @@ export default function SearchBar() {
   }
 
   function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      if (open && selected >= 0) { handleSelect(items[selected]); return }
+      if (open && items.length > 0) { handleSelect(items[0]); return }
+      if (query.trim().length >= 2) {
+        setOpen(false)
+        router.push(`/courses?q=${encodeURIComponent(query.trim())}`)
+      }
+      return
+    }
     if (!open) return
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s + 1, items.length - 1)) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(s => Math.max(s - 1, -1)) }

@@ -14,12 +14,28 @@ export async function GET(req: NextRequest) {
   const credits = req.nextUrl.searchParams.get('credits')?.trim()
   const level = req.nextUrl.searchParams.get('level')?.trim()
   const semester = req.nextUrl.searchParams.get('semester')?.trim()
+  const offsetParam = req.nextUrl.searchParams.get('offset')?.trim()
+  const openOnly = req.nextUrl.searchParams.get('openonly') === '1'
+  const PAGE_SIZE = 160
+  const offset = Math.max(0, parseInt(offsetParam ?? '0', 10) || 0)
 
   if (!supabase) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
   }
 
   try {
+    // When openonly=1, pre-fetch course IDs that have at least one open section
+    // so pagination correctly skips courses with no seats available.
+    let openCourseIds: string[] | null = null
+    if (openOnly) {
+      const { data: openData } = await supabase
+        .from('teaching_assignments')
+        .select('course_id')
+        .eq('open_status', true)
+        .eq('status', 'active')
+      openCourseIds = openData ? [...new Set(openData.map((r: { course_id: string }) => r.course_id))] : []
+    }
+
     // Use !inner only when filtering by dept (excludes non-matching courses).
     // Both levels need !inner — a filter on a nested left-joined embed only
     // nullifies the embed, it does not exclude the parent row.
@@ -50,6 +66,12 @@ export async function GET(req: NextRequest) {
     if (dept) {
       query = query.eq('course_departments.departments.slug', dept)
     }
+    if (openCourseIds && openCourseIds.length > 0) {
+      query = query.in('id', openCourseIds)
+    } else if (openCourseIds !== null) {
+      // openonly requested but no open courses found — return empty
+      return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+    }
     if (q && q.length >= 2) {
       // Multi-word queries: every word must appear in the title, or the
       // whole query matches the course number.
@@ -69,7 +91,7 @@ export async function GET(req: NextRequest) {
     if (level) {
       query = query.eq('academic_level', level)
     }
-    query = query.limit(160)
+    query = query.range(offset, offset + PAGE_SIZE - 1)
 
     const { data, error } = await query
 
@@ -134,7 +156,14 @@ export async function GET(req: NextRequest) {
       ? courses.filter(course => course.semester != null)
       : courses
 
-    return NextResponse.json(visibleCourses)
+    return NextResponse.json({
+      courses: visibleCourses,
+      hasMore: courses.length === PAGE_SIZE,
+      offset,
+      pageSize: PAGE_SIZE,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=60' },
+    })
   } catch (err) {
     log.error('Courses error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -281,6 +310,7 @@ async function loadNativeReviewStats(professorIds: string[]) {
     .select('professor_id, quality_rating, difficulty_rating, would_take_again, grade_received')
     .in('professor_id', professorIds)
     .eq('source', 'native')
+    .eq('is_removed', false)
 
   if (error) {
     log.error('Course native review stats error:', error)

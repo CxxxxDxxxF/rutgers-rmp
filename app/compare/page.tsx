@@ -122,6 +122,14 @@ function CompareContent() {
   const bestWta = Math.max(...professors.map(p => p.would_take_again ?? -1))
   const bestGrade = Math.max(...professors.map(p => p.student_grade?.score ?? -1))
 
+  // Courses taught by every professor being compared
+  const commonCourses = useMemo(() => {
+    if (professors.length < 2) return []
+    return professors[0].courses.filter(c =>
+      professors.slice(1).every(p => p.courses.some(pc => pc.slug === c.slug))
+    )
+  }, [professors])
+
   const missingFromTray = missing
     .map(id => trayItems.find(t => t.rmpId === id))
     .filter(Boolean)
@@ -326,6 +334,27 @@ function CompareContent() {
                       </td>
                     ))}
                   </Row>
+                  {commonCourses.length > 0 && (
+                    <tr className="border-t border-zinc-800">
+                      <td className="px-4 py-3 text-[11px] uppercase tracking-wider text-zinc-500 font-semibold whitespace-nowrap align-top">
+                        Taught by all
+                      </td>
+                      <td colSpan={professors.length} className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {commonCourses.map(c => (
+                            <Link
+                              key={c.slug}
+                              href={`/course/${c.slug}`}
+                              title={c.name}
+                              className="text-[11px] font-mono px-1.5 py-0.5 rounded border bg-[#CC0033]/10 border-[#CC0033]/40 text-[#ff4d6d] hover:bg-[#CC0033]/20 transition-colors"
+                            >
+                              {c.course_number}
+                            </Link>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   <Row label="Courses taught">
                     {professors.map(p => (
                       <td key={p.rmp_id} className="px-4 py-3">
@@ -336,7 +365,11 @@ function CompareContent() {
                                 key={c.slug}
                                 href={`/course/${c.slug}`}
                                 title={c.name}
-                                className="text-[11px] font-mono px-1.5 py-0.5 rounded border bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-[#CC0033]/60 hover:text-white transition-colors"
+                                className={`text-[11px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+                                  commonCourses.some(cc => cc.slug === c.slug)
+                                    ? 'bg-[#CC0033]/10 border-[#CC0033]/40 text-[#ff4d6d] hover:bg-[#CC0033]/20'
+                                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-[#CC0033]/60 hover:text-white'
+                                }`}
                               >
                                 {c.course_number}
                               </Link>

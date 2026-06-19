@@ -38,7 +38,7 @@ npm run ingest -- --year 2026 --term 1 --campus all                     # Spring
 
 ```bash
 supabase db push                                                    # preferred
-npm run migrate -- --file supabase/migrations/019_expand_subject_map_coverage.sql # fallback (needs SUPABASE_DB_PASSWORD or DATABASE_URL)
+npm run migrate -- --file supabase/migrations/020_add_summer_2026_semester.sql # fallback (needs SUPABASE_DB_PASSWORD or DATABASE_URL)
 ```
 
 ## Architecture
@@ -70,7 +70,7 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 | `lib/professor-grade.ts` | Grade signal aggregation from native reviews |
 | `worker/sniper-worker.mjs` | Always-on Railway worker (plain ESM, no bundler) |
 | `scripts/ingest-soc.ts` | Rutgers SOC → Supabase bulk ingest |
-| `supabase/migrations/` | Numbered SQL migrations (`001`–`014`) |
+| `supabase/migrations/` | Numbered SQL migrations (`001`–`020`) |
 
 ### Supabase client split
 
