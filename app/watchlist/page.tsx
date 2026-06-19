@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
 import AppHeader from '@/components/AppHeader'
+import FlipBoardBanner from '@/components/FlipBoardBanner'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import { CopyButton } from '@/components/SectionTable'
@@ -1165,6 +1166,8 @@ export default function WatchlistPage() {
             Track any Rutgers section by index number. Get alerted by email or SMS the moment a seat opens. Jump straight to WebReg with the index ready.
           </p>
         </div>
+
+        <FlipBoardBanner />
 
         <QuickSnipeBox />
 

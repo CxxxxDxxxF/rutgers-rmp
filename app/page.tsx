@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase'
 import AppHeader from '@/components/AppHeader'
 import SearchBar from '@/components/SearchBar'
 import ProfessorCard from '@/components/ProfessorCard'
-import FlipBoardBanner from '@/components/FlipBoardBanner'
 import type { ProfessorCache } from '@/lib/supabase'
 
 async function getPopular(): Promise<ProfessorCache[]> {
@@ -120,11 +119,6 @@ export default async function HomePage() {
             Track a section
           </Link>
         </div>
-      </section>
-
-      {/* Flip-board banner */}
-      <section className="px-4 sm:px-6 max-w-5xl mx-auto w-full">
-        <FlipBoardBanner />
       </section>
 
       {/* Tool cards */}
