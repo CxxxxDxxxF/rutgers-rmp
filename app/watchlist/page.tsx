@@ -77,6 +77,77 @@ function writeQuickPrefs(prefs: { email: string; phone: string; emailEnabled: bo
   catch { /* localStorage blocked */ }
 }
 
+// ─── Phone helpers ────────────────────────────────────────────────────────────
+
+// Converts raw input → display format "(732) 555-1234"
+function formatPhoneDisplay(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
+// Converts E.164 "+17325551234" → display "(732) 555-1234" for pre-populating inputs
+function e164ToDisplay(e164: string): string {
+  const digits = e164.replace(/\D/g, '')
+  const local = digits.startsWith('1') ? digits.slice(1) : digits
+  return formatPhoneDisplay(local)
+}
+
+// Converts display input → E.164 "+1XXXXXXXXXX" (returns '' if incomplete)
+function displayToE164(display: string): string {
+  const digits = display.replace(/\D/g, '')
+  if (digits.length !== 10) return ''
+  return `+1${digits}`
+}
+
+// ─── PhoneInput ───────────────────────────────────────────────────────────────
+
+function PhoneInput({
+  value,
+  onChange,
+  className = '',
+}: {
+  value: string        // E.164 stored value
+  onChange: (e164: string) => void
+  className?: string
+}) {
+  const [display, setDisplay] = useState(value ? e164ToDisplay(value) : '')
+
+  // Sync when the stored value changes (e.g., loaded from DB)
+  useEffect(() => {
+    setDisplay(value ? e164ToDisplay(value) : '')
+  }, [value])
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value
+    const formatted = formatPhoneDisplay(raw)
+    setDisplay(formatted)
+    onChange(displayToE164(formatted))
+  }
+
+  return (
+    <div className={`relative ${className}`}>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-500 pointer-events-none select-none">
+        🇺🇸 +1
+      </span>
+      <input
+        type="tel"
+        inputMode="numeric"
+        value={display}
+        onChange={handleChange}
+        placeholder="(732) 555-1234"
+        maxLength={14}
+        className={`w-full pl-14 pr-3 py-2 rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-white outline-none focus:border-[#CC0033] transition-colors ${
+          display && displayToE164(display) === '' && display.replace(/\D/g, '').length > 0
+            ? 'border-red-800/60'
+            : ''
+        }`}
+      />
+    </div>
+  )
+}
+
 // ─── StatusPip ────────────────────────────────────────────────────────────────
 
 function StatusPip({ status }: { status: 'open' | 'closed' | 'unknown' }) {
@@ -215,14 +286,8 @@ function InlineNotificationPanel({ watch, onClose }: { watch: WatchedSection; on
             />
           </label>
           <label className="block">
-            <span className="text-[11px] text-zinc-500 font-medium">Phone (E.164)</span>
-            <input
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="+17325551234"
-              className="mt-1 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
-            />
+            <span className="text-[11px] text-zinc-500 font-medium">Phone (SMS)</span>
+            <PhoneInput value={phone} onChange={setPhone} className="mt-1" />
           </label>
         </div>
 
@@ -700,14 +765,8 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Phone (E.164)</span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="+17325551234"
-                    className="mt-1.5 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
-                  />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Phone (SMS)</span>
+                  <PhoneInput value={phone} onChange={setPhone} className="mt-1.5" />
                 </label>
               </div>
 
@@ -914,13 +973,7 @@ function QuickSnipeBox() {
                 placeholder="Email"
                 className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
               />
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="Phone (+1…)"
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
-              />
+              <PhoneInput value={phone} onChange={setPhone} />
               <div className="flex gap-3 text-xs text-zinc-400">
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} className="accent-[#CC0033]" />
