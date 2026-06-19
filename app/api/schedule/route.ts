@@ -72,15 +72,16 @@ export async function POST(req: NextRequest) {
 
   if (supabase && found.length > 0) {
     const ids = found.map(f => f.id)
-    const { data } = await supabase
-      .from('professor_cache')
-      .select('rmp_id, ai_analysis, avg_rating, avg_difficulty, would_take_again, num_ratings')
-      .in('rmp_id', ids)
-
-    const { data: socProfessors } = await supabase
-      .from('professors')
-      .select('id, rmp_id')
-      .in('rmp_id', ids)
+    const [{ data }, { data: socProfessors }] = await Promise.all([
+      supabase
+        .from('professor_cache')
+        .select('rmp_id, ai_analysis, avg_rating, avg_difficulty, would_take_again, num_ratings')
+        .in('rmp_id', ids),
+      supabase
+        .from('professors')
+        .select('id, rmp_id')
+        .in('rmp_id', ids),
+    ])
 
     const professorIdByRmp = new Map((socProfessors ?? []).map(p => [p.rmp_id, p.id]))
     const nativeStats = await loadNativeReviewStats([...professorIdByRmp.values()])

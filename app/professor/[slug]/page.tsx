@@ -499,73 +499,50 @@ function RelatedProfessorsSection({ rmpId }: { rmpId: string }) {
     async function load() {
       setLoading(true)
       try {
-        // 1. Get this professor's id from professors table
+        // Query 1: get this prof's id + primary department in one join
         const { data: prof } = await supabase!
           .from('professors')
-          .select('id')
+          .select('id, professor_departments!inner(department_id, is_primary, departments(id, name, slug))')
           .eq('rmp_id', rmpId)
+          .eq('professor_departments.is_primary', true)
           .single()
 
         if (!prof) { setLoading(false); return }
 
-        // 2. Get their primary department
-        const { data: deptRow } = await supabase!
-          .from('professor_departments')
-          .select('department_id, departments(id, name, slug)')
-          .eq('professor_id', prof.id)
-          .eq('is_primary', true)
-          .single()
-
-        if (!deptRow) { setLoading(false); return }
-
-        const dept = deptRow.departments as unknown as { id: string; name: string; slug: string } | null
+        const deptJoin = (prof as { professor_departments: unknown }).professor_departments
+        const deptRow = Array.isArray(deptJoin) ? deptJoin[0] : deptJoin
+        const dept = deptRow
+          ? (Array.isArray(deptRow.departments) ? deptRow.departments[0] : deptRow.departments) as { id: string; name: string; slug: string } | null
+          : null
         if (!dept) { setLoading(false); return }
         setDeptName(dept.name)
         setDeptSlug(dept.slug)
 
-        // 3. Find other professors in same department
-        const { data: otherDeptRows } = await supabase!
+        // Query 2: get related profs with ratings via embedded join
+        const { data: relatedRows } = await supabase!
           .from('professor_departments')
-          .select('professor_id')
+          .select('professors!inner(id, rmp_id, slug, first_name, last_name, professor_cache(avg_rating, avg_difficulty, department))')
           .eq('department_id', dept.id)
           .neq('professor_id', prof.id)
           .limit(20)
 
-        if (!otherDeptRows || otherDeptRows.length === 0) { setLoading(false); return }
-
-        const otherIds = otherDeptRows.map((r: { professor_id: string }) => r.professor_id)
-
-        // 4. Get their data from professors + professor_cache
-        const { data: profs } = await supabase!
-          .from('professors')
-          .select('id, rmp_id, slug, first_name, last_name')
-          .in('id', otherIds)
-          .limit(8)
-
-        if (!profs || profs.length === 0) { setLoading(false); return }
-
-        const rmpIds = profs.map((p: { rmp_id: string }) => p.rmp_id)
-
-        const { data: caches } = await supabase!
-          .from('professor_cache')
-          .select('rmp_id, avg_rating, avg_difficulty, department')
-          .in('rmp_id', rmpIds)
-
-        const cacheMap: Record<string, { avg_rating: number; avg_difficulty: number; department: string }> = {}
-        for (const c of caches ?? []) {
-          cacheMap[c.rmp_id] = c
-        }
-
-        const result: RelatedProfessor[] = profs
-          .map((p: { id: string; rmp_id: string; slug: string; first_name: string; last_name: string }) => ({
-            rmp_id: p.rmp_id,
-            slug: p.slug,
-            first_name: p.first_name,
-            last_name: p.last_name,
-            avg_rating: cacheMap[p.rmp_id]?.avg_rating ?? null,
-            avg_difficulty: cacheMap[p.rmp_id]?.avg_difficulty ?? null,
-            department: cacheMap[p.rmp_id]?.department ?? null,
-          }))
+        const result: RelatedProfessor[] = (relatedRows ?? [])
+          .map((row: unknown) => {
+            const r = row as { professors: unknown }
+            const p = Array.isArray(r.professors) ? r.professors[0] : r.professors
+            if (!p) return null
+            const cache = Array.isArray(p.professor_cache) ? p.professor_cache[0] : p.professor_cache
+            return {
+              rmp_id: p.rmp_id as string,
+              slug: p.slug as string,
+              first_name: p.first_name as string,
+              last_name: p.last_name as string,
+              avg_rating: cache?.avg_rating != null ? Number(cache.avg_rating) : null,
+              avg_difficulty: cache?.avg_difficulty != null ? Number(cache.avg_difficulty) : null,
+              department: (cache?.department as string | null) ?? null,
+            } satisfies RelatedProfessor
+          })
+          .filter((p): p is RelatedProfessor => p !== null)
           .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
           .slice(0, 4)
 

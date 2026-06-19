@@ -29,10 +29,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { data: cached, error } = await supabase
-      .from('professor_cache')
-      .select('id, rmp_id, slug, first_name, last_name, department, avg_rating, avg_difficulty, would_take_again, num_ratings, ai_analysis')
-      .in('rmp_id', ids)
+    // Parallel: fetch cache rows and professor IDs (both keyed by rmp_id)
+    const [{ data: cached, error }, { data: profs }] = await Promise.all([
+      supabase
+        .from('professor_cache')
+        .select('id, rmp_id, slug, first_name, last_name, department, avg_rating, avg_difficulty, would_take_again, num_ratings, ai_analysis')
+        .in('rmp_id', ids),
+      supabase
+        .from('professors')
+        .select('id, rmp_id')
+        .in('rmp_id', ids),
+    ])
 
     if (error) {
       log.error('Compare fetch error:', error)
@@ -40,40 +47,36 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = cached ?? []
-
-    // Courses taught: professor_cache → professors (cache_id) → teaching_assignments
-    const coursesByRmpId = new Map<string, { course_number: string; name: string; slug: string }[]>()
     const profIdByRmpId = new Map<string, string>()
-    if (rows.length > 0) {
-      const { data: profs } = await supabase
-        .from('professors')
-        .select('id, rmp_id')
-        .in('rmp_id', rows.map(r => r.rmp_id))
+    for (const p of profs ?? []) profIdByRmpId.set(p.rmp_id, p.id)
+    const profIds = [...profIdByRmpId.values()]
 
-      if (profs && profs.length > 0) {
-        for (const prof of profs) profIdByRmpId.set(prof.rmp_id, prof.id)
-        const { data: tas } = await supabase
-          .from('teaching_assignments')
-          .select('professor_id, courses(course_number, name, slug)')
-          .in('professor_id', profs.map(p => p.id))
-          .eq('status', 'active')
-          .limit(200)
+    // Parallel: fetch teaching assignments and native review stats using prof IDs
+    const coursesByRmpId = new Map<string, { course_number: string; name: string; slug: string }[]>()
+    const [tasResult, nativeStats] = await Promise.all([
+      profIds.length > 0
+        ? supabase
+            .from('teaching_assignments')
+            .select('professor_id, courses(course_number, name, slug)')
+            .in('professor_id', profIds)
+            .eq('status', 'active')
+            .limit(200)
+        : Promise.resolve({ data: null }),
+      loadNativeReviewStats(profIds),
+    ])
 
-        const profIdToRmp = new Map(profs.map(p => [p.id, p.rmp_id]))
-        for (const ta of tas ?? []) {
-          const rmpId = profIdToRmp.get(ta.professor_id)
-          if (!rmpId) continue
-          const course = Array.isArray(ta.courses) ? ta.courses[0] : ta.courses
-          if (!course) continue
-          const list = coursesByRmpId.get(rmpId) ?? []
-          if (!list.some(c => c.slug === course.slug) && list.length < 8) {
-            list.push(course)
-          }
-          coursesByRmpId.set(rmpId, list)
-        }
+    const profIdToRmp = new Map((profs ?? []).map(p => [p.id, p.rmp_id]))
+    for (const ta of (tasResult.data ?? []) as AssignmentRow[]) {
+      const rmpId = profIdToRmp.get(ta.professor_id)
+      if (!rmpId) continue
+      const course = Array.isArray(ta.courses) ? ta.courses[0] : ta.courses
+      if (!course) continue
+      const list = coursesByRmpId.get(rmpId) ?? []
+      if (!list.some(c => c.slug === course.slug) && list.length < 8) {
+        list.push(course)
       }
+      coursesByRmpId.set(rmpId, list)
     }
-    const nativeStats = await loadNativeReviewStats([...profIdByRmpId.values()])
 
     const professors = rows.map(r => ({
       rmp_id: r.rmp_id,
@@ -133,6 +136,11 @@ async function loadNativeReviewStats(professorIds: string[]) {
     stats.set(professorId, summarizeNativeReviews(rows))
   }
   return stats
+}
+
+interface AssignmentRow {
+  professor_id: string
+  courses: { course_number: string; name: string; slug: string } | { course_number: string; name: string; slug: string }[] | null
 }
 
 interface NativeReviewStatRow {
