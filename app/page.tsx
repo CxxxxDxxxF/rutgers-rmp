@@ -216,7 +216,7 @@ export default async function HomePage() {
               </span>
             </h2>
             <Link
-              href="/courses?sort=open"
+              href="/courses?sort=open&openonly=1"
               className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
             >
               See all →

@@ -801,6 +801,7 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
     if (!supabase) { setLoading(false); return }
 
     async function load() {
+      // Query 1: get this professor's primary department
       const { data: deptRows } = await supabase!
         .from('professor_departments')
         .select('department_id, departments(id, name, slug)')
@@ -814,46 +815,31 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
       setDeptName(dept.name)
       setDeptSlug(dept.slug)
 
-      const { data: others } = await supabase!
+      // Query 2: get related profs with ratings via embedded join
+      const { data: relatedRows } = await supabase!
         .from('professor_departments')
-        .select('professor_id')
+        .select('professors!inner(id, rmp_id, slug, first_name, last_name, professor_cache(avg_rating))')
         .eq('department_id', dept.id)
         .neq('professor_id', professorId)
         .limit(20)
 
-      if (!others?.length) { setLoading(false); return }
-
-      const { data: profs } = await supabase!
-        .from('professors')
-        .select('id, rmp_id, slug, first_name, last_name, cache_id')
-        .in('id', others.map((r: { professor_id: string }) => r.professor_id))
-        .limit(8)
-
-      if (!profs?.length) { setLoading(false); return }
-
-      const cacheIds = profs
-        .filter((p: { cache_id: string | null }) => p.cache_id)
-        .map((p: { cache_id: string | null }) => p.cache_id as string)
-
-      const cacheMap: Record<string, number> = {}
-      if (cacheIds.length > 0) {
-        const { data: caches } = await supabase!
-          .from('professor_cache')
-          .select('id, avg_rating')
-          .in('id', cacheIds)
-        for (const c of caches ?? []) cacheMap[c.id] = c.avg_rating
-      }
-
       setRelated(
-        (profs as { id: string; rmp_id: string | null; slug: string; first_name: string; last_name: string; cache_id: string | null }[])
-          .map(p => ({
-            id: p.id,
-            rmp_id: p.rmp_id,
-            slug: p.slug,
-            first_name: p.first_name,
-            last_name: p.last_name,
-            avg_rating: p.cache_id ? (cacheMap[p.cache_id] ?? null) : null,
-          }))
+        (relatedRows ?? [])
+          .map((row: unknown) => {
+            const r = row as { professors: unknown }
+            const p = Array.isArray(r.professors) ? r.professors[0] : r.professors
+            if (!p) return null
+            const cache = Array.isArray(p.professor_cache) ? p.professor_cache[0] : p.professor_cache
+            return {
+              id: p.id as string,
+              rmp_id: p.rmp_id as string | null,
+              slug: p.slug as string,
+              first_name: p.first_name as string,
+              last_name: p.last_name as string,
+              avg_rating: cache?.avg_rating != null ? Number(cache.avg_rating) : null,
+            }
+          })
+          .filter((p): p is SocRelatedProf => p !== null)
           .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
           .slice(0, 4)
       )

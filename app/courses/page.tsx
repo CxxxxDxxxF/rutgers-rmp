@@ -244,6 +244,7 @@ function CoursesContent() {
         if (serverQuery.length >= 2) params.set('q', serverQuery)
         if (credits) params.set('credits', credits)
         if (level) params.set('level', level)
+        if (onlyWithOpen) params.set('openonly', '1')
         const qs = params.toString()
         const res = await fetch(qs ? `/api/courses?${qs}` : '/api/courses')
         if (!res.ok) throw new Error('Failed to load courses')
@@ -259,7 +260,7 @@ function CoursesContent() {
       }
     }
     loadCourses()
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithOpen, loadKey])
 
   async function handleLoadMore() {
     if (loadingMore) return
@@ -271,6 +272,7 @@ function CoursesContent() {
       if (serverQuery.length >= 2) params.set('q', serverQuery)
       if (credits) params.set('credits', credits)
       if (level) params.set('level', level)
+      if (onlyWithOpen) params.set('openonly', '1')
       params.set('offset', String(loadMoreOffset))
       const res = await fetch(`/api/courses?${params.toString()}`)
       if (!res.ok) return
