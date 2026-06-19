@@ -618,25 +618,27 @@ function CoursesContent() {
 
         {/* Course grid */}
         {!loading && !error && filtered.length > 0 && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {filtered.map(course => (
-                <CourseCard key={course.id} course={course} />
-              ))}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filtered.map(course => (
+              <CourseCard key={course.id} course={course} />
+            ))}
+          </div>
+        )}
 
-            {hasMore && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="px-6 py-2.5 rounded-xl border border-zinc-700 bg-zinc-900 text-sm font-semibold text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loadingMore ? 'Loading…' : 'Load more courses'}
-                </button>
-              </div>
+        {/* Load more — show even when client-side filters empty the current page */}
+        {!loading && !error && hasMore && (
+          <div className="mt-6 flex flex-col items-center gap-2">
+            {filtered.length === 0 && courses.length > 0 && (
+              <p className="text-xs text-zinc-600">All courses on this page were filtered out — there may be more.</p>
             )}
-          </>
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="px-6 py-2.5 rounded-xl border border-zinc-700 bg-zinc-900 text-sm font-semibold text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loadingMore ? 'Loading…' : 'Load more courses'}
+            </button>
+          </div>
         )}
       </main>
 
