@@ -44,6 +44,9 @@ function CoursesContent() {
   }, [])
 
   const [courses, setCourses] = useState<CourseCardData[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [loadMoreOffset, setLoadMoreOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [departments, setDepartments] = useState<Department[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [selectedDept, setSelectedDept] = useState<string>(searchParams.get('dept') ?? '')
@@ -209,6 +212,8 @@ function CoursesContent() {
     async function loadCourses() {
       setLoading(true)
       setError(null)
+      setHasMore(false)
+      setLoadMoreOffset(0)
       try {
         const params = new URLSearchParams()
         if (selectedDept) params.set('dept', selectedDept)
@@ -220,7 +225,10 @@ function CoursesContent() {
         const res = await fetch(qs ? `/api/courses?${qs}` : '/api/courses')
         if (!res.ok) throw new Error('Failed to load courses')
         const data = await res.json()
-        setCourses(Array.isArray(data) ? data : [])
+        const list = Array.isArray(data) ? data : (data?.courses ?? [])
+        setCourses(list)
+        setHasMore(data?.hasMore ?? false)
+        setLoadMoreOffset(data?.pageSize ?? 160)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -229,6 +237,30 @@ function CoursesContent() {
     }
     loadCourses()
   }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
+
+  async function handleLoadMore() {
+    setLoadingMore(true)
+    try {
+      const params = new URLSearchParams()
+      if (selectedDept) params.set('dept', selectedDept)
+      if (selectedSemester) params.set('semester', selectedSemester)
+      if (serverQuery.length >= 2) params.set('q', serverQuery)
+      if (credits) params.set('credits', credits)
+      if (level) params.set('level', level)
+      params.set('offset', String(loadMoreOffset))
+      const res = await fetch(`/api/courses?${params.toString()}`)
+      if (!res.ok) throw new Error('Failed to load more')
+      const data = await res.json()
+      const list = Array.isArray(data) ? data : (data?.courses ?? [])
+      setCourses(prev => [...prev, ...list])
+      setHasMore(data?.hasMore ?? false)
+      setLoadMoreOffset(prev => prev + (data?.pageSize ?? 160))
+    } catch {
+      // non-fatal — user can retry
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // Instant client-side narrowing while typing + section filter + sort
   const filtered = useMemo(() => {
@@ -529,7 +561,10 @@ function CoursesContent() {
         {/* Result count */}
         {!loading && !error && (
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
-            <span>{filtered.length} course{filtered.length !== 1 ? 's' : ''} found</span>
+            <span>
+              {filtered.length} course{filtered.length !== 1 ? 's' : ''}
+              {hasMore ? ` shown — more available` : ' found'}
+            </span>
             {selectedSemester && (
               <span>
                 · scoped to {semesters.find(s => s.slug === selectedSemester)?.name ?? selectedSemester}
@@ -583,11 +618,25 @@ function CoursesContent() {
 
         {/* Course grid */}
         {!loading && !error && filtered.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {filtered.map(course => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filtered.map(course => (
+                <CourseCard key={course.id} course={course} />
+              ))}
+            </div>
+
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="px-6 py-2.5 rounded-xl border border-zinc-700 bg-zinc-900 text-sm font-semibold text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loadingMore ? 'Loading…' : 'Load more courses'}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </main>
 

@@ -274,11 +274,6 @@ export default function DepartmentsPage() {
     return groups
   }, [filtered, activeSchool, search])
 
-  const totalProfs = useMemo(
-    () => new Set(departments.flatMap(() => [])).size,
-    [departments]
-  )
-
   const statsProfs = departments.reduce((s, d) => s + d.professor_count, 0)
   const statsCourses = departments.reduce((s, d) => s + d.course_count, 0)
 
