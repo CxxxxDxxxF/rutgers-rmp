@@ -1,9 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
 import Badge from '@/components/Badge'
+import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 
 const FEATURES = [
   'Priority open-seat alerts with email/SMS support',
@@ -12,49 +15,51 @@ const FEATURES = [
   'Schedule ranking by teacher quality, difficulty, and seat risk',
 ]
 
-export default function ProPage() {
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [plan, setPlan] = useState<'pro' | 'club'>('pro')
-  const [useCase, setUseCase] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function ProPageContent() {
+  const { user, loading } = useAuth()
+  const searchParams = useSearchParams()
+  const paymentSuccess = searchParams.get('success') === '1'
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (saving) return
-    setSaving(true)
-    setSaved(false)
-    setError(null)
+  const [plan, setPlan] = useState<'pro' | 'club'>('pro')
+  const [subscribed] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
+
+  async function handleSubscribe() {
+    if (checkoutLoading || !supabase) return
+    setCheckoutLoading(true)
+    setCheckoutError(null)
+
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
 
     try {
-      const res = await fetch('/api/pro-interest', {
+      const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          phone,
-          plan,
-          use_case: useCase,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ plan }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json.error ?? 'Could not save interest')
-      setSaved(true)
-      setEmail('')
-      setPhone('')
-      setUseCase('')
+      if (!res.ok) throw new Error(json.error ?? 'Could not start checkout')
+      if (json.url) window.location.href = json.url
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save interest')
-    } finally {
-      setSaving(false)
+      setCheckoutError(err instanceof Error ? err.message : 'Could not start checkout')
+      setCheckoutLoading(false)
     }
   }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <AppHeader />
+
+      {paymentSuccess && (
+        <div className="border-b border-green-900 bg-green-950 px-4 py-3 text-center text-sm font-medium text-green-400">
+          Payment successful! Welcome to Pro.
+        </div>
+      )}
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-10 pb-28">
         <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
@@ -98,77 +103,120 @@ export default function ProPage() {
             </div>
           </div>
 
-          <form onSubmit={submit} className="motion-rise rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-2xl">
-            <div className="mb-5">
-              <h2 className="text-xl font-black text-white">Join the Pro list</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                No charge today. This captures demand before Stripe is wired.
-              </p>
-            </div>
+          <div className="motion-rise rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-2xl">
+            {!user && !loading && (
+              <>
+                <div className="mb-5">
+                  <h2 className="text-xl font-black text-white">Subscribe to Pro</h2>
+                  <p className="mt-1 text-sm text-zinc-500">Sign in to get started.</p>
+                </div>
+                <Link
+                  href="/login"
+                  className="block w-full rounded-xl bg-[#CC0033] px-4 py-3 text-center text-sm font-bold text-white transition-colors hover:bg-[#a8002b]"
+                >
+                  Sign in to subscribe
+                </Link>
+                <p className="mt-4 text-center text-sm text-zinc-500">
+                  or{' '}
+                  <Link href="/login" className="text-zinc-300 underline underline-offset-2 hover:text-white">
+                    join the waitlist
+                  </Link>
+                </p>
+              </>
+            )}
 
-            <div className="grid grid-cols-2 gap-2 rounded-xl bg-zinc-900 p-1">
-              <button
-                type="button"
-                onClick={() => setPlan('pro')}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                  plan === 'pro' ? 'bg-[#CC0033] text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Student Pro
-              </button>
-              <button
-                type="button"
-                onClick={() => setPlan('club')}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                  plan === 'club' ? 'bg-[#CC0033] text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Club / Group
-              </button>
-            </div>
+            {user && !subscribed && (
+              <>
+                <div className="mb-5">
+                  <h2 className="text-xl font-black text-white">Choose a plan</h2>
+                  <p className="mt-1 text-sm text-zinc-500">Billed monthly. Cancel any time.</p>
+                </div>
 
-            <div className="mt-5 space-y-3">
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="Rutgers email"
-                className="w-full rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
-              />
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="Phone for SMS alerts"
-                className="w-full rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
-              />
-              <textarea
-                value={useCase}
-                onChange={e => setUseCase(e.target.value)}
-                placeholder="What would make this worth paying for?"
-                rows={4}
-                className="w-full resize-none rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
-              />
-            </div>
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-zinc-900 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setPlan('pro')}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                      plan === 'pro' ? 'bg-[#CC0033] text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Student Pro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlan('club')}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                      plan === 'club' ? 'bg-[#CC0033] text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Club / Group
+                  </button>
+                </div>
 
-            {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
-            {saved && <p className="mt-3 text-sm text-green-400">Saved. You are on the list.</p>}
+                <p className="mt-3 text-center text-sm text-zinc-400">
+                  {plan === 'pro' ? '$4.99 / month' : '$9.99 / month'}
+                </p>
 
-            <button
-              type="submit"
-              disabled={saving || (!email.trim() && !phone.trim())}
-              className="motion-pulse-soft mt-5 w-full rounded-xl bg-[#CC0033] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#a8002b] disabled:animate-none disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Request Pro access'}
-            </button>
+                {checkoutError && <p className="mt-3 text-sm text-red-400">{checkoutError}</p>}
+
+                <button
+                  type="button"
+                  onClick={handleSubscribe}
+                  disabled={checkoutLoading}
+                  className="mt-4 w-full rounded-xl bg-[#CC0033] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#a8002b] disabled:opacity-50"
+                >
+                  {checkoutLoading ? 'Redirecting...' : 'Subscribe with Stripe'}
+                </button>
+
+                <p className="mt-3 text-[11px] leading-relaxed text-zinc-600">
+                  Clicking opens Stripe&apos;s secure checkout. RU Rate never stores your payment details.
+                </p>
+              </>
+            )}
+
+            {user && subscribed && (
+              <>
+                <div className="mb-5">
+                  <h2 className="text-xl font-black text-white">You&apos;re a Pro subscriber</h2>
+                </div>
+                <div className="rounded-xl border border-green-900 bg-green-950/40 p-4">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-green-400">
+                    <span className="text-base">✓</span>
+                    Active subscription
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {FEATURES.map(feature => (
+                      <li key={feature} className="flex items-start gap-2 text-sm text-zinc-300">
+                        <span className="mt-0.5 shrink-0 text-green-400">✓</span>
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {loading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-[#CC0033]" />
+              </div>
+            )}
 
             <p className="mt-4 text-[11px] leading-relaxed text-zinc-600">
               RU Rate does not register for you, store NetID credentials, or submit WebReg actions.
               It helps you make better decisions and move faster when a seat opens.
             </p>
-          </form>
+          </div>
         </section>
       </main>
     </div>
+  )
+}
+
+export default function ProPage() {
+  return (
+    <Suspense>
+      <ProPageContent />
+    </Suspense>
   )
 }
