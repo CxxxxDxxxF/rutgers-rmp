@@ -8,9 +8,10 @@ import EmptyState from '@/components/EmptyState'
 import { CourseGridSkeleton } from '@/components/LoadingSkeleton'
 
 interface Department {
-  code: string
+  code: string | null
   name: string
   slug: string
+  school?: string
 }
 
 interface Semester {
@@ -68,6 +69,11 @@ function CoursesContent() {
   const suggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
+  // Department combobox
+  const [deptInputValue, setDeptInputValue] = useState('')
+  const [deptOpen, setDeptOpen] = useState(false)
+  const deptComboRef = useRef<HTMLDivElement>(null)
+
   // Fetch departments and semesters for filters.
   useEffect(() => {
     async function loadFilters() {
@@ -118,7 +124,7 @@ function CoursesContent() {
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
   }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
 
-  // Close dropdown on click outside
+  // Close autocomplete dropdown on click outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -128,6 +134,27 @@ function CoursesContent() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Close dept combobox on click outside, revert input to selected dept label
+  useEffect(() => {
+    function handleDeptClickOutside(e: MouseEvent) {
+      if (deptComboRef.current && !deptComboRef.current.contains(e.target as Node)) {
+        setDeptOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleDeptClickOutside)
+    return () => document.removeEventListener('mousedown', handleDeptClickOutside)
+  }, [])
+
+  // Sync dept input display value whenever selectedDept or loaded departments change
+  useEffect(() => {
+    if (!selectedDept) {
+      setDeptInputValue('')
+    } else {
+      const sel = departments.find(d => d.slug === selectedDept)
+      if (sel) setDeptInputValue(sel.code ? `${sel.code} — ${sel.name}` : sel.name)
+    }
+  }, [selectedDept, departments])
 
   // Fetch course suggestions as user types
   const fetchSuggestions = useCallback(async (q: string) => {
@@ -236,6 +263,23 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
+  const groupedDepts = useMemo(() => {
+    const q = deptInputValue.toLowerCase()
+    const filtered = (q && !selectedDept)
+      ? departments.filter(d =>
+          d.name.toLowerCase().includes(q) ||
+          (d.code ?? '').toLowerCase().includes(q)
+        )
+      : departments
+    const groups = new Map<string, Department[]>()
+    for (const d of filtered) {
+      const school = d.school ?? 'Rutgers University'
+      if (!groups.has(school)) groups.set(school, [])
+      groups.get(school)!.push(d)
+    }
+    return Array.from(groups.entries())
+  }, [departments, deptInputValue, selectedDept])
+
   const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
 
   return (
@@ -333,18 +377,82 @@ function CoursesContent() {
               ))}
             </select>
 
-            <select
-              value={selectedDept}
-              onChange={e => setSelectedDept(e.target.value)}
-              className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] sm:min-w-[200px]"
-            >
-              <option value="">All Departments</option>
-              {departments.map(d => (
-                <option key={d.slug} value={d.slug}>
-                  {d.code} — {d.name}
-                </option>
-              ))}
-            </select>
+            {/* Searchable department combobox */}
+            <div ref={deptComboRef} className="relative sm:min-w-[220px]">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={deptInputValue}
+                  placeholder="All Departments"
+                  onChange={e => {
+                    setDeptInputValue(e.target.value)
+                    if (selectedDept) setSelectedDept('')
+                    setDeptOpen(true)
+                  }}
+                  onFocus={() => setDeptOpen(true)}
+                  className="w-full pr-8 pl-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] cursor-pointer"
+                  readOnly={!!selectedDept}
+                  onClick={() => { if (selectedDept) { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(true) } }}
+                />
+                {selectedDept ? (
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    aria-label="Clear department"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                ) : (
+                  <svg
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                )}
+              </div>
+
+              {deptOpen && groupedDepts.length > 0 && (
+                <div className="absolute top-full mt-1 left-0 right-0 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 border-b border-zinc-800 italic"
+                  >
+                    All Departments
+                  </button>
+                  {groupedDepts.map(([school, depts]) => (
+                    <div key={school}>
+                      <div className="px-4 pt-2 pb-1 text-[10px] font-black uppercase tracking-widest text-zinc-600 sticky top-0 bg-zinc-900/95 backdrop-blur-sm">
+                        {school}
+                      </div>
+                      {depts.map(d => (
+                        <button
+                          key={d.slug}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDept(d.slug)
+                            setDeptInputValue(d.code ? `${d.code} — ${d.name}` : d.name)
+                            setDeptOpen(false)
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm border-b border-zinc-800/40 last:border-0 transition-colors ${
+                            selectedDept === d.slug
+                              ? 'bg-[#CC0033]/15 text-[#ff4d6d]'
+                              : 'text-zinc-300 hover:bg-zinc-800'
+                          }`}
+                        >
+                          {d.code && <span className="text-zinc-500 text-xs mr-1.5">{d.code}</span>}
+                          {d.name}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
