@@ -175,7 +175,7 @@ function CourseNumberBadge({ watch }: { watch: WatchedSection }) {
   const styles = {
     open:    'bg-green-500/15 border border-green-500/40 text-green-300 hover:bg-green-500/25',
     closed:  'bg-zinc-800/80 border border-zinc-700 text-zinc-400 hover:bg-zinc-700/60',
-    unknown: 'bg-zinc-800/60 border border-zinc-800 text-zinc-500 hover:bg-zinc-700/50',
+    unknown: 'border text-zinc-500 hover:bg-white/5',
   }[status]
 
   return (
@@ -717,7 +717,7 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
     <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--card-2)] overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 sm:px-5 hover:bg-zinc-900/60 transition-colors group"
+        className="w-full flex items-center justify-between px-4 py-3 sm:px-5 hover:bg-white/5 transition-colors group"
       >
         <div className="flex items-center gap-3">
           <div className={`p-1.5 rounded-lg border transition-colors ${

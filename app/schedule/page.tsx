@@ -279,7 +279,7 @@ export default function SchedulePage() {
             {loading && (
               <div className="flex flex-col items-center gap-4 py-8 text-center">
                 <div className="relative w-12 h-12">
-                  <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+                  <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
                   <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
                 </div>
                 <div>

@@ -15,7 +15,7 @@ export default function GlobalError({
   }, [error])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-4 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center" style={{ background: 'var(--bg)' }}>
       <div
         className="w-16 h-16 rounded-2xl flex items-center justify-center font-black text-white text-xl mb-6 shadow-[0_0_40px_rgba(204,0,51,0.2)]"
         style={{ backgroundColor: '#CC0033' }}
@@ -39,7 +39,7 @@ export default function GlobalError({
         </button>
         <Link
           href="/"
-          className="rounded-xl border border-zinc-700 bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500 transition-colors"
+          className="rounded-xl px-5 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500 transition-colors" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
         >
           Go home
         </Link>

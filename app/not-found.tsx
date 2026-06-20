@@ -3,7 +3,7 @@ import AppHeader from '@/components/AppHeader'
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
       <main className="flex flex-col items-center justify-center px-4 py-32 text-center">
         <div
@@ -26,13 +26,13 @@ export default function NotFound() {
           </Link>
           <Link
             href="/departments"
-            className="rounded-xl border border-zinc-700 bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500 transition-colors"
+            className="rounded-xl px-5 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500 transition-colors" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
           >
             Find professors
           </Link>
           <Link
             href="/"
-            className="rounded-xl border border-zinc-800 px-5 py-2.5 text-sm font-semibold text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-colors"
+            className="rounded-xl px-5 py-2.5 text-sm font-semibold text-zinc-500 hover:text-zinc-300 hover:border-zinc-500 transition-colors" style={{ border: '1px solid var(--border)' }}
           >
             Go home
           </Link>

@@ -417,7 +417,7 @@ function PageLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="relative w-12 h-12">
-        <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+        <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
         <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
       </div>
     </div>
