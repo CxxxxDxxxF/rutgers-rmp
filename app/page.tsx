@@ -143,8 +143,27 @@ export default async function HomePage() {
       <AppHeader />
 
       {/* Hero */}
-      <section className="flex flex-col items-center px-4 sm:px-6 pt-16 sm:pt-24 pb-12 text-center">
-        <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight mb-4">
+      <section className="relative flex flex-col items-center px-4 sm:px-6 pt-16 sm:pt-24 pb-12 text-center overflow-hidden">
+        {/* Scarlet radial bloom */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(204,0,51,0.13) 0%, transparent 70%)',
+          }}
+        />
+        {/* Dot grid */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.18]"
+          style={{
+            backgroundImage: 'radial-gradient(circle, #444 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+            maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
+          }}
+        />
+        <h1 className="relative text-4xl sm:text-5xl md:text-7xl font-black tracking-tight mb-4">
           <span className="text-white">Find the right</span>
           <br />
           <span style={{ color: '#CC0033' }}>Rutgers class.</span>
