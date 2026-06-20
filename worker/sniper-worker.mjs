@@ -17,6 +17,8 @@ const NOTIFY_EMAIL_FROM = process.env.NOTIFY_EMAIL_FROM
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
+const AI_ANALYSIS_INTERVAL_MS = parseInterval(process.env.AI_ANALYSIS_INTERVAL_MS, 30 * 60 * 1000, 60 * 1000)
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error(JSON.stringify({
@@ -49,6 +51,8 @@ let watches = []
 let lastWatchlistLoad = 0
 let loopCount = 0
 let backoffMs = 0
+let lastAnalysisRun = 0
+let analysisRunning = false
 
 main().catch(error => {
   console.error(JSON.stringify({
@@ -74,6 +78,14 @@ async function main() {
 
   while (true) {
     const startedAt = Date.now()
+
+    if (OPENROUTER_API_KEY && !analysisRunning && Date.now() - lastAnalysisRun >= AI_ANALYSIS_INTERVAL_MS) {
+      lastAnalysisRun = Date.now()
+      analysisRunning = true
+      runAnalysisBatch().catch(err => {
+        console.error(JSON.stringify({ event: 'analysis_batch_error', message: errorMessage(err) }))
+      }).finally(() => { analysisRunning = false })
+    }
 
     try {
       if (Date.now() - lastWatchlistLoad >= WATCHLIST_REFRESH_MS) {
@@ -589,6 +601,197 @@ function groupBy(items, keyFn) {
     map.set(key, list)
   }
   return map
+}
+
+async function runAnalysisBatch() {
+  const BATCH_SIZE = 5
+  const ITEM_DELAY_MS = 800
+
+  const { data: batch, error } = await supabase
+    .from('professor_cache')
+    .select('rmp_id, first_name, last_name, department, avg_rating, avg_difficulty, would_take_again, num_ratings')
+    .is('ai_analysis', null)
+    .order('num_ratings', { ascending: false, nullsFirst: false })
+    .limit(BATCH_SIZE)
+
+  if (error) throw new Error(`Analysis batch fetch: ${error.message}`)
+
+  const rows = batch ?? []
+  if (rows.length === 0) {
+    console.log(JSON.stringify({ event: 'analysis_batch_skip', reason: 'none_pending' }))
+    return
+  }
+
+  console.log(JSON.stringify({ event: 'analysis_batch_start', count: rows.length }))
+  let ok = 0
+  let errors = 0
+
+  for (const row of rows) {
+    try {
+      const professor = await rmpGetProfessorById(row.rmp_id)
+      if (!professor) { errors++; continue }
+
+      const ai_analysis = await openRouterAnalyze(
+        `${professor.firstName} ${professor.lastName}`,
+        professor.department,
+        professor.avgRating,
+        professor.avgDifficulty,
+        professor.wouldTakeAgainPercent,
+        professor.ratings
+      )
+
+      await supabase
+        .from('professor_cache')
+        .update({ ai_analysis, cached_at: new Date().toISOString() })
+        .eq('rmp_id', row.rmp_id)
+
+      ok++
+    } catch (err) {
+      errors++
+      console.error(JSON.stringify({
+        event: 'analysis_item_error',
+        rmp_id: row.rmp_id,
+        message: errorMessage(err),
+      }))
+    }
+    await sleep(ITEM_DELAY_MS)
+  }
+
+  console.log(JSON.stringify({ event: 'analysis_batch_complete', ok, errors, total: rows.length }))
+}
+
+async function rmpGetProfessorById(id) {
+  const RMP_GRAPHQL_URL = 'https://www.ratemyprofessors.com/graphql'
+  const RMP_AUTH = 'Basic dGVzdDp0ZXN0'
+  const RMP_TIMEOUT_MS = 8000
+  const query = `
+    query GetProfessor($id: ID!, $cursor: String) {
+      node(id: $id) {
+        ... on Teacher {
+          id firstName lastName department
+          avgRating avgDifficulty wouldTakeAgainPercent numRatings
+          ratings(first: 100, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            edges {
+              node {
+                id class comment qualityRating difficultyRatingRounded
+                thumbsUpTotal thumbsDownTotal date grade
+                isForOnlineClass attendanceMandatory wouldTakeAgain ratingTags
+              }
+            }
+          }
+        }
+      }
+    }
+  `
+  const doFetch = async (vars) => {
+    const res = await fetchWithTimeout(RMP_GRAPHQL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: RMP_AUTH },
+      body: JSON.stringify({ query, variables: vars }),
+    }, RMP_TIMEOUT_MS)
+    if (!res.ok) throw new Error(`RMP API error: ${res.status}`)
+    const data = await res.json()
+    const errs = Array.isArray(data?.errors) ? data.errors : []
+    if (errs.length > 0) throw new Error(`RMP GraphQL: ${errs[0]?.message ?? 'unknown'}`)
+    return data
+  }
+
+  const data = await doFetch({ id, cursor: null })
+  const teacher = data?.data?.node
+  if (!teacher) return null
+
+  const parseEdges = (edges) => (edges ?? []).map(e => ({
+    id: e.node.id,
+    class: e.node.class ?? null,
+    comment: e.node.comment,
+    qualityRating: e.node.qualityRating,
+    difficultyRatingRounded: e.node.difficultyRatingRounded,
+    grade: e.node.grade,
+    wouldTakeAgain: e.node.wouldTakeAgain,
+    tags: e.node.ratingTags ? e.node.ratingTags.split('--') : [],
+  }))
+
+  const ratings = parseEdges(teacher.ratings?.edges)
+  const pageInfo = teacher.ratings?.pageInfo
+  if (pageInfo?.hasNextPage && pageInfo.endCursor && ratings.length < 200) {
+    try {
+      const page2 = await doFetch({ id, cursor: pageInfo.endCursor })
+      ratings.push(...parseEdges(page2?.data?.node?.ratings?.edges))
+    } catch { /* non-fatal */ }
+  }
+
+  return {
+    id: teacher.id,
+    firstName: teacher.firstName,
+    lastName: teacher.lastName,
+    department: teacher.department,
+    avgRating: teacher.avgRating,
+    avgDifficulty: teacher.avgDifficulty,
+    wouldTakeAgainPercent: teacher.wouldTakeAgainPercent,
+    numRatings: teacher.numRatings,
+    ratings,
+  }
+}
+
+async function openRouterAnalyze(name, department, avgRating, avgDifficulty, wouldTakeAgainPercent, ratings) {
+  const recentReviews = ratings
+    .filter(r => r.comment && r.comment.length > 20)
+    .slice(0, 40)
+    .map(r => `[${r.qualityRating}/5, Diff: ${r.difficultyRatingRounded}/5, Grade: ${r.grade || 'N/A'}]: ${r.comment}`)
+    .join('\n')
+
+  const prompt = `You are analyzing a Rutgers University professor for a student-facing Rate My Professor tool.
+
+Professor: ${name}
+Department: ${department}
+Average Rating: ${avgRating}/5
+Average Difficulty: ${avgDifficulty}/5
+Would Take Again: ${wouldTakeAgainPercent?.toFixed(0) ?? 'N/A'}%
+Total Ratings: ${ratings.length}
+
+Recent student reviews:
+${recentReviews}
+
+Rutgers students care most about: grading leniency, attendance policies, exam difficulty, workload per week, whether the textbook is required, and how much the professor affects final grade vs curved exams.
+
+Return a JSON object with these exact fields:
+{
+  "verdict": "take" | "avoid" | "depends",
+  "verdict_reason": "One punchy sentence explaining the verdict (max 20 words)",
+  "teaching_style": "2-3 sentences describing how this prof teaches",
+  "workload": "2-3 sentences on workload, homework, assignments",
+  "grading": "2-3 sentences on grading style, curves, exams",
+  "tips": ["tip1", "tip2", "tip3", "tip4"],
+  "best_for": "One sentence: what type of student thrives with this prof",
+  "worst_for": "One sentence: what type of student struggles",
+  "common_complaints": ["complaint1", "complaint2", "complaint3"],
+  "common_praise": ["praise1", "praise2", "praise3"]
+}
+
+Be direct and honest. Rutgers students want real talk, not sugarcoating. Use student-friendly language.`
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      'HTTP-Referer': APP_BASE_URL ?? 'https://rurate-web-production.up.railway.app',
+      'X-Title': 'RU Rate',
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-haiku-4-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
+
+  if (!res.ok) throw new Error(`OpenRouter error: ${res.status}`)
+  const data = await res.json()
+  const text = data.choices?.[0]?.message?.content ?? ''
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('No JSON in AI response')
+  return JSON.parse(jsonMatch[0])
 }
 
 function sleep(ms) {
