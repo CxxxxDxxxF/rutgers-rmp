@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${spaceGrotesk.className} bg-[#0a0a0a] text-white min-h-screen antialiased`}>
+      <body className={`${spaceGrotesk.className} text-white min-h-screen antialiased`} style={{ background: 'var(--bg)' }}>
         {children}
         <CompareTray />
       </body>

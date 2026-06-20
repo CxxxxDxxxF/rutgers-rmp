@@ -139,7 +139,7 @@ export default async function HomePage() {
   const [popular, hotCourses] = await Promise.all([getPopular(), getHotCourses()])
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       {/* Hero */}
@@ -190,7 +190,8 @@ export default async function HomePage() {
           </Link>
           <Link
             href="/watchlist"
-            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500"
+            className="rounded-xl border px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-colors"
+            style={{ borderColor: 'var(--border)', background: 'var(--card-2)' }}
           >
             Track a section
           </Link>
@@ -207,7 +208,7 @@ export default async function HomePage() {
             <Link
               key={tool.href}
               href={tool.href}
-              className="group bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all"
+              className="group card-warm rounded-2xl p-5"
             >
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center text-white mb-3"
@@ -246,7 +247,7 @@ export default async function HomePage() {
               <Link
                 key={course.id}
                 href={`/course/${course.slug}`}
-                className="group relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-green-800/60 hover:bg-zinc-800/50 transition-all"
+                className="group relative card-warm rounded-xl overflow-hidden"
               >
                 <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-green-500" />
                 <div className="relative pl-5 pr-4 pt-3 pb-3">

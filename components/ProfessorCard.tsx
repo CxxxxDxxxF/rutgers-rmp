@@ -63,7 +63,7 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
     return (
       <Link
         href={`/professor/${professor.slug}?rmpId=${professor.rmp_id}`}
-        className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
+        className="relative block card-warm rounded-xl overflow-hidden group"
       >
         <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
@@ -116,7 +116,7 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
   }
 
   return (
-    <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+    <div className="relative card-warm rounded-2xl overflow-hidden">
       <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ backgroundColor: qColor }} />
 
       <div className="pl-6 pr-6 pt-5 pb-5 space-y-4">
