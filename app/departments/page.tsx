@@ -205,12 +205,17 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'courses', label: 'Most Courses' },
 ]
 
-function abbrevSchool(school: string): string {
+const NB_SCHOOL_ABBREVS = new Set([
+  'SAS', 'SOE', 'RBS', 'Pharmacy', 'MGSA', 'SEBS', 'SSW',
+  'SPH', 'SCJ', 'Nursing', 'GSE', 'iSchool', 'Comm', 'SMLR',
+])
+
+function abbrevSchool(school: string): string | null {
   if (/arts.+sciences/i.test(school)) return 'SAS'
   if (/engineering/i.test(school)) return 'SOE'
   if (/business/i.test(school)) return 'RBS'
   if (/pharmacy/i.test(school)) return 'Pharmacy'
-  if (/mason.+gross/i.test(school) || /arts$/i.test(school)) return 'MGSA'
+  if (/mason.+gross/i.test(school)) return 'MGSA'
   if (/environmental|biological/i.test(school)) return 'SEBS'
   if (/social.+work/i.test(school)) return 'SSW'
   if (/public.+health/i.test(school)) return 'SPH'
@@ -219,9 +224,8 @@ function abbrevSchool(school: string): string {
   if (/education/i.test(school)) return 'GSE'
   if (/information/i.test(school)) return 'iSchool'
   if (/communication/i.test(school)) return 'Comm'
-  if (/newark/i.test(school)) return 'Newark'
-  if (/camden/i.test(school)) return 'Camden'
-  return school.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4)
+  if (/management.+labor|labor.+relations|smlr/i.test(school)) return 'SMLR'
+  return null
 }
 
 export default function DepartmentsPage() {
@@ -239,14 +243,21 @@ export default function DepartmentsPage() {
       .catch(() => { setError('Failed to load departments.'); setLoading(false) })
   }, [])
 
-  const schools = useMemo(
-    () => [...new Set(departments.map(d => d.school))].sort(),
-    [departments]
-  )
+  const schools = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const d of departments) {
+      const abbrev = abbrevSchool(d.school)
+      if (!abbrev) continue
+      counts[abbrev] = (counts[abbrev] ?? 0) + d.professor_count
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([abbrev]) => abbrev)
+  }, [departments])
 
   const filtered = useMemo(() => {
-    let list = departments
-    if (activeSchool) list = list.filter(d => d.school === activeSchool)
+    let list = departments.filter(d => abbrevSchool(d.school) !== null)
+    if (activeSchool) list = list.filter(d => abbrevSchool(d.school) === activeSchool)
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter(d =>
@@ -267,7 +278,7 @@ export default function DepartmentsPage() {
     if (activeSchool || search.trim()) return null
     const groups: Record<string, DepartmentRow[]> = {}
     for (const d of filtered) {
-      const s = d.school || 'Other'
+      const s = abbrevSchool(d.school) ?? 'Other'
       if (!groups[s]) groups[s] = []
       groups[s].push(d)
     }
