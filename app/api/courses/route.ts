@@ -28,11 +28,17 @@ export async function GET(req: NextRequest) {
     // so pagination correctly skips courses with no seats available.
     let openCourseIds: string[] | null = null
     if (openOnly) {
-      const { data: openData } = await supabase
+      let openQuery = supabase
         .from('teaching_assignments')
-        .select('course_id')
+        .select('course_id, semesters!inner ( slug, is_current )')
         .eq('open_status', true)
         .eq('status', 'active')
+      if (semester) {
+        openQuery = openQuery.eq('semesters.slug', semester)
+      } else {
+        openQuery = openQuery.eq('semesters.is_current', true)
+      }
+      const { data: openData } = await openQuery
       openCourseIds = openData ? [...new Set(openData.map((r: { course_id: string }) => r.course_id))] : []
     }
 
@@ -207,6 +213,9 @@ async function loadSectionSummary(courseIds: string[], semesterSlug?: string | n
 
   if (semesterSlug) {
     query = query.eq('semesters.slug', semesterSlug)
+  } else {
+    // Default to current semester only to avoid mixing F2025 (null open_status) with F2026
+    query = query.eq('semesters.is_current', true)
   }
 
   const { data, error } = await query
