@@ -139,7 +139,7 @@ function PhoneInput({
         onChange={handleChange}
         placeholder="(732) 555-1234"
         maxLength={14}
-        className={`w-full pl-14 pr-3 py-2 rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-white outline-none focus:border-[#CC0033] transition-colors ${
+        className={`w-full pl-14 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm text-white outline-none focus:border-[#CC0033] transition-colors ${
           display && displayToE164(display) === '' && display.replace(/\D/g, '').length > 0
             ? 'border-red-800/60'
             : ''
@@ -272,7 +272,7 @@ function InlineNotificationPanel({ watch, onClose }: { watch: WatchedSection; on
       transition={{ duration: 0.22, ease: 'easeInOut' }}
       className="overflow-hidden"
     >
-      <div className="border-t border-zinc-800 mt-3 pt-3 space-y-3">
+      <div className="border-t border-[var(--border)] mt-3 pt-3 space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Alert settings for this snipe</p>
 
         <div className="grid sm:grid-cols-2 gap-3">
@@ -283,7 +283,7 @@ function InlineNotificationPanel({ watch, onClose }: { watch: WatchedSection; on
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="mt-1 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
             />
           </label>
           <label className="block">
@@ -358,10 +358,10 @@ function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean })
   }[status]
 
   const cardBg = newly
-    ? 'bg-zinc-900 border-green-800/60 motion-flash-open'
+    ? 'bg-[var(--card)] border-green-800/60 motion-flash-open'
     : status === 'open'
-    ? 'bg-zinc-900 border-green-900/40'
-    : 'bg-zinc-900 border-zinc-800'
+    ? 'bg-[var(--card)] border-green-900/40'
+    : 'bg-[var(--card)] border-[var(--border)]'
 
   async function handleRemove() {
     if (removing) return
@@ -392,7 +392,7 @@ function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean })
               </span>
               <CourseNumberBadge watch={watch} />
               {s?.semester_name && (
-                <span className="text-[11px] text-zinc-600 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
+                <span className="text-[11px] text-zinc-600 bg-[var(--card)] border border-[var(--border)] rounded px-1.5 py-0.5">
                   {s.semester_name}
                 </span>
               )}
@@ -464,7 +464,7 @@ function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean })
           {/* right side: index + actions */}
           <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
             {indexNumber && (
-              <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5 bg-[var(--card-2)] border border-[var(--border)] rounded-lg px-2.5 py-1.5">
                 <span className="font-mono text-sm font-bold text-zinc-200">{indexNumber}</span>
                 <CopyButton value={indexNumber} label="index" />
               </div>
@@ -476,7 +476,7 @@ function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean })
                   href={s.source_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 transition-colors"
+                  className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-zinc-500 hover:text-white hover:border-zinc-500 transition-colors"
                 >
                   SOC ↗
                 </a>
@@ -488,7 +488,7 @@ function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean })
                 className={`p-1.5 rounded-lg border transition-colors ${
                   hasAlerts
                     ? 'bg-[#CC0033]/15 border-[#CC0033]/40 text-[#ff4d6d] hover:bg-[#CC0033]/25'
-                    : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-200 hover:border-zinc-500'
+                    : 'bg-[var(--card)] border-[var(--border)] text-zinc-500 hover:text-zinc-200 hover:border-zinc-500'
                 }`}
               >
                 {hasAlerts ? (
@@ -504,7 +504,7 @@ function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean })
               <button
                 onClick={handleRemove}
                 disabled={removing}
-                className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900/60 hover:bg-red-950/20 transition-colors disabled:opacity-40"
+                className="p-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-zinc-500 hover:text-red-400 hover:border-red-900/60 hover:bg-red-950/20 transition-colors disabled:opacity-40"
                 title="Remove snipe"
               >
                 {removing ? (
@@ -714,7 +714,7 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
   }
 
   return (
-    <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden">
+    <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--card-2)] overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 sm:px-5 hover:bg-zinc-900/60 transition-colors group"
@@ -751,7 +751,7 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
-            <div className="border-t border-zinc-800 px-4 pt-4 pb-5 sm:px-5 space-y-4">
+            <div className="border-t border-[var(--border)] px-4 pt-4 pb-5 sm:px-5 space-y-4">
               <p className="text-xs text-zinc-500">Applies to all your snipes. You can also set per-snipe alerts via the 🔔 on each card.</p>
 
               <div className="grid sm:grid-cols-2 gap-3">
@@ -762,7 +762,7 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="mt-1.5 w-full rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+                    className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
                   />
                 </label>
                 <label className="block">
@@ -784,7 +784,7 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
                     className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
                       checked
                         ? 'bg-[#CC0033]/10 border-[#CC0033]/40 text-white'
-                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600'
+                        : 'bg-[var(--card)] border-[var(--border)] text-zinc-400 hover:border-zinc-600'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1 mb-0.5">
@@ -882,8 +882,8 @@ function QuickSnipeBox() {
   }
 
   return (
-    <section className="mb-6 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
-      <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/60 px-4 py-3 sm:px-5">
+    <section className="mb-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card-2)]">
+      <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 sm:px-5">
         <div className="h-2 w-2 rounded-full bg-[#CC0033] motion-pulse-soft" />
         <span className="text-sm font-semibold text-white">Paste an index. Start sniping.</span>
         <Badge tone="scarlet" className="ml-auto">Live worker</Badge>
@@ -903,7 +903,7 @@ function QuickSnipeBox() {
                   placeholder="Index number (e.g. 26253)"
                   maxLength={12}
                   className={`w-full min-h-12 rounded-xl border bg-black px-4 py-3 font-mono text-lg font-black tracking-wider text-white outline-none transition-all ${
-                    error ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-[#CC0033]'
+                    error ? 'border-red-500 focus:border-red-400' : 'border-[var(--border)] focus:border-[#CC0033]'
                   }`}
                 />
                 {indexNumber.replace(/\D/g, '').length === 5 && !error && (
@@ -964,7 +964,7 @@ function QuickSnipeBox() {
           </div>
 
           {/* alert contact */}
-          <div className="rounded-xl border border-zinc-800 bg-black/40 p-4 lg:w-64">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)]/40 p-4 lg:w-64">
             <p className="text-xs font-semibold text-zinc-300 mb-3">Alert contact</p>
             <div className="space-y-2">
               <input
@@ -972,7 +972,7 @@ function QuickSnipeBox() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="Email"
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
               />
               <PhoneInput value={phone} onChange={setPhone} />
               <div className="flex gap-3 text-xs text-zinc-400">
@@ -996,7 +996,7 @@ function QuickSnipeBox() {
             { n: '2', title: 'Alert', desc: 'Email · SMS · browser notification' },
             { n: '3', title: 'Register', desc: 'Copy index → WebReg' },
           ].map(step => (
-            <div key={step.n} className="rounded-xl border border-zinc-800/60 bg-black/30 p-2.5">
+            <div key={step.n} className="rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/30 p-2.5">
               <span className="block font-bold text-zinc-400 mb-0.5">{step.n}. {step.title}</span>
               {step.desc}
             </div>
@@ -1013,7 +1013,7 @@ function StatCards({ total, openCount, closedCount, alertCount }: { total: numbe
   return (
     <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
       {[
-        { value: total, label: 'snipes', border: 'border-zinc-800', bg: 'bg-zinc-900', num: 'text-white' },
+        { value: total, label: 'snipes', border: 'border-[var(--border)]', bg: 'bg-[var(--card)]', num: 'text-white' },
         { value: openCount, label: 'open now', border: 'border-green-900/50', bg: 'bg-green-950/20', num: 'text-green-400' },
         { value: closedCount, label: 'closed', border: 'border-red-900/40', bg: 'bg-red-950/15', num: 'text-red-400' },
         { value: alertCount, label: 'new alerts', border: 'border-amber-900/50', bg: 'bg-amber-950/20', num: 'text-amber-400' },
@@ -1054,7 +1054,7 @@ function FilterBar({
 
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+      <div className="flex items-center gap-1 bg-[var(--card)] border border-[var(--border)] rounded-xl p-1">
         {tabs.map(t => (
           <button
             key={t.id}
@@ -1149,7 +1149,7 @@ export default function WatchlistPage() {
   }, [items, tab, sort])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 pb-28">
@@ -1199,7 +1199,7 @@ export default function WatchlistPage() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-6 py-10 text-center text-zinc-500 text-sm"
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)]/40 px-6 py-10 text-center text-zinc-500 text-sm"
               >
                 No snipes match this filter.
               </motion.div>
@@ -1262,14 +1262,14 @@ export default function WatchlistPage() {
         )}
 
         {/* footer explainer */}
-        <div className="mt-10 rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-4 text-[11px] text-zinc-600 leading-relaxed space-y-1.5">
+        <div className="mt-10 rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/30 p-4 text-[11px] text-zinc-600 leading-relaxed space-y-1.5">
           <p className="font-semibold text-zinc-400 text-xs">How the sniper works</p>
           <p>The Railway worker polls the Rutgers Schedule of Classes every 500 ms, compares open/closed status against what was last recorded, and fires email/SMS alerts when a watched section changes. Status is not live — always confirm in WebReg before planning around it.</p>
           <p>RU Rate never auto-registers, never touches WebReg on your behalf, and never stores your NetID. Your watchlist is tied to this browser — clearing site data clears it.</p>
         </div>
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-4">
+      <footer className="border-t px-6 py-6 mt-4" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
           RU Rate Course Sniper · Status from Rutgers Schedule of Classes
         </div>

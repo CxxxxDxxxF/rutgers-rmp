@@ -43,14 +43,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="mx-auto max-w-sm px-4 py-16">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-6 shadow-2xl">
           <h1 className="mb-6 text-xl font-black text-white">Sign in to RU Rate</h1>
 
-          <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-zinc-900 p-1">
+          <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-[var(--card)] p-1">
             <button
               type="button"
               onClick={() => { setMode('signin'); setError(null); setSignedUp(false) }}
@@ -72,7 +72,7 @@ export default function LoginPage() {
           </div>
 
           {signedUp ? (
-            <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 text-sm text-green-400">
+            <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-4 text-sm text-green-400">
               Check your email to confirm your account.
             </p>
           ) : (
@@ -83,7 +83,7 @@ export default function LoginPage() {
                 onChange={e => setEmail(e.target.value)}
                 placeholder="Email"
                 required
-                className="w-full rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
               />
               <input
                 type="password"
@@ -91,7 +91,7 @@ export default function LoginPage() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Password"
                 required
-                className="w-full rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
               />
 
               {error && <p className="text-sm text-red-400">{error}</p>}
