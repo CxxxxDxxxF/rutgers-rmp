@@ -30,7 +30,9 @@ const WRITE = process.argv.includes('--write')
 const PAGE_SIZE = 1000
 const YEAR = '2025'
 const TERM = '9'
-const CAMPUSES = ['NB', 'NK', 'CM']
+// New Brunswick only — pulling NK/CM subject metadata leaks Camden/Newark
+// school labels onto New Brunswick departments.
+const CAMPUSES = ['NB']
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY

@@ -79,6 +79,14 @@ export async function GET() {
       }
     })
 
+    // Rank by popularity so the most-used departments lead the list/dropdown
+    // instead of niche departments surfacing first alphabetically.
+    result.sort(
+      (a, b) =>
+        b.professor_count - a.professor_count ||
+        a.name.localeCompare(b.name)
+    )
+
     return NextResponse.json(result)
   } catch (err) {
     log.error('Departments API error:', err)

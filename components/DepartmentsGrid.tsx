@@ -87,7 +87,19 @@ export default function DepartmentsGrid({ departments }: { departments: Departme
     return groups
   }, [filtered])
 
-  const schools = Object.keys(grouped).sort()
+  // Order school sections by aggregate size so the biggest schools lead, and
+  // push the catch-all "Other" group to the end regardless of size.
+  const schools = useMemo(() => {
+    const totals: Record<string, number> = {}
+    for (const [school, depts] of Object.entries(grouped)) {
+      totals[school] = depts.reduce((sum, d) => sum + d.professor_count, 0)
+    }
+    return Object.keys(grouped).sort((a, b) => {
+      if (a === 'Other') return 1
+      if (b === 'Other') return -1
+      return totals[b] - totals[a] || a.localeCompare(b)
+    })
+  }, [grouped])
   const isFiltered = search.trim().length > 0
 
   return (

@@ -56,24 +56,31 @@ async function getDepartments(): Promise<DepartmentRow[]> {
       }
     }
 
-    return departments.map((d) => {
-      const stats = deptStats[d.id]
-      const avg =
-        stats && stats.ratings.length > 0
-          ? stats.ratings.reduce((a, b) => a + b, 0) / stats.ratings.length
-          : null
+    return departments
+      .map((d) => {
+        const stats = deptStats[d.id]
+        const avg =
+          stats && stats.ratings.length > 0
+            ? stats.ratings.reduce((a, b) => a + b, 0) / stats.ratings.length
+            : null
 
-      return {
-        id: d.id,
-        code: d.code,
-        name: d.name,
-        full_name: d.full_name ?? d.name,
-        school: d.school ?? 'Rutgers University',
-        slug: d.slug,
-        professor_count: stats?.count ?? 0,
-        avg_rating: avg != null ? Math.round(avg * 10) / 10 : null,
-      }
-    })
+        return {
+          id: d.id,
+          code: d.code,
+          name: d.name,
+          full_name: d.full_name ?? d.name,
+          school: d.school ?? 'Other',
+          slug: d.slug,
+          professor_count: stats?.count ?? 0,
+          avg_rating: avg != null ? Math.round(avg * 10) / 10 : null,
+        }
+      })
+      // Rank by popularity so prominent departments lead each school section.
+      .sort(
+        (a, b) =>
+          b.professor_count - a.professor_count ||
+          a.name.localeCompare(b.name)
+      )
   } catch {
     return []
   }
