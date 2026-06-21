@@ -52,7 +52,7 @@ function ProPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       {paymentSuccess && (
@@ -79,7 +79,7 @@ function ProPageContent() {
 
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
               {FEATURES.map(feature => (
-                <div key={feature} className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4 text-sm text-zinc-300">
+                <div key={feature} className="rounded-xl border border-[var(--border)] bg-[var(--card)]/70 p-4 text-sm text-zinc-300">
                   <span className="mr-2 text-green-400">✓</span>
                   {feature}
                 </div>
@@ -96,14 +96,14 @@ function ProPageContent() {
               </Link>
               <Link
                 href="/watchlist"
-                className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500"
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-zinc-200 hover:border-zinc-500"
               >
                 Open sniper
               </Link>
             </div>
           </div>
 
-          <div className="motion-rise rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-2xl">
+          <div className="motion-rise rounded-2xl p-5 sm:p-6 shadow-2xl" style={{ border: '1px solid var(--border)', background: 'var(--card-2)' }}>
             {!user && !loading && (
               <>
                 <div className="mb-5">
@@ -132,7 +132,7 @@ function ProPageContent() {
                   <p className="mt-1 text-sm text-zinc-500">Billed monthly. Cancel any time.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 rounded-xl bg-zinc-900 p-1">
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-[var(--card)] p-1">
                   <button
                     type="button"
                     onClick={() => setPlan('pro')}

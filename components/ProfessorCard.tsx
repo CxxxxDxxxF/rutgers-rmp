@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import NumberTicker from '@/components/NumberTicker'
 import type { ProfessorCache } from '@/lib/supabase'
 
 interface ProfessorCardProps {
@@ -62,7 +63,7 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
     return (
       <Link
         href={`/professor/${professor.slug}?rmpId=${professor.rmp_id}`}
-        className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
+        className="relative block card-warm rounded-xl overflow-hidden group"
       >
         <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
@@ -78,14 +79,18 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
             <div className="flex items-center gap-2.5">
               <div className="text-center">
                 <div className="text-xl font-black leading-none" style={{ color: qColor }}>
-                  {professor.avg_rating?.toFixed(1)}
+                  {professor.avg_rating != null
+                    ? <NumberTicker value={professor.avg_rating} decimals={1} />
+                    : '—'}
                 </div>
                 <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
               </div>
               <div className="h-7 w-px bg-zinc-800" />
               <div className="text-center">
                 <div className="text-xl font-black leading-none" style={{ color: dColor }}>
-                  {professor.avg_difficulty?.toFixed(1)}
+                  {professor.avg_difficulty != null
+                    ? <NumberTicker value={professor.avg_difficulty} decimals={1} />
+                    : '—'}
                 </div>
                 <div className="text-[10px] text-zinc-600 mt-0.5">Diff</div>
               </div>
@@ -111,7 +116,7 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
   }
 
   return (
-    <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+    <div className="relative card-warm rounded-2xl overflow-hidden">
       <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ backgroundColor: qColor }} />
 
       <div className="pl-6 pr-6 pt-5 pb-5 space-y-4">

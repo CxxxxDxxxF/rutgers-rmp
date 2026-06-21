@@ -59,7 +59,7 @@ function ShareCompareButton({ ids }: { ids: string[] }) {
       className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
         copied
           ? 'border-green-800 bg-green-950/30 text-green-400'
-          : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-white'
+          : 'text-zinc-400 hover:border-zinc-500 hover:text-white border-[var(--border)] bg-[var(--card)]'
       }`}
     >
       {copied ? '✓ Copied' : '↗ Share link'}
@@ -135,7 +135,7 @@ function CompareContent() {
     .filter(Boolean)
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 pb-28">
@@ -203,10 +203,10 @@ function CompareContent() {
               </div>
             )}
 
-            <div className="overflow-x-auto rounded-2xl border border-zinc-800">
+            <div className="overflow-x-auto rounded-2xl" style={{ border: '1px solid var(--border)' }}>
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
-                  <tr className="bg-zinc-900">
+                  <tr style={{ background: 'var(--card)' }}>
                     <th className="text-left px-4 py-4 text-[11px] uppercase tracking-wider text-zinc-500 font-semibold w-36 sm:w-44">
                       Professor
                     </th>
@@ -231,7 +231,7 @@ function CompareContent() {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/70">
+                <tbody className="divide-y divide-[rgba(255,255,255,0.07)]">
                   <Row label="Rating">
                     {professors.map(p => (
                       <td key={p.rmp_id} className="px-4 py-3">
@@ -335,7 +335,7 @@ function CompareContent() {
                     ))}
                   </Row>
                   {commonCourses.length > 0 && (
-                    <tr className="border-t border-zinc-800">
+                    <tr style={{ borderTop: '1px solid var(--border)' }}>
                       <td className="px-4 py-3 text-[11px] uppercase tracking-wider text-zinc-500 font-semibold whitespace-nowrap align-top">
                         Taught by all
                       </td>
@@ -368,7 +368,7 @@ function CompareContent() {
                                 className={`text-[11px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
                                   commonCourses.some(cc => cc.slug === c.slug)
                                     ? 'bg-[#CC0033]/10 border-[#CC0033]/40 text-[#ff4d6d] hover:bg-[#CC0033]/20'
-                                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-[#CC0033]/60 hover:text-white'
+                                    : 'text-zinc-300 bg-[var(--card)] border-[var(--border)] hover:border-[#CC0033]/60 hover:text-white'
                                 }`}
                               >
                                 {c.course_number}
@@ -393,7 +393,7 @@ function CompareContent() {
         )}
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
           RU Rate — Compare Rutgers Professors
         </div>
@@ -404,7 +404,7 @@ function CompareContent() {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <tr className="bg-zinc-900/40">
+    <tr style={{ background: 'rgba(20,15,17,0.4)' }}>
       <td className="px-4 py-3 text-[11px] uppercase tracking-wider text-zinc-500 font-semibold align-top">
         {label}
       </td>
@@ -415,9 +415,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function PageLoading() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="relative w-12 h-12">
-        <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+        <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
         <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
       </div>
     </div>

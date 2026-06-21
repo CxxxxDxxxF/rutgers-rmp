@@ -193,7 +193,7 @@ function CoursesContent() {
         const res = await fetch(qs ? `/api/courses?${qs}` : '/api/courses')
         if (!res.ok) throw new Error('Failed to load courses')
         const data = await res.json()
-        setCourses(Array.isArray(data) ? data : [])
+        setCourses(Array.isArray(data?.courses) ? data.courses : [])
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -239,7 +239,7 @@ function CoursesContent() {
   const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 pb-28">
@@ -273,14 +273,15 @@ function CoursesContent() {
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => suggestions.length > 0 && setDropdownOpen(true)}
                 placeholder="Search by name or number (e.g. 198:111 or Data Structures)..."
-                className="w-full pl-9 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
                 autoComplete="off"
               />
 
               {/* Suggestion dropdown */}
               {dropdownOpen && suggestions.length > 0 && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden shadow-2xl z-50 max-h-64 overflow-y-auto">
-                  <div className="px-4 pt-2 pb-1 text-[10px] font-black uppercase tracking-widest text-zinc-600 sticky top-0 bg-zinc-900">
+                <div className="absolute top-full mt-1 left-0 right-0 rounded-xl overflow-hidden shadow-2xl z-50 max-h-64 overflow-y-auto" style={{ background: 'var(--card-2)', border: '1px solid var(--border)' }}>
+                  <div className="px-4 pt-2 pb-1 text-[10px] font-black uppercase tracking-widest text-zinc-600 sticky top-0" style={{ background: 'var(--card-2)' }}>
                     Course suggestions
                   </div>
                   {suggestions.map((course, i) => (
@@ -288,9 +289,13 @@ function CoursesContent() {
                       key={course.id}
                       onClick={() => handleSuggestionSelect(course)}
                       onMouseEnter={() => setSelectedIdx(i)}
-                      className={`w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors border-b border-zinc-800/40 last:border-0 ${
-                        i === selectedIdx ? 'bg-zinc-800' : 'hover:bg-zinc-800/60'
+                      className={`w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors ${
+                        i === selectedIdx ? '' : ''
                       }`}
+                      style={{
+                        borderBottom: '1px solid var(--border)',
+                        background: i === selectedIdx ? 'var(--card)' : undefined,
+                      }}
                     >
                       <span
                         className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded text-white"
@@ -319,11 +324,12 @@ function CoursesContent() {
               )}
             </div>
 
-            {/* Department dropdown */}
+            {/* Semester dropdown */}
             <select
               value={selectedSemester}
               onChange={e => setSelectedSemester(e.target.value)}
-              className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] sm:min-w-[160px]"
+              className="px-4 py-2.5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#CC0033] sm:min-w-[160px] transition-colors"
+              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
             >
               <option value="">All Semesters</option>
               {semesters.map(s => (
@@ -336,7 +342,8 @@ function CoursesContent() {
             <select
               value={selectedDept}
               onChange={e => setSelectedDept(e.target.value)}
-              className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] sm:min-w-[200px]"
+              className="px-4 py-2.5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#CC0033] sm:min-w-[200px] transition-colors"
+              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
             >
               <option value="">All Departments</option>
               {departments.map(d => (
@@ -351,7 +358,8 @@ function CoursesContent() {
             <select
               value={credits}
               onChange={e => setCredits(e.target.value)}
-              className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-[#CC0033]"
+              className="px-3 py-2 rounded-lg text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
+              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
             >
               {CREDIT_OPTIONS.map(c => (
                 <option key={c} value={c}>{c === '' ? 'Any credits' : `${c} credits`}</option>
@@ -361,7 +369,8 @@ function CoursesContent() {
             <select
               value={level}
               onChange={e => setLevel(e.target.value)}
-              className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-[#CC0033]"
+              className="px-3 py-2 rounded-lg text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
+              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
             >
               <option value="">Any level</option>
               {levels.map(l => (
@@ -374,8 +383,9 @@ function CoursesContent() {
               className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
                 onlyWithOpen
                   ? 'bg-green-950 border-green-800 text-green-400'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                  : 'text-zinc-400 hover:text-white'
               }`}
+              style={!onlyWithOpen ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
             >
               Open seats only
             </button>
@@ -385,8 +395,9 @@ function CoursesContent() {
               className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
                 onlyWithSections
                   ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                  : 'text-zinc-400 hover:text-white'
               }`}
+              style={!onlyWithSections ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
             >
               Has sections
             </button>
@@ -394,11 +405,12 @@ function CoursesContent() {
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors focus:outline-none ${
-                sortBy !== 'number'
-                  ? 'bg-zinc-800 border-zinc-600 text-zinc-200'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-              }`}
+              className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
+              style={{
+                background: sortBy !== 'number' ? 'var(--card-2)' : 'var(--card)',
+                border: `1px solid ${sortBy !== 'number' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
+                color: sortBy !== 'number' ? 'white' : '#a1a1aa',
+              }}
             >
               <option value="number">Sort: Course #</option>
               <option value="open">Sort: Most Open</option>
@@ -483,7 +495,7 @@ function CoursesContent() {
         )}
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
           RU Rate — Rutgers Course Browser · Course data from the Rutgers Schedule of Classes
         </div>
@@ -494,7 +506,7 @@ function CoursesContent() {
 
 function PageLoading() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
         <CourseGridSkeleton count={8} />
       </main>

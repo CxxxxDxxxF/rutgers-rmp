@@ -28,7 +28,7 @@ function DeptCard({ dept }: { dept: DepartmentRow }) {
   return (
     <Link
       href={`/department/${dept.slug}`}
-      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all group"
+      className="block rounded-xl p-5 hover:border-[#CC0033]/50 transition-all group" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
@@ -57,13 +57,13 @@ function DeptCard({ dept }: { dept: DepartmentRow }) {
         </span>
         {dept.course_count > 0 && (
           <>
-            <span className="w-1 h-1 rounded-full bg-zinc-700 shrink-0" />
+            <span className="w-1 h-1 rounded-full shrink-0" style={{ background: 'var(--border)' }} />
             <span>{dept.course_count} course{dept.course_count !== 1 ? 's' : ''}</span>
           </>
         )}
         {dept.avg_rating != null && (
           <>
-            <span className="w-1 h-1 rounded-full bg-zinc-700 shrink-0" />
+            <span className="w-1 h-1 rounded-full shrink-0" style={{ background: 'var(--border)' }} />
             <span style={{ color: ratingColor(dept.avg_rating) }}>
               {dept.avg_rating.toFixed(1)} avg
             </span>
@@ -128,7 +128,7 @@ function RateProfessorSearch() {
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 sm:p-6 mb-8">
+    <div className="rounded-2xl p-5 sm:p-6 mb-8" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h2 className="text-sm font-semibold text-white">Rate a Professor</h2>
@@ -157,19 +157,19 @@ function RateProfessorSearch() {
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="Search professor name…"
-          className="w-full pl-10 pr-4 py-3 bg-zinc-950 border border-zinc-700 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] transition-colors"
+          className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] transition-colors" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
           autoComplete="off"
         />
         {searching && (
           <div className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-zinc-600 border-t-[#CC0033] animate-spin" />
         )}
         {open && results.length > 0 && (
-          <div className="absolute z-20 top-full mt-1.5 left-0 right-0 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden">
+          <div className="absolute z-20 top-full mt-1.5 left-0 right-0 rounded-xl shadow-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
             {results.map(prof => (
               <button
                 key={prof.slug}
                 onMouseDown={() => go(prof)}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 transition-colors text-left border-b border-zinc-800/60 last:border-0"
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors text-left border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.07)' }}
               >
                 <span className="text-sm font-semibold text-white">
                   {prof.firstName} {prof.lastName}
@@ -205,12 +205,12 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'courses', label: 'Most Courses' },
 ]
 
-function abbrevSchool(school: string): string {
+function abbrevSchool(school: string): string | null {
   if (/arts.+sciences/i.test(school)) return 'SAS'
   if (/engineering/i.test(school)) return 'SOE'
   if (/business/i.test(school)) return 'RBS'
   if (/pharmacy/i.test(school)) return 'Pharmacy'
-  if (/mason.+gross/i.test(school) || /arts$/i.test(school)) return 'MGSA'
+  if (/mason.+gross/i.test(school)) return 'MGSA'
   if (/environmental|biological/i.test(school)) return 'SEBS'
   if (/social.+work/i.test(school)) return 'SSW'
   if (/public.+health/i.test(school)) return 'SPH'
@@ -219,9 +219,8 @@ function abbrevSchool(school: string): string {
   if (/education/i.test(school)) return 'GSE'
   if (/information/i.test(school)) return 'iSchool'
   if (/communication/i.test(school)) return 'Comm'
-  if (/newark/i.test(school)) return 'Newark'
-  if (/camden/i.test(school)) return 'Camden'
-  return school.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4)
+  if (/management.+labor|labor.+relations|smlr/i.test(school)) return 'SMLR'
+  return null
 }
 
 export default function DepartmentsPage() {
@@ -239,14 +238,21 @@ export default function DepartmentsPage() {
       .catch(() => { setError('Failed to load departments.'); setLoading(false) })
   }, [])
 
-  const schools = useMemo(
-    () => [...new Set(departments.map(d => d.school))].sort(),
-    [departments]
-  )
+  const schools = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const d of departments) {
+      const abbrev = abbrevSchool(d.school)
+      if (!abbrev) continue
+      counts[abbrev] = (counts[abbrev] ?? 0) + d.professor_count
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([abbrev]) => abbrev)
+  }, [departments])
 
   const filtered = useMemo(() => {
-    let list = departments
-    if (activeSchool) list = list.filter(d => d.school === activeSchool)
+    let list = departments.filter(d => abbrevSchool(d.school) !== null)
+    if (activeSchool) list = list.filter(d => abbrevSchool(d.school) === activeSchool)
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter(d =>
@@ -267,7 +273,7 @@ export default function DepartmentsPage() {
     if (activeSchool || search.trim()) return null
     const groups: Record<string, DepartmentRow[]> = {}
     for (const d of filtered) {
-      const s = d.school || 'Other'
+      const s = abbrevSchool(d.school) ?? 'Other'
       if (!groups[s]) groups[s] = []
       groups[s].push(d)
     }
@@ -278,13 +284,13 @@ export default function DepartmentsPage() {
   const statsCourses = departments.reduce((s, d) => s + d.course_count, 0)
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-10">
         {/* Header */}
         <div className="mb-8">
-          <div className="mb-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">
+          <div className="mb-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs text-zinc-400" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
             <span className="w-1.5 h-1.5 rounded-full bg-[#CC0033]" />
             {loading ? '…' : departments.length} Departments
           </div>
@@ -305,7 +311,7 @@ export default function DepartmentsPage() {
               { label: 'Professors', value: statsProfs },
               { label: 'Courses', value: statsCourses },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-center">
+              <div key={label} className="rounded-xl p-4 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
                 <div className="text-2xl font-black text-white tabular-nums">
                   {value.toLocaleString()}
                 </div>
@@ -326,7 +332,7 @@ export default function DepartmentsPage() {
               className={`text-xs px-3 py-1.5 rounded-full border transition-all font-semibold ${
                 activeSchool === null
                   ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d]'
-                  : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                  : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
               }`}
             >
               All
@@ -338,7 +344,7 @@ export default function DepartmentsPage() {
                 className={`text-xs px-3 py-1.5 rounded-full border transition-all font-semibold ${
                   activeSchool === school
                     ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d]'
-                    : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                    : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
                 }`}
               >
                 {abbrevSchool(school)}
@@ -363,7 +369,7 @@ export default function DepartmentsPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search by name or code…"
-                className="w-full pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
                 autoComplete="off"
               />
             </div>
@@ -374,8 +380,8 @@ export default function DepartmentsPage() {
                   onClick={() => setSort(opt.value)}
                   className={`text-xs px-3 py-2 rounded-lg border transition-all ${
                     sort === opt.value
-                      ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
-                      : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      ? 'border-[var(--border)] bg-[var(--card-2)] text-white font-semibold'
+                      : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
                   }`}
                 >
                   {opt.label}
@@ -389,7 +395,7 @@ export default function DepartmentsPage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <div className="relative w-12 h-12">
-              <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+              <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
               <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
             </div>
             <p className="text-sm text-zinc-500">Loading departments…</p>
@@ -423,7 +429,7 @@ export default function DepartmentsPage() {
                   <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider whitespace-nowrap">
                     {school}
                   </h2>
-                  <div className="flex-1 h-px bg-zinc-800" />
+                  <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
                   <span className="text-xs text-zinc-600 shrink-0">
                     {grouped[school].length} dept{grouped[school].length !== 1 ? 's' : ''}
                   </span>
@@ -455,7 +461,7 @@ export default function DepartmentsPage() {
         )}
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="px-6 py-6 mt-10" style={{ borderTop: '1px solid var(--border)' }}>
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
           <span>RU Rate — Rutgers University Professor Reviews</span>
           <span>Data sourced from RateMyProfessors · Powered by Claude AI</span>

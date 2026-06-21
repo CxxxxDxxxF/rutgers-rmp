@@ -54,7 +54,7 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
   return (
     <Link
       href={href}
-      className="group relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all"
+      className="group relative block card-warm rounded-xl overflow-hidden"
     >
       {/* Status accent bar */}
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: accentColor }} />

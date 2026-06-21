@@ -103,7 +103,7 @@ function ProfessorCard({ prof }: { prof: ProfessorRow }) {
   return (
     <Link
       href={href}
-      className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
+      className="relative block bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-[var(--card)]/50 transition-all group"
     >
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
@@ -125,7 +125,7 @@ function ProfessorCard({ prof }: { prof: ProfessorRow }) {
               </div>
               {prof.avg_difficulty != null && (
                 <>
-                  <div className="h-7 w-px bg-zinc-800" />
+                  <div className="h-7 w-px bg-[var(--border)]" />
                   <div className="text-center">
                     <div className="text-xl font-black leading-none" style={{ color: dColor }}>
                       {prof.avg_difficulty.toFixed(1)}
@@ -161,7 +161,7 @@ function CourseRow({
   return (
     <Link
       href={`/course/${course.slug}`}
-      className="flex flex-col gap-2 px-5 py-3.5 hover:bg-zinc-800/50 transition-colors group border-b border-zinc-800 last:border-b-0"
+      className="flex flex-col gap-2 px-5 py-3.5 hover:bg-[var(--card)]/50 transition-colors group border-b border-[var(--border)] last:border-b-0"
     >
       <div className="flex items-center gap-3">
         {/* Availability dot */}
@@ -219,9 +219,9 @@ function CourseRow({
 
 function LoadingSpinner() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: 'var(--bg)' }}>
       <div className="relative w-16 h-16">
-        <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+        <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
         <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
       </div>
       <div className="text-center">
@@ -262,7 +262,7 @@ function DepartmentContent({ slug }: { slug: string }) {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6 bg-[#0a0a0a]">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6" style={{ background: 'var(--bg)' }}>
         <div className="text-5xl">🏛️</div>
         <h1 className="text-xl font-bold text-white">Department not found</h1>
         <p className="text-zinc-500 text-sm">{error ?? 'Could not load department data'}</p>
@@ -290,10 +290,10 @@ function DepartmentContent({ slug }: { slug: string }) {
   const totalSections = Object.values(courseSectionMap).reduce((sum, s) => sum + s.total, 0)
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
-      <div className="border-b border-zinc-900/60 px-6 py-2">
+      <div className="border-b px-6 py-2" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto flex items-center gap-2 text-xs text-zinc-500">
           <Link href="/departments" className="hover:text-zinc-300 transition-colors">
             Departments
@@ -307,7 +307,7 @@ function DepartmentContent({ slug }: { slug: string }) {
         <div className="flex gap-8 items-start">
           <div className="flex-1 min-w-0 space-y-8">
             {/* Hero */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
+            <div className="bg-[var(--card)]/50 border border-[var(--border)] rounded-2xl p-8">
               <div className="text-xs font-mono text-zinc-500 mb-1 uppercase tracking-wider">
                 {department.code}
               </div>
@@ -345,7 +345,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                 Top Professors
               </h2>
               {professors.length === 0 ? (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500 text-sm">
+                <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
                   No professors found for this department yet.
                 </div>
               ) : (
@@ -375,7 +375,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                       placeholder="Filter courses…"
                       value={courseSearch}
                       onChange={e => setCourseSearch(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-44"
+                      className="px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-44"
                     />
                     <Link
                       href={`/courses?dept=${department.slug}`}
@@ -386,7 +386,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                   </div>
                 </div>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
                   {filteredCourses.length === 0 ? (
                     <div className="px-5 py-8 text-center text-zinc-500 text-sm">
                       No courses match &ldquo;{courseSearch}&rdquo;
@@ -417,7 +417,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                   <Link
                     key={rd.id}
                     href={`/department/${rd.slug}`}
-                    className="block bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 hover:text-white hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all"
+                    className="block bg-[var(--card)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-zinc-300 hover:text-white hover:border-[#CC0033]/50 hover:bg-[var(--card)]/50 transition-all"
                   >
                     {rd.name}
                   </Link>
@@ -428,7 +428,7 @@ function DepartmentContent({ slug }: { slug: string }) {
         </div>
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
           <span>RU Rate — Rutgers University Professor Reviews</span>
           <span>Data sourced from RateMyProfessors · Powered by Claude AI</span>

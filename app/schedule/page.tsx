@@ -160,13 +160,13 @@ export default function SchedulePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="max-w-3xl mx-auto px-6 py-12 space-y-10">
         {/* Hero */}
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--card)] border border-[var(--border)] text-xs text-zinc-400">
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#CC0033' }} />
             Schedule Optimizer · Rutgers
           </div>
@@ -180,7 +180,7 @@ export default function SchedulePage() {
 
         {/* Step 1: Input */}
         {step === 'input' && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 space-y-4">
             <div>
               <label className="text-sm font-semibold text-zinc-200 block mb-1">
                 Paste your Rutgers schedule
@@ -192,7 +192,7 @@ export default function SchedulePage() {
                 value={text}
                 onChange={e => setText(e.target.value)}
                 placeholder={`Paste WebReg schedule, or just type names:\n\nInstructor: Smith, John\nInstructor: Doe, Jane\n\n— or —\n\nJohn Smith\nJane Doe`}
-                className="w-full h-56 bg-zinc-950 border border-zinc-700 rounded-xl p-4 text-sm text-zinc-300 placeholder-zinc-700 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] font-mono resize-none"
+                className="w-full h-56 bg-[var(--card-2)] border border-[var(--border)] rounded-xl p-4 text-sm text-zinc-300 placeholder-zinc-700 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] font-mono resize-none"
               />
             </div>
             <button
@@ -209,7 +209,7 @@ export default function SchedulePage() {
         {/* Step 2: Confirm chips */}
         {step === 'confirm' && (
           <div className="space-y-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-white">
                   Professors detected
@@ -227,7 +227,7 @@ export default function SchedulePage() {
                   {chips.map(name => (
                     <div
                       key={name}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-zinc-700 group"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--card)] border border-[var(--border)] group"
                     >
                       <span className="text-sm text-zinc-200">{name}</span>
                       <button
@@ -250,11 +250,11 @@ export default function SchedulePage() {
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChip() } }}
                   placeholder="Add professor manually..."
-                  className="flex-1 px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                  className="flex-1 px-3 py-2 bg-[var(--card-2)] border border-[var(--border)] rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
                 />
                 <button
                   onClick={addChip}
-                  className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-200 bg-[var(--card)] hover:bg-zinc-700 border border-[var(--border)] transition-colors"
                 >
                   Add
                 </button>
@@ -279,7 +279,7 @@ export default function SchedulePage() {
             {loading && (
               <div className="flex flex-col items-center gap-4 py-8 text-center">
                 <div className="relative w-12 h-12">
-                  <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+                  <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
                   <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
                 </div>
                 <div>
@@ -308,7 +308,7 @@ export default function SchedulePage() {
                   )
                 })}
                 {results.filter(r => !r.ai_analysis).length > 0 && (
-                  <div className="px-3 py-1 rounded-lg border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-500">
+                  <div className="px-3 py-1 rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs font-bold text-zinc-500">
                     {results.filter(r => !r.ai_analysis).length} UNANALYZED
                   </div>
                 )}
@@ -317,7 +317,7 @@ export default function SchedulePage() {
                 {results.length > 1 && (
                   <Link
                     href={`/compare?ids=${encodeURIComponent(results.slice(0, MAX_COMPARE).map(r => r.id).join(','))}`}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white transition-colors"
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-zinc-400 hover:border-zinc-500 hover:text-white transition-colors"
                   >
                     Compare All →
                   </Link>
@@ -338,7 +338,7 @@ export default function SchedulePage() {
                   <div
                     key={prof.id}
                     className={`rounded-2xl border p-5 space-y-3 transition-colors ${
-                      vc ? `${vc.bg} ${vc.border}` : 'bg-zinc-900 border-zinc-800'
+                      vc ? `${vc.bg} ${vc.border}` : 'bg-[var(--card)] border-[var(--border)]'
                     } ${isTop ? 'ring-1 ring-[#CC0033]/30' : ''}`}
                   >
                     <div className="flex items-start gap-4 justify-between">
@@ -371,7 +371,7 @@ export default function SchedulePage() {
                             {vc.label}
                           </span>
                         ) : (
-                          <span className="text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-600">
+                          <span className="text-xs font-bold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] text-zinc-600">
                             NO DATA
                           </span>
                         )}
@@ -398,7 +398,7 @@ export default function SchedulePage() {
                     <div className="pl-11 flex items-center gap-3 flex-wrap">
                       <Link
                         href={`/professor/${prof.slug}?rmpId=${prof.id}`}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
                       >
                         Full Analysis
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -423,13 +423,13 @@ export default function SchedulePage() {
 
             {/* Not found */}
             {notFound.length > 0 && (
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-2">
+              <div className="bg-[var(--card)]/60 border border-[var(--border)] rounded-xl p-4 space-y-2">
                 <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                   Not found on RateMyProfessors
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {notFound.map(name => (
-                    <span key={name} className="text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-500 border border-zinc-700">
+                    <span key={name} className="text-xs px-2.5 py-1 rounded-full bg-[var(--card)] text-zinc-500 border border-[var(--border)]">
                       {name}
                     </span>
                   ))}
@@ -452,7 +452,7 @@ export default function SchedulePage() {
         )}
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
           RU Rate — Data sourced from RateMyProfessors · Powered by Claude AI
         </div>

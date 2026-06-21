@@ -24,7 +24,7 @@ export default function AppHeader() {
   }
 
   return (
-    <header className="border-b border-zinc-900 px-4 sm:px-6 py-3 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/92">
+    <header className="px-4 sm:px-6 py-3 sticky top-0 z-40 backdrop-blur-md" style={{ background: 'rgba(9,8,10,0.88)', borderBottom: '1px solid var(--border)' }}>
       <div className="max-w-6xl mx-auto flex items-center gap-3">
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <div
@@ -60,8 +60,9 @@ export default function AppHeader() {
           className={`ml-auto md:ml-2 rounded-lg border px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors ${
             pathname === '/pro'
               ? 'border-[#CC0033]/60 bg-[#CC0033]/15 text-[#ff4d6d]'
-              : 'border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white'
+              : 'text-zinc-200 hover:text-white'
           }`}
+          style={pathname !== '/pro' ? { borderColor: 'var(--border)', background: 'var(--card-2)' } : {}}
         >
           Pro
         </Link>

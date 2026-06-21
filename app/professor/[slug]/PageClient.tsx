@@ -91,8 +91,8 @@ function TagCloud({ ratings, tagCounts: precomputed }: { ratings: Rating[]; tagC
         return (
           <span
             key={tag}
-            className="text-xs px-3 py-1.5 rounded-full border border-zinc-700 text-zinc-300"
-            style={{ backgroundColor: `#CC0033${alpha}`, borderColor: intensity > 0.5 ? '#CC003360' : '#3f3f46' }}
+            className="text-xs px-3 py-1.5 rounded-full border border-[var(--border)] text-zinc-300"
+            style={{ backgroundColor: `#CC0033${alpha}`, borderColor: intensity > 0.5 ? '#CC003360' : undefined }}
           >
             {tag}
             <span className="ml-1.5 text-zinc-500">{count}</span>
@@ -165,7 +165,7 @@ function RelatedProfessorCard({ prof }: { prof: RelatedProfessor }) {
   return (
     <Link
       href={href}
-      className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
+      className="relative block bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
     >
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
       <div className="pl-4 pr-4 py-3 flex items-center justify-between gap-2">
@@ -304,7 +304,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
           Student Reviews on RU Rate
           {total > 0 && (
-            <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500">
+            <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-[var(--card)] text-zinc-500">
               {total}
             </span>
           )}
@@ -332,7 +332,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
       {loading ? (
         <div className="text-sm text-zinc-600 py-4">Loading reviews...</div>
       ) : reviews.length === 0 && !showForm ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center space-y-3">
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center space-y-3">
           <div className="text-2xl">📝</div>
           <p className="text-sm font-semibold text-white">Be the first to review on RU Rate!</p>
           <p className="text-xs text-zinc-500">Share your experience to help fellow Rutgers students.</p>
@@ -350,7 +350,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         <div className="space-y-3">
           {/* Grade summary */}
           {reviews.length > 0 && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <ProfessorGradeBadge grade={nativeGrade} />
                 {nativeStats.review_count >= 2 && (
@@ -367,7 +367,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
                       </div>
                     )}
                     {nativeStats.avg_quality != null && nativeStats.avg_difficulty != null && (
-                      <div className="h-7 w-px bg-zinc-800" />
+                      <div className="h-7 w-px bg-[var(--border)]" />
                     )}
                     {nativeStats.avg_difficulty != null && (
                       <div className="text-center">
@@ -382,7 +382,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
                     )}
                     {nativeStats.would_take_again_pct != null && (
                       <>
-                        <div className="h-7 w-px bg-zinc-800" />
+                        <div className="h-7 w-px bg-[var(--border)]" />
                         <div className="text-center">
                           <div
                             className="text-xl font-black leading-none"
@@ -414,8 +414,8 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
                     onClick={() => setSort(opt.value)}
                     className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition-all ${
                       sort === opt.value
-                        ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
-                        : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                        ? 'border-zinc-600 bg-[var(--card)] text-white font-semibold'
+                        : 'border-[var(--border)] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                     }`}
                   >
                     {opt.label}
@@ -427,7 +427,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
                   {activeTag && (
                     <button
                       onClick={() => setActiveTag(null)}
-                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:text-white transition-all flex items-center gap-1"
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-zinc-600 bg-[var(--card)] text-zinc-300 hover:text-white transition-all flex items-center gap-1"
                     >
                       ✕ Clear
                     </button>
@@ -439,7 +439,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
                       className={`shrink-0 text-xs px-2.5 py-1 rounded-lg border transition-all ${
                         activeTag === tag
                           ? 'border-[#CC0033] bg-[#CC003320] text-[#CC0033] font-semibold'
-                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                          : 'border-[var(--border)] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                       }`}
                     >
                       {tag}
@@ -472,7 +472,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
             <button
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="w-full py-3 rounded-xl border border-zinc-800 text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
+              className="w-full py-3 rounded-xl border border-[var(--border)] text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
             >
               {loadingMore ? 'Loading…' : `Load more (${total - reviews.length} remaining)`}
             </button>
@@ -700,7 +700,7 @@ function TeachingHistorySection({ professorId }: { professorId: string }) {
             <Link
               key={c.course_id}
               href={`/course/${c.course_slug}`}
-              className="group bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 hover:border-[#CC0033]/50 transition-all"
+              className="group bg-[var(--card)] border border-[var(--border)] rounded-xl px-3.5 py-2.5 hover:border-[#CC0033]/50 transition-all"
             >
               <span className="font-mono text-xs text-zinc-500 group-hover:text-[#ff4d6d] transition-colors">
                 {c.course_number}
@@ -717,12 +717,12 @@ function TeachingHistorySection({ professorId }: { professorId: string }) {
       <div className="space-y-4">
         <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Teaching History</h3>
         {semesters.map(sem => (
-          <div key={sem.semester_id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
+          <div key={sem.semester_id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-white text-sm">{sem.semester_name}</span>
               {sem.is_current && <Badge tone="green">CURRENT</Badge>}
             </div>
-            <div className="divide-y divide-zinc-800/60">
+            <div className="divide-y divide-[var(--border)]">
               {sem.courses.map(course => (
                 <div key={course.course_id} className="py-2.5 first:pt-0 last:pb-0">
                   <Link href={`/course/${course.course_slug}`} className="text-sm text-zinc-300 hover:text-[#ff4d6d] transition-colors">
@@ -872,7 +872,7 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
             <Link
               key={p.id}
               href={p.rmp_id ? `/professor/${p.slug}?rmpId=${p.rmp_id}` : `/professor/${p.slug}?socId=${p.id}`}
-              className="relative block bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
+              className="relative block bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden hover:border-[#CC0033]/40 hover:bg-zinc-800/50 transition-all group"
             >
               <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
               <div className="pl-4 pr-4 py-3 flex items-center justify-between gap-2">
@@ -939,9 +939,9 @@ function SocProfessorContent({ socId }: { socId: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: 'var(--bg)' }}>
         <div className="relative w-16 h-16">
-          <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+          <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
           <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
         </div>
         <div className="text-center">
@@ -966,11 +966,11 @@ function SocProfessorContent({ socId }: { socId: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8">
+        <div className="bg-[var(--card)]/50 border border-[var(--border)] rounded-2xl p-6 sm:p-8">
           {prof.department && (
             <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{prof.department}</div>
           )}
@@ -986,7 +986,7 @@ function SocProfessorContent({ socId }: { socId: string }) {
           </div>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5">
           <div className="flex items-center gap-3">
             <span className="text-xl">📋</span>
             <div>
@@ -1005,7 +1005,7 @@ function SocProfessorContent({ socId }: { socId: string }) {
         <SocRelatedSection professorId={socId} />
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
           <span>RU Rate — Rutgers University Professor Reviews</span>
           <span>Data sourced from RateMyProfessors · Powered by Claude AI</span>
@@ -1056,9 +1056,9 @@ function ProfessorContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: 'var(--bg)' }}>
         <div className="relative w-16 h-16">
-          <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+          <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
           <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
         </div>
         <div className="text-center">
@@ -1094,7 +1094,7 @@ function ProfessorContent() {
   })
   const visibleReviews = showAllReviews ? sortedRatings : sortedRatings.slice(0, 8)
 return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
@@ -1103,7 +1103,7 @@ return (
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8"
+          className="bg-[var(--card)]/50 border border-[var(--border)] rounded-2xl p-6 sm:p-8"
         >
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div>
@@ -1135,7 +1135,7 @@ return (
                 )}
               </div>
             ) : (
-              <div className="shrink-0 flex items-center justify-center bg-zinc-800/50 border border-zinc-700 rounded-xl px-6 py-4 text-center">
+              <div className="shrink-0 flex items-center justify-center bg-[var(--card-2)]/50 border border-[var(--border)] rounded-xl px-6 py-4 text-center">
                 <div>
                   <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">RMP Rating</div>
                   <div className="text-sm text-zinc-400 mt-1">No ratings yet</div>
@@ -1180,7 +1180,7 @@ return (
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, delay: 0.12 + i * 0.05 }}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl p-5"
+                className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5"
               >
                 <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">{title}</h3>
                 <p className="text-sm text-zinc-300 leading-relaxed">{content}</p>
@@ -1192,7 +1192,7 @@ return (
         {/* Praise / Complaints */}
         {analysis && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5">
               <h3 className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Common Praise
               </h3>
@@ -1205,7 +1205,7 @@ return (
                 ))}
               </ul>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5">
               <h3 className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Common Complaints
               </h3>
@@ -1223,7 +1223,7 @@ return (
 
         {/* Tips */}
         {analysis?.tips && analysis.tips.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6">
             <h3 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
               <span style={{ color: '#CC0033' }}>★</span> Student Tips
             </h3>
@@ -1233,7 +1233,7 @@ return (
 
         {/* Tag cloud */}
         {ratings.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6">
             <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Common Tags</h3>
             <TagCloud ratings={ratings} tagCounts={tagCounts} />
           </div>
@@ -1241,7 +1241,7 @@ return (
 
         {/* Grade distribution */}
         {ratings.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6">
             <GradeChart ratings={ratings} />
           </div>
         )}
@@ -1273,8 +1273,8 @@ return (
                       onClick={() => setRmpSort(opt.value)}
                       className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
                         rmpSort === opt.value
-                          ? 'border-zinc-600 bg-zinc-800 text-white font-semibold'
-                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                          ? 'border-zinc-600 bg-[var(--card)] text-white font-semibold'
+                          : 'border-[var(--border)] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                       }`}
                     >
                       {opt.label}
@@ -1291,7 +1291,7 @@ return (
             {ratings.length > 8 && !showAllReviews && (
               <button
                 onClick={() => setShowAllReviews(true)}
-                className="mt-4 w-full py-3 rounded-xl border border-zinc-800 text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+                className="mt-4 w-full py-3 rounded-xl border border-[var(--border)] text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
               >
                 Show all {ratings.length} reviews
               </button>
@@ -1303,7 +1303,7 @@ return (
         {rmpId && <RelatedProfessorsSection rmpId={rmpId} />}
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
           <span>RU Rate — Rutgers University Professor Reviews</span>
           <span>Data sourced from RateMyProfessors · Powered by Claude AI</span>
@@ -1322,9 +1322,9 @@ function ProfessorRouter() {
 
 function PageLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: 'var(--bg)' }}>
       <div className="relative w-16 h-16">
-        <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+        <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
         <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
       </div>
       <div className="text-center">

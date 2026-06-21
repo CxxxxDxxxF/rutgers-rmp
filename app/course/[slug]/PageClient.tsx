@@ -88,7 +88,7 @@ function ProfessorOptionCard({ prof }: { prof: Professor }) {
     : '#52525b'
 
   return (
-    <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#CC0033]/40 transition-all group/card">
+    <div className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden hover:border-[#CC0033]/40 transition-all group/card">
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
       <div className="pl-4 pr-5 pt-4 pb-3 space-y-3">
@@ -115,7 +115,7 @@ function ProfessorOptionCard({ prof }: { prof: Professor }) {
                 </div>
               )}
               {prof.avg_rating != null && prof.avg_difficulty != null && (
-                <div className="h-7 w-px bg-zinc-800" />
+                <div className="h-7 w-px bg-[var(--border)]" />
               )}
               {prof.avg_difficulty != null && (
                 <div className="text-center">
@@ -180,7 +180,7 @@ function WatchCourseButton({ courseId }: { courseId: string }) {
       className={`inline-flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl border transition-all disabled:opacity-50 ${
         courseWatch
           ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
-          : 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:border-[#CC0033]/60 hover:text-white'
+          : 'bg-[var(--card)] border-[var(--border)] text-zinc-200 hover:border-[#CC0033]/60 hover:text-white'
       }`}
     >
       {courseWatch ? '★ Watching this course' : '☆ Watch this course'}
@@ -200,7 +200,7 @@ function RegistrationHelper({
     .filter(s => s.open_status === true && s.index_number)
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+    <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 space-y-4">
       <div>
           <h2 className="font-semibold text-white">Registration helper</h2>
           <p className="text-sm text-zinc-500 mt-1">
@@ -209,7 +209,7 @@ function RegistrationHelper({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm">
+        <span className="inline-flex items-center gap-2 bg-[var(--card-2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm">
           <span className="text-zinc-500 text-xs">Course #</span>
           <span className="font-mono text-zinc-200">{course.course_number}</span>
           <CopyButton value={course.course_number} label="course number" />
@@ -218,7 +218,7 @@ function RegistrationHelper({
         {openSections.slice(0, 6).map(s => (
           <span
             key={s.id}
-            className="inline-flex items-center gap-2 bg-zinc-950 border border-green-900/60 rounded-lg px-3 py-2 text-sm"
+            className="inline-flex items-center gap-2 bg-[var(--card-2)] border border-green-900/60 rounded-lg px-3 py-2 text-sm"
           >
             <span className="text-green-500 text-xs">Open · Sec {s.section_number ?? '—'}</span>
             <span className="font-mono text-zinc-200">{s.index_number}</span>
@@ -231,7 +231,7 @@ function RegistrationHelper({
             href={sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg bg-[var(--card-2)] border border-[var(--border)] text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
           >
             Open Rutgers SOC ↗
           </a>
@@ -299,7 +299,7 @@ function SubmissionForm({ courseId }: { courseId: string }) {
           onChange={e => setProfessorName(e.target.value)}
           placeholder="e.g. John Smith"
           required
-          className="w-full px-3 py-2.5 bg-zinc-950 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
+          className="w-full px-3 py-2.5 bg-[var(--card-2)] border border-[var(--border)] rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
         />
       </div>
       <div>
@@ -311,7 +311,7 @@ function SubmissionForm({ courseId }: { courseId: string }) {
           value={semesterCode}
           onChange={e => setSemesterCode(e.target.value)}
           placeholder="e.g. Fall 2024"
-          className="w-full px-3 py-2.5 bg-zinc-950 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
+          className="w-full px-3 py-2.5 bg-[var(--card-2)] border border-[var(--border)] rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
         />
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
@@ -364,10 +364,10 @@ function CourseContent({ slug }: { slug: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a]">
+      <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
         <AppHeader />
         <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 space-y-4">
+          <div className="bg-[var(--card)]/50 border border-[var(--border)] rounded-2xl p-8 space-y-4">
             <SkeletonBlock className="h-6 w-28" />
             <SkeletonBlock className="h-10 w-2/3" />
             <SkeletonBlock className="h-4 w-1/3" />
@@ -380,7 +380,7 @@ function CourseContent({ slug }: { slug: string }) {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a]">
+      <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
         <AppHeader />
         <div className="flex flex-col items-center justify-center gap-4 px-6 py-32">
           <div className="text-5xl">📚</div>
@@ -409,12 +409,12 @@ function CourseContent({ slug }: { slug: string }) {
   const topProfessor = ratedProfessors[0]
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8 pb-28">
         {/* Course hero */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 sm:p-8">
+        <div className="bg-[var(--card)]/50 border border-[var(--border)] rounded-2xl p-6 sm:p-8">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -439,7 +439,7 @@ function CourseContent({ slug }: { slug: string }) {
                     href={`/courses?dept=${department.slug}`}
                     className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
                   >
-                    <span className="px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-xs">
+                    <span className="px-2 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-xs">
                       {department.code}
                     </span>
                     <span>{department.name}</span>
@@ -486,11 +486,11 @@ function CourseContent({ slug }: { slug: string }) {
             </div>
 
             <div className="shrink-0 flex md:flex-col gap-3">
-              <div className="text-center bg-zinc-800 border border-zinc-700 rounded-xl px-6 py-4">
+              <div className="text-center bg-[var(--card)] border border-[var(--border)] rounded-xl px-6 py-4">
                 <div className="text-3xl font-black text-white">{course.credits ?? '—'}</div>
                 <div className="text-xs text-zinc-500 mt-0.5">credits</div>
               </div>
-              <div className="text-center bg-zinc-800 border border-zinc-700 rounded-xl px-6 py-4">
+              <div className="text-center bg-[var(--card)] border border-[var(--border)] rounded-xl px-6 py-4">
                 <div className="text-3xl font-black text-white">{totalSections}</div>
                 <div className="text-xs text-zinc-500 mt-0.5">sections</div>
               </div>
@@ -498,7 +498,7 @@ function CourseContent({ slug }: { slug: string }) {
           </div>
 
           {course.description && (
-            <div className="mt-6 pt-6 border-t border-zinc-800">
+            <div className="mt-6 pt-6 border-t border-[var(--border)]">
               <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
                 Description
               </h2>
@@ -534,7 +534,7 @@ function CourseContent({ slug }: { slug: string }) {
                     className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
                       selectedSemester?.id === sem.id
                         ? 'border-[#CC0033]/60 bg-[#CC0033]/15 text-[#ff4d6d]'
-                        : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                        : 'border-[var(--border)] bg-[var(--card)] text-zinc-400 hover:text-white'
                     }`}
                   >
                     {sem.name}
@@ -596,7 +596,7 @@ function CourseContent({ slug }: { slug: string }) {
         </div>
 
         {/* Submission section */}
-        <div id="submit" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+        <div id="submit" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 space-y-4">
           <div>
             <h2 className="font-semibold text-white">
               Have info about who teaches this course?
@@ -609,7 +609,7 @@ function CourseContent({ slug }: { slug: string }) {
         </div>
       </main>
 
-      <footer className="border-t border-zinc-900 px-6 py-6 mt-10">
+      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
           RU Rate — Rutgers Registration Command Center · Course data from Rutgers SOC · Ratings from RateMyProfessors
         </div>
@@ -620,9 +620,9 @@ function CourseContent({ slug }: { slug: string }) {
 
 function PageLoading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: 'var(--bg)' }}>
       <div className="relative w-16 h-16">
-        <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+        <div className="absolute inset-0 rounded-full border-4 border-[var(--border)]" />
         <div className="absolute inset-0 rounded-full border-4 border-t-[#CC0033] animate-spin" />
       </div>
       <div className="text-center">

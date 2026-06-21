@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Space_Grotesk } from 'next/font/google'
 import CompareTray from '@/components/CompareTray'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] })
 
 export const metadata: Metadata = {
   title: 'RU Rate — Rutgers Registration Command Center',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-[#0a0a0a] text-white min-h-screen antialiased`}>
+      <body className={`${spaceGrotesk.className} text-white min-h-screen antialiased`} style={{ background: 'var(--bg)' }}>
         {children}
         <CompareTray />
       </body>

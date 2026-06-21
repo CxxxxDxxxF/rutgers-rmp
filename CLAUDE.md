@@ -88,9 +88,12 @@ SNIPER_MAX_BACKOFF_MS=15000
 SNIPER_DEFAULT_YEAR=2025
 SNIPER_DEFAULT_TERM=9
 SNIPER_DEFAULT_CAMPUS=NB
+AI_ANALYSIS_INTERVAL_MS=1800000  # 30 min; min 60000
 ```
 
 Email/SMS alerts are real only when `RESEND_API_KEY`, `NOTIFY_EMAIL_FROM`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are all set. Without them, the worker logs a sanitized provider-missing event and keeps polling.
+
+The worker also runs a background AI analysis batch every `AI_ANALYSIS_INTERVAL_MS` (default 30 min): fetches 5 professors without `ai_analysis` from `professor_cache` (highest `num_ratings` first), calls RMP GraphQL + OpenRouter Haiku, and upserts the result. Requires `OPENROUTER_API_KEY` in Railway. With 935 pending professors and 5 per batch, the backlog clears within ~94 hours of deploy.
 
 ## Environment variables
 

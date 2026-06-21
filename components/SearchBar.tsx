@@ -182,15 +182,17 @@ export default function SearchBar() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKey}
-          onFocus={() => items.length > 0 && setOpen(true)}
+          onFocus={e => { if (items.length > 0) setOpen(true); e.currentTarget.style.borderColor = '#CC0033' }}
+          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
           placeholder="Search courses first — number, title, or Rutgers NB professor..."
-          className="w-full pl-12 pr-4 py-4 bg-zinc-900 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 text-base sm:text-lg focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033] transition-colors"
+          className="w-full pl-12 pr-4 py-4 rounded-2xl text-white placeholder-zinc-500 text-base sm:text-lg focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
           autoComplete="off"
         />
       </div>
 
       {open && items.length > 0 && (
-        <div className="absolute top-full mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl z-50 max-h-[28rem] overflow-y-auto">
+        <div className="absolute top-full mt-2 w-full rounded-2xl overflow-hidden shadow-2xl z-50 max-h-[28rem] overflow-y-auto" style={{ background: 'var(--card-2)', border: '1px solid var(--border)' }}>
           {items.map((item, i) => {
             const groupHeader =
               i === firstProfessorIdx ? 'Professors' : i === firstCourseIdx ? 'Courses' : null
@@ -198,16 +200,19 @@ export default function SearchBar() {
             return (
               <div key={item.kind === 'professor' ? `p-${item.professor.id}` : `c-${item.course.id}`}>
                 {groupHeader && (
-                  <div className="px-5 pt-3 pb-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-600 bg-zinc-900 sticky top-0">
+                  <div className="px-5 pt-3 pb-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-600 sticky top-0" style={{ background: 'var(--card-2)' }}>
                     {groupHeader}
                   </div>
                 )}
                 <button
                   onClick={() => handleSelect(item)}
-                  onMouseEnter={() => setSelected(i)}
-                  className={`w-full text-left px-5 py-3 flex items-center justify-between gap-4 transition-colors border-b border-zinc-800/60 last:border-0 ${
-                    i === selected ? 'bg-zinc-800' : 'hover:bg-zinc-800/60'
-                  }`}
+                  onMouseEnter={e => { setSelected(i); (e.currentTarget as HTMLElement).style.background = i === selected ? 'var(--card)' : 'rgba(255,255,255,0.03)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = i === selected ? 'var(--card)' : '' }}
+                  className="w-full text-left px-5 py-3 flex items-center justify-between gap-4 transition-colors last:border-0"
+                  style={{
+                    borderBottom: '1px solid var(--border)',
+                    background: i === selected ? 'var(--card)' : undefined,
+                  }}
                 >
                   {item.kind === 'professor' ? (
                     <>
@@ -275,7 +280,7 @@ export default function SearchBar() {
       )}
 
       {open && query.trim().length >= 1 && items.length === 0 && !loading && (
-        <div className="absolute top-full mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-6 text-center text-zinc-500 shadow-2xl z-50">
+        <div className="absolute top-full mt-2 w-full rounded-2xl px-5 py-6 text-center text-zinc-500 shadow-2xl z-50" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           No professors or courses found for &ldquo;{query}&rdquo;
         </div>
       )}
