@@ -97,13 +97,25 @@ groups:
 
 | Migration | Purpose |
 | --- | --- |
-| `001`-`008` | Core professor cache, reviews, teaching assignments, RLS, review votes |
+| `001`-`008` | Core schema, professor cache, reviews, teaching assignments, RLS, review votes |
 | `009` | Section open-status tracking and anonymous watchlist |
 | `010` | Course browser stats RPC |
 | `011` | RLS hardening |
 | `012` | Email/SMS watchlist notification fields and constraints |
 | `013` | Watchlist course index |
 | `014` | Pro interest capture |
+| `015` | Submissions fingerprint |
+| `016` | Review vote-count trigger |
+| `017` | Reviews hardening |
+| `018` | Professor cache tags |
+| `019` | Expand subject-map coverage |
+| `020` | Summer 2026 semester |
+| `021` | User subscriptions (Stripe Pro) |
+| `022` | Normalize department school labels to canonical NB names |
+| `20260618223316` | Backfill Rutgers SOC subject-code → department links |
+
+Migration numbers `004`-`005` are intentionally unused (no gap in applied
+schema); ordering follows filename sort.
 
 Typical Supabase CLI flow:
 

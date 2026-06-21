@@ -11,6 +11,6 @@
     "outDir": ".tmp-test-build",
     "types": ["node"]
   },
-  "include": ["lib/rmp/**/*.ts"],
+  "include": ["lib/**/*.ts"],
   "exclude": ["node_modules", ".tmp-test-build"]
 }
