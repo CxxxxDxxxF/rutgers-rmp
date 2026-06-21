@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
 import AppHeader from '@/components/AppHeader'
@@ -54,6 +54,30 @@ function formatMeets(section: WatchedSection['section']): string | null {
   if (section.meeting_days) parts.push(section.meeting_days)
   if (section.meeting_times) parts.push(section.meeting_times)
   return parts.length ? parts.join(' ') : null
+}
+
+function formatRelative(from: number, now: number): string {
+  const secs = Math.max(0, Math.round((now - from) / 1000))
+  if (secs < 5) return 'just now'
+  if (secs < 60) return `${secs}s ago`
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+// Most recent worker sync across all watched sections — proves the polling
+// worker is alive and shows how fresh the open/closed data is.
+function latestWorkerSync(items: WatchedSection[]): number | null {
+  let latest: number | null = null
+  for (const w of items) {
+    const ts = w.section?.status_updated_at
+    if (!ts) continue
+    const ms = new Date(ts).getTime()
+    if (!Number.isNaN(ms) && (latest === null || ms > latest)) latest = ms
+  }
+  return latest
 }
 
 function readNotifiedKeys() {
@@ -979,6 +1003,143 @@ function StatCards({ total, openCount, closedCount, alertCount }: { total: numbe
   )
 }
 
+// ─── BrowserAlertPrompt ───────────────────────────────────────────────────────
+// Browser push is the fastest free alert, but it's only useful if permission is
+// granted BEFORE a seat opens. Surface a proactive, dismissible prompt instead of
+// burying the request inside the post-open banner.
+
+const BROWSER_ALERT_DISMISSED_KEY = 'ru-rate-browser-alert-dismissed'
+
+function BrowserAlertPrompt() {
+  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
+  const [dismissed, setDismissed] = useState(true)
+  const [requesting, setRequesting] = useState(false)
+
+  useEffect(() => {
+    setPermission('Notification' in window ? Notification.permission : 'unsupported')
+    try { setDismissed(localStorage.getItem(BROWSER_ALERT_DISMISSED_KEY) === '1') }
+    catch { setDismissed(false) }
+  }, [])
+
+  if (permission !== 'default' || dismissed) return null
+
+  async function enable() {
+    if (requesting || !('Notification' in window)) return
+    setRequesting(true)
+    try {
+      setPermission(await Notification.requestPermission())
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  function dismiss() {
+    setDismissed(true)
+    try { localStorage.setItem(BROWSER_ALERT_DISMISSED_KEY, '1') } catch { /* blocked */ }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#CC0033]/40 bg-[#CC0033]/10 px-4 py-3 sm:px-5"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="shrink-0 p-1.5 rounded-lg bg-[#CC0033]/20 text-[#ff4d6d]">
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">Turn on instant browser alerts</p>
+          <p className="text-[11px] text-zinc-400">Get notified the instant a seat opens — even faster than email. Grant it now so you don&apos;t miss it.</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={enable}
+          disabled={requesting}
+          className="rounded-lg bg-[#CC0033] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a8002b] disabled:opacity-50"
+        >
+          {requesting ? 'Enabling…' : 'Enable alerts'}
+        </button>
+        <button
+          onClick={dismiss}
+          className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:text-zinc-300"
+          aria-label="Dismiss"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── LiveStatusBar ────────────────────────────────────────────────────────────
+// Freshness + manual refresh. For a sniper the single most important thing is
+// trusting the open/closed data is current, so surface the last worker sync and
+// let users force a re-pull instead of waiting for the auto-refresh.
+
+function LiveStatusBar({
+  lastWorkerSync, lastRefreshAt, refreshing, onRefresh, intervalSec,
+}: {
+  lastWorkerSync: number | null
+  lastRefreshAt: number
+  refreshing: boolean
+  onRefresh: () => void
+  intervalSec: number
+}) {
+  const [now, setNow] = useState(() => Date.now())
+
+  // Tick so the relative timestamps stay current without a full reload.
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 5000)
+    return () => window.clearInterval(t)
+  }, [])
+
+  const syncLabel = lastWorkerSync != null ? formatRelative(lastWorkerSync, now) : 'awaiting first sync'
+  const stale = lastWorkerSync != null && now - lastWorkerSync > 5 * 60_000
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 sm:px-5">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="relative flex h-2 w-2 shrink-0">
+          {!stale && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />}
+          <span className={`relative inline-flex h-2 w-2 rounded-full ${stale ? 'bg-amber-400' : 'bg-green-400'}`} />
+        </span>
+        <p className="text-xs text-zinc-400 truncate">
+          <span className={stale ? 'text-amber-400 font-semibold' : 'text-zinc-300 font-semibold'}>
+            {stale ? 'Data may be stale' : 'Live'}
+          </span>
+          <span className="text-zinc-600"> · worker synced </span>
+          <span className="tabular-nums text-zinc-300">{syncLabel}</span>
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="hidden sm:inline text-[11px] text-zinc-600 tabular-nums">
+          auto every {intervalSec}s · last check {formatRelative(lastRefreshAt, now)}
+        </span>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white disabled:opacity-50"
+        >
+          <svg
+            className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── FilterBar ────────────────────────────────────────────────────────────────
 
 type FilterTab = 'all' | 'open' | 'closed' | 'alerts'
@@ -1059,6 +1220,21 @@ export default function WatchlistPage() {
   const openCount = items.filter(w => openStatus(w) === 'open').length
   const closedCount = items.filter(w => openStatus(w) === 'closed').length
   const newlyOpen = useMemo(() => items.filter(isNewlyOpen), [items])
+  const lastWorkerSync = useMemo(() => latestWorkerSync(items), [items])
+
+  const REFRESH_INTERVAL_SEC = 25
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now())
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await reload()
+    } finally {
+      setLastRefreshAt(Date.now())
+      setRefreshing(false)
+    }
+  }, [reload])
 
   // track which IDs are freshly added this session
   const [newIds, setNewIds] = useState<Set<string>>(new Set())
@@ -1074,9 +1250,9 @@ export default function WatchlistPage() {
   }, [items])
 
   useEffect(() => {
-    const interval = window.setInterval(reload, 60_000)
+    const interval = window.setInterval(refresh, REFRESH_INTERVAL_SEC * 1000)
     return () => window.clearInterval(interval)
-  }, [reload])
+  }, [refresh])
 
   const filtered = useMemo(() => {
     let result = [...items]
@@ -1118,11 +1294,21 @@ export default function WatchlistPage() {
         {/* loaded state */}
         {!loading && !error && items.length > 0 && (
           <>
+            <BrowserAlertPrompt />
+
             <StatCards
               total={items.length}
               openCount={openCount}
               closedCount={closedCount}
               alertCount={newlyOpen.length}
+            />
+
+            <LiveStatusBar
+              lastWorkerSync={lastWorkerSync}
+              lastRefreshAt={lastRefreshAt}
+              refreshing={refreshing}
+              onRefresh={refresh}
+              intervalSec={REFRESH_INTERVAL_SEC}
             />
 
             <OpenSectionAlerts newlyOpen={newlyOpen} />
