@@ -97,7 +97,7 @@ groups:
 
 | Migration | Purpose |
 | --- | --- |
-| `000`-`008` | Core schema, professor cache, reviews, teaching assignments, RLS, review votes |
+| `001`-`008` | Core schema, professor cache, reviews, teaching assignments, RLS, review votes |
 | `009` | Section open-status tracking and anonymous watchlist |
 | `010` | Course browser stats RPC |
 | `011` | RLS hardening |
