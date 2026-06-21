@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 
 const NAV = [
   { href: '/courses', label: 'Courses', short: 'Courses' },
@@ -13,6 +15,13 @@ const NAV = [
 
 export default function AppHeader() {
   const pathname = usePathname()
+  const { user, loading } = useAuth()
+
+  async function handleSignOut() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+    window.location.href = '/'
+  }
 
   return (
     <header className="border-b border-zinc-900 px-4 sm:px-6 py-3 sticky top-0 z-40 backdrop-blur bg-[#0a0a0a]/92">
@@ -56,6 +65,27 @@ export default function AppHeader() {
         >
           Pro
         </Link>
+
+        {!loading && (
+          user ? (
+            <div className="hidden md:flex items-center gap-2 ml-1">
+              <span className="text-xs text-zinc-500 max-w-[120px] truncate">{user.email}</span>
+              <button
+                onClick={handleSignOut}
+                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="hidden md:block text-xs text-zinc-500 hover:text-zinc-300 transition-colors ml-1"
+            >
+              Sign in
+            </Link>
+          )
+        )}
       </div>
 
       <nav className="md:hidden mt-3 -mx-1 flex items-center gap-1 overflow-x-auto px-1">

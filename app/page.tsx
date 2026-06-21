@@ -5,6 +5,8 @@ import SearchBar from '@/components/SearchBar'
 import ProfessorCard from '@/components/ProfessorCard'
 import type { ProfessorCache } from '@/lib/supabase'
 
+export const revalidate = 120
+
 async function getPopular(): Promise<ProfessorCache[]> {
   if (!supabase) return []
   try {
@@ -14,6 +16,61 @@ async function getPopular(): Promise<ProfessorCache[]> {
       .order('search_count', { ascending: false })
       .limit(6)
     return data ?? []
+  } catch {
+    return []
+  }
+}
+
+interface HotCourse {
+  id: string
+  course_number: string
+  name: string
+  slug: string
+  credits: number | null
+  open_count: number
+  semester_name: string
+}
+
+async function getHotCourses(): Promise<HotCourse[]> {
+  if (!supabase) return []
+  try {
+    const { data: semData } = await supabase
+      .from('semesters')
+      .select('id, name')
+      .eq('is_current', true)
+      .single()
+    if (!semData) return []
+
+    const { data } = await supabase
+      .from('teaching_assignments')
+      .select('course_id, courses ( id, course_number, name, slug, credits )')
+      .eq('semester_id', semData.id)
+      .eq('open_status', true)
+      .eq('status', 'active')
+      .limit(600)
+
+    const courseMap = new Map<string, HotCourse>()
+    for (const row of data ?? []) {
+      const course = Array.isArray(row.courses) ? row.courses[0] : row.courses
+      if (!course) continue
+      const existing = courseMap.get(course.id)
+      if (existing) {
+        existing.open_count++
+      } else {
+        courseMap.set(course.id, {
+          id: course.id,
+          course_number: course.course_number,
+          name: course.name,
+          slug: course.slug,
+          credits: course.credits ?? null,
+          open_count: 1,
+          semester_name: semData.name,
+        })
+      }
+    }
+    return Array.from(courseMap.values())
+      .sort((a, b) => b.open_count - a.open_count)
+      .slice(0, 6)
   } catch {
     return []
   }
@@ -79,7 +136,7 @@ const TOOLS: {
 ]
 
 export default async function HomePage() {
-  const popular = await getPopular()
+  const [popular, hotCourses] = await Promise.all([getPopular(), getHotCourses()])
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
@@ -147,6 +204,56 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Hot courses — open seats right now */}
+      {hotCourses.length > 0 && (
+        <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
+              Open Seats Right Now
+              <span className="ml-2 font-normal text-zinc-700 normal-case tracking-normal">
+                · {hotCourses[0]?.semester_name}
+              </span>
+            </h2>
+            <Link
+              href="/courses?sort=open&openonly=1"
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              See all →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {hotCourses.map(course => (
+              <Link
+                key={course.id}
+                href={`/course/${course.slug}`}
+                className="group relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-green-800/60 hover:bg-zinc-800/50 transition-all"
+              >
+                <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-green-500" />
+                <div className="relative pl-5 pr-4 pt-3 pb-3">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <span
+                      className="shrink-0 text-xs font-black tracking-wider px-2 py-0.5 rounded text-white"
+                      style={{ backgroundColor: '#CC0033' }}
+                    >
+                      {course.course_number}
+                    </span>
+                    <span className="text-xs font-bold text-green-400 shrink-0">
+                      {course.open_count} open
+                    </span>
+                  </div>
+                  <div className="font-semibold text-sm text-zinc-200 group-hover:text-white transition-colors leading-snug line-clamp-2">
+                    {course.name}
+                  </div>
+                  {course.credits != null && (
+                    <div className="mt-1 text-xs text-zinc-600">{course.credits} credits</div>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Popular */}
       {popular.length > 0 && (

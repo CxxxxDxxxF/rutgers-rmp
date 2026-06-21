@@ -108,7 +108,10 @@ groups:
 | `016` | Review vote-count trigger |
 | `017` | Reviews hardening |
 | `018` | Professor cache tags |
-| `019` | Normalize department school labels to canonical NB names |
+| `019` | Expand subject-map coverage |
+| `020` | Summer 2026 semester |
+| `021` | User subscriptions (Stripe Pro) |
+| `022` | Normalize department school labels to canonical NB names |
 | `20260618223316` | Backfill Rutgers SOC subject-code → department links |
 
 Migration numbers `004`-`005` are intentionally unused (no gap in applied

@@ -235,7 +235,9 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ course, professors, department, semesters })
+    return NextResponse.json({ course, professors, department, semesters }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
+    })
   } catch (err) {
     log.error('Course detail error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
