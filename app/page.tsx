@@ -183,15 +183,22 @@ export default async function HomePage() {
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href="/courses"
-            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: '#CC0033' }}
           >
             Browse courses
           </Link>
           <Link
-            href="/watchlist"
-            className="rounded-xl border px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-colors"
+            href="/departments"
+            className="rounded-xl border px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-colors hover:border-zinc-500 hover:text-white"
             style={{ borderColor: 'var(--border)', background: 'var(--card-2)' }}
+          >
+            Browse professors
+          </Link>
+          <Link
+            href="/watchlist"
+            className="rounded-xl border px-4 py-2.5 text-sm font-semibold text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-300"
+            style={{ borderColor: 'var(--border)', background: 'transparent' }}
           >
             Track a section
           </Link>
@@ -278,9 +285,17 @@ export default async function HomePage() {
       {/* Popular */}
       {popular.length > 0 && (
         <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
-          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
-            Most Searched Professors
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
+              Most Searched Professors
+            </h2>
+            <Link
+              href="/departments"
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              All professors →
+            </Link>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {popular.map((prof) => (
               <ProfessorCard key={prof.id} professor={prof} compact />
@@ -288,6 +303,52 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Rate a Professor CTA */}
+      <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
+        <div
+          className="relative rounded-2xl overflow-hidden border p-8 text-center"
+          style={{
+            background: 'linear-gradient(135deg, #140f11 0%, #1a0a0e 100%)',
+            borderColor: 'rgba(204,0,51,0.25)',
+          }}
+        >
+          {/* Subtle bloom */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: 'radial-gradient(ellipse 60% 70% at 50% 100%, rgba(204,0,51,0.10) 0%, transparent 70%)',
+            }}
+          />
+          <div className="relative space-y-3">
+            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest px-3 py-1 rounded-full" style={{ color: '#ff4d6d', background: 'rgba(204,0,51,0.12)', border: '1px solid rgba(204,0,51,0.25)' }}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+              </svg>
+              RU Rate Reviews
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-white">
+              Taken a class? Rate your professor.
+            </h2>
+            <p className="text-zinc-400 text-sm max-w-md mx-auto">
+              Your review helps Rutgers students pick better schedules. Find a professor and leave an honest rating — it takes under a minute.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/departments"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#CC0033' }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Find a professor to review
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="mt-auto border-t border-zinc-900 px-6 py-6">
