@@ -321,18 +321,18 @@ function DepartmentContent({ slug }: { slug: string }) {
               {department.description && (
                 <p className="text-zinc-400 text-sm mt-4 leading-relaxed">{department.description}</p>
               )}
-              <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-500">
-                <span>{professors.length} professor{professors.length !== 1 ? 's' : ''}</span>
+              <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-400">
+                <span className="font-medium">{professors.length} professor{professors.length !== 1 ? 's' : ''}</span>
                 <span className="w-1 h-1 rounded-full bg-zinc-700" />
-                <span>{courses.length} course{courses.length !== 1 ? 's' : ''}</span>
+                <span className="font-medium">{courses.length} course{courses.length !== 1 ? 's' : ''}</span>
                 {totalSections > 0 && (
                   <>
                     <span className="w-1 h-1 rounded-full bg-zinc-700" />
                     <span>
-                      <span className="font-semibold" style={{ color: totalOpen > 0 ? '#22c55e' : '#ef4444' }}>
+                      <span className="font-bold" style={{ color: totalOpen > 0 ? '#22c55e' : '#ef4444' }}>
                         {totalOpen}
                       </span>
-                      <span className="text-zinc-600"> / {totalSections} sections open</span>
+                      <span className="text-zinc-500"> / {totalSections} sections open</span>
                     </span>
                   </>
                 )}
@@ -341,9 +341,14 @@ function DepartmentContent({ slug }: { slug: string }) {
 
             {/* Top professors */}
             <section>
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
-                Top Professors
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                  Professors
+                </h2>
+                <p className="text-xs text-zinc-600">
+                  Click any professor to read reviews or write one
+                </p>
+              </div>
               {professors.length === 0 ? (
                 <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
                   No professors found for this department yet.

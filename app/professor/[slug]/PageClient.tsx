@@ -300,7 +300,7 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
           Student Reviews on RU Rate
           {total > 0 && (
@@ -312,9 +312,12 @@ function NativeReviewsSection({ rmpId, professorId: initProfId }: { rmpId?: stri
         {(rmpId || professorId) && !showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-opacity hover:opacity-80"
+            className="shrink-0 flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl text-white transition-opacity hover:opacity-85"
             style={{ backgroundColor: '#CC0033' }}
           >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
             Write a Review
           </button>
         )}
@@ -1112,7 +1115,7 @@ return (
                 {data.first_name} {data.last_name}
               </h1>
               <p className="text-zinc-400 mt-2">{data.school_name}</p>
-              <p className="text-sm text-zinc-600 mt-1">{data.num_ratings} student ratings</p>
+              <p className="text-sm text-zinc-400 mt-1">{data.num_ratings} student ratings on RMP</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Badge>RateMyProfessors data</Badge>
                 {rmpId && (
@@ -1131,7 +1134,7 @@ return (
                 <RatingCircle value={data.avg_rating ?? 0} label="Quality" />
                 <RatingCircle value={data.avg_difficulty ?? 0} label="Difficulty" />
                 {data.would_take_again != null && (
-                  <RatingCircle value={data.would_take_again} label="Again" pct />
+                  <RatingCircle value={data.would_take_again} label="Take Again" pct />
                 )}
               </div>
             ) : (
@@ -1160,9 +1163,15 @@ return (
           </div>
         )}
 
-        {/* Verdict */}
+        {/* AI Analysis label + Verdict */}
         {analysis && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }}>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ color: '#ff4d6d', background: 'rgba(204,0,51,0.12)', border: '1px solid rgba(204,0,51,0.25)' }}>
+                ✦ AI Analysis
+              </span>
+              <span className="text-xs text-zinc-600">Based on {data.num_ratings} RMP reviews · Powered by Claude</span>
+            </div>
             <VerdictBox analysis={analysis} />
           </motion.div>
         )}
@@ -1250,11 +1259,25 @@ return (
         {rmpId && <SocDataForRmpProfessor rmpId={rmpId} />}
 
         {/* Native reviews (RU Rate) — above RMP reviews */}
-        {rmpId && <NativeReviewsSection rmpId={rmpId} />}
+        {rmpId && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-[var(--border)]" />
+              <span className="text-xs text-zinc-600 font-medium shrink-0">on RU Rate</span>
+              <div className="h-px flex-1 bg-[var(--border)]" />
+            </div>
+            <NativeReviewsSection rmpId={rmpId} />
+          </div>
+        )}
 
         {/* RMP Reviews */}
         {ratings.length > 0 && (
           <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-px flex-1 bg-[var(--border)]" />
+              <span className="text-xs text-zinc-600 font-medium shrink-0">from RateMyProfessors</span>
+              <div className="h-px flex-1 bg-[var(--border)]" />
+            </div>
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-zinc-300">
                 RateMyProfessors Reviews

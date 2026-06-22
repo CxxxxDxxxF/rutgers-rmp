@@ -60,6 +60,10 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
   const dColor = difficultyColor(professor.avg_difficulty ?? 0)
 
   if (compact) {
+    const wtaColor = professor.would_take_again != null
+      ? (professor.would_take_again >= 70 ? '#22c55e' : professor.would_take_again >= 50 ? '#f59e0b' : '#ef4444')
+      : null
+
     return (
       <Link
         href={`/professor/${professor.slug}?rmpId=${professor.rmp_id}`}
@@ -68,35 +72,44 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
         <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
         <div className="pl-4 pr-4 pt-3 pb-2 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors leading-tight truncate">
               {professor.first_name} {professor.last_name}
             </div>
             <div className="text-xs text-zinc-500 truncate mt-0.5">{professor.department}</div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 pt-0.5">
-            <div className="flex items-center gap-2.5">
-              <div className="text-center">
-                <div className="text-xl font-black leading-none" style={{ color: qColor }}>
-                  {professor.avg_rating != null
-                    ? <NumberTicker value={professor.avg_rating} decimals={1} />
-                    : '—'}
-                </div>
-                <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+          <div className="flex items-center gap-2.5 shrink-0 pt-0.5">
+            <div className="text-center">
+              <div className="text-xl font-black leading-none" style={{ color: qColor }}>
+                {professor.avg_rating != null
+                  ? <NumberTicker value={professor.avg_rating} decimals={1} />
+                  : '—'}
               </div>
-              <div className="h-7 w-px bg-zinc-800" />
-              <div className="text-center">
-                <div className="text-xl font-black leading-none" style={{ color: dColor }}>
-                  {professor.avg_difficulty != null
-                    ? <NumberTicker value={professor.avg_difficulty} decimals={1} />
-                    : '—'}
-                </div>
-                <div className="text-[10px] text-zinc-600 mt-0.5">Diff</div>
-              </div>
+              <div className="text-[10px] text-zinc-500 mt-0.5">Quality</div>
             </div>
+            <div className="h-7 w-px bg-zinc-800" />
+            <div className="text-center">
+              <div className="text-xl font-black leading-none" style={{ color: dColor }}>
+                {professor.avg_difficulty != null
+                  ? <NumberTicker value={professor.avg_difficulty} decimals={1} />
+                  : '—'}
+              </div>
+              <div className="text-[10px] text-zinc-500 mt-0.5">Diff</div>
+            </div>
+            {professor.would_take_again != null && wtaColor && (
+              <>
+                <div className="h-7 w-px bg-zinc-800" />
+                <div className="text-center">
+                  <div className="text-xl font-black leading-none" style={{ color: wtaColor }}>
+                    {Math.round(professor.would_take_again)}%
+                  </div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Again</div>
+                </div>
+              </>
+            )}
             {vc && (
-              <span className={`hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${vc.bg} ${vc.border} ${vc.text}`}>
+              <span className={`hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ml-0.5 ${vc.bg} ${vc.border} ${vc.text}`}>
                 {vc.label}
               </span>
             )}
@@ -104,7 +117,7 @@ export default function ProfessorCard({ professor, compact }: ProfessorCardProps
         </div>
 
         <div className="px-4 pb-2 flex items-center justify-between">
-          <div className="text-[10px] text-zinc-700">{professor.num_ratings} ratings</div>
+          <div className="text-[10px] text-zinc-600">{professor.num_ratings} ratings</div>
           {vc && (
             <span className={`sm:hidden text-[10px] font-bold px-2 py-0.5 rounded-md border ${vc.bg} ${vc.border} ${vc.text}`}>
               {vc.label}
