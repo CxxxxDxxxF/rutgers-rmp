@@ -495,7 +495,29 @@ function CoursesContent() {
         )}
       </main>
 
-      <footer className="border-t px-6 py-6 mt-10" style={{ borderColor: 'var(--border)' }}>
+      {/* Review nudge — shown once courses load */}
+      {!loading && courses.length > 0 && (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-8 mb-2">
+          <div
+            className="rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+          >
+            <div>
+              <p className="text-sm font-semibold text-white">Taken one of these courses?</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Rate your professor and help the next student make a better choice.</p>
+            </div>
+            <a
+              href="/departments"
+              className="shrink-0 text-xs font-bold px-4 py-2 rounded-xl text-white transition-opacity hover:opacity-80"
+              style={{ backgroundColor: '#CC0033' }}
+            >
+              Rate a Professor →
+            </a>
+          </div>
+        </div>
+      )}
+
+      <footer className="border-t px-6 py-6 mt-8" style={{ borderColor: 'var(--border)' }}>
         <div className="max-w-5xl mx-auto text-xs text-zinc-700 text-center">
           RU Rate — Rutgers Course Browser · Course data from the Rutgers Schedule of Classes
         </div>
