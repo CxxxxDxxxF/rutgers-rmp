@@ -216,9 +216,11 @@ function abbrevSchool(school: string): string | null {
   if (/public.+health/i.test(school)) return 'SPH'
   if (/criminal.+justice/i.test(school)) return 'SCJ'
   if (/nursing/i.test(school)) return 'Nursing'
+  if (/applied.+professional.+psych/i.test(school)) return 'GSAPP'
+  if (/bloustein|planning.+public.+policy/i.test(school)) return 'Bloustein'
+  if (/graduate.+studies/i.test(school)) return 'SGS'
   if (/education/i.test(school)) return 'GSE'
-  if (/information/i.test(school)) return 'iSchool'
-  if (/communication/i.test(school)) return 'Comm'
+  if (/communication.+information|information.+communication/i.test(school)) return 'SC&I'
   if (/management.+labor|labor.+relations|smlr/i.test(school)) return 'SMLR'
   return null
 }
