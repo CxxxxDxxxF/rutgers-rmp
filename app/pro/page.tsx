@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
@@ -21,9 +21,23 @@ function ProPageContent() {
   const paymentSuccess = searchParams.get('success') === '1'
 
   const [plan, setPlan] = useState<'pro' | 'club'>('pro')
-  const [subscribed] = useState(false)
+  const [subscribed, setSubscribed] = useState(false)
+  const [subLoading, setSubLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user || !supabase) { setSubLoading(false); return }
+    supabase
+      .from('user_subscriptions')
+      .select('status')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setSubscribed(data?.status === 'active')
+        setSubLoading(false)
+      })
+  }, [user])
 
   async function handleSubscribe() {
     if (checkoutLoading || !supabase) return
@@ -104,7 +118,7 @@ function ProPageContent() {
           </div>
 
           <div className="motion-rise rounded-2xl p-5 sm:p-6 shadow-2xl" style={{ border: '1px solid var(--border)', background: 'var(--card-2)' }}>
-            {!user && !loading && (
+            {!user && !loading && !subLoading && (
               <>
                 <div className="mb-5">
                   <h2 className="text-xl font-black text-white">Subscribe to Pro</h2>
@@ -125,7 +139,7 @@ function ProPageContent() {
               </>
             )}
 
-            {user && !subscribed && (
+            {user && !subscribed && !subLoading && (
               <>
                 <div className="mb-5">
                   <h2 className="text-xl font-black text-white">Choose a plan</h2>
@@ -174,7 +188,7 @@ function ProPageContent() {
               </>
             )}
 
-            {user && subscribed && (
+            {user && subscribed && !subLoading && (
               <>
                 <div className="mb-5">
                   <h2 className="text-xl font-black text-white">You&apos;re a Pro subscriber</h2>
@@ -196,7 +210,7 @@ function ProPageContent() {
               </>
             )}
 
-            {loading && (
+            {(loading || subLoading) && (
               <div className="flex items-center justify-center py-8">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-[#CC0033]" />
               </div>

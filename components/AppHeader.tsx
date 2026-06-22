@@ -6,11 +6,11 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 
 const NAV = [
-  { href: '/courses', label: 'Courses', short: 'Courses' },
-  { href: '/departments', label: 'Departments', short: 'Depts' },
-  { href: '/watchlist', label: 'Sniper', short: 'Sniper' },
-  { href: '/compare', label: 'Compare', short: 'Compare' },
-  { href: '/schedule', label: 'Ranker', short: 'Ranker' },
+  { href: '/courses', label: 'Courses' },
+  { href: '/departments', label: 'Departments' },
+  { href: '/watchlist', label: 'Sniper' },
+  { href: '/compare', label: 'Compare' },
+  { href: '/schedule', label: 'Ranker' },
 ]
 
 export default function AppHeader() {
@@ -24,89 +24,133 @@ export default function AppHeader() {
   }
 
   return (
-    <header className="px-4 sm:px-6 py-3 sticky top-0 z-40 backdrop-blur-md" style={{ background: 'rgba(9,8,10,0.88)', borderBottom: '1px solid var(--border)' }}>
-      <div className="max-w-6xl mx-auto flex items-center gap-3">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-xs shadow-[0_0_24px_rgba(204,0,51,0.24)]"
-            style={{ backgroundColor: '#CC0033' }}
-          >
-            RU
-          </div>
-          <span className="font-bold text-white tracking-tight text-sm sm:text-base">RU Rate</span>
-        </Link>
+    <header
+      className="sticky top-0 z-40 backdrop-blur-xl"
+      style={{
+        background: 'rgba(9,8,10,0.95)',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: '0 1px 0 rgba(204,0,51,0.15)',
+      }}
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center h-14 gap-3">
 
-        <nav className="ml-auto hidden md:flex items-center gap-1">
-          {NAV.map(item => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
+          {/* Wordmark */}
+          <Link href="/" className="shrink-0 flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, #CC0033 0%, #990026 100%)',
+                boxShadow: '0 0 14px rgba(204,0,51,0.35)',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <text
+                  x="8" y="13"
+                  textAnchor="middle"
+                  fill="white"
+                  fontSize="13"
+                  fontWeight="900"
+                  fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+                >
+                  R
+                </text>
+              </svg>
+            </div>
+            <span className="font-black tracking-tight text-base leading-none">
+              <span style={{ color: '#CC0033' }}>RU</span>
+              <span className="text-white"> Rate</span>
+            </span>
+          </Link>
+
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center ml-3">
+            {NAV.map(({ href, label }) => {
+              const active = pathname === href || pathname.startsWith(`${href}/`)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`relative px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors rounded-lg ${
+                    active ? 'text-white' : 'text-zinc-500 hover:text-zinc-200'
+                  }`}
+                >
+                  {label}
+                  {active && (
+                    <span
+                      className="absolute left-1.5 right-1.5 -bottom-[1px] h-[2px] rounded-t"
+                      style={{ background: '#CC0033' }}
+                    />
+                  )}
+                </Link>
+              )
+            })}
+          </nav>
+
+          {/* Right side */}
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/pro"
+              className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+              style={{
+                background: pathname === '/pro' ? 'rgba(204,0,51,0.2)' : 'rgba(204,0,51,0.08)',
+                border: '1px solid rgba(204,0,51,0.45)',
+                color: '#ff4d6d',
+              }}
+            >
+              <span style={{ fontSize: '9px' }}>✦</span>
+              Pro
+            </Link>
+
+            {!loading && (
+              user ? (
+                <div className="hidden md:flex items-center gap-2 pl-2 border-l border-white/[0.07]">
+                  <span className="text-[11px] text-zinc-600 max-w-[100px] truncate">{user.email}</span>
+                  <button
+                    onClick={handleSignOut}
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="hidden md:block text-xs font-medium text-zinc-400 hover:text-white transition-colors"
+                >
+                  Sign in
+                </Link>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Mobile nav */}
+        <nav className="md:hidden flex gap-0.5 pb-2.5 -mx-1 px-1 overflow-x-auto">
+          {NAV.map(({ href, label }) => {
+            const active = pathname === href || pathname.startsWith(`${href}/`)
+            const short = label === 'Departments' ? 'Depts' : label
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                  active
-                    ? 'text-white bg-zinc-800'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                key={href}
+                href={href}
+                className={`relative flex-1 min-w-fit px-3 py-1.5 rounded-lg text-center text-xs font-semibold whitespace-nowrap transition-colors ${
+                  active ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
+                style={active ? { background: 'rgba(255,255,255,0.05)' } : {}}
               >
-                {item.label}
+                {short}
+                {active && (
+                  <span
+                    className="absolute left-2 right-2 bottom-0 h-[2px] rounded-t"
+                    style={{ background: '#CC0033' }}
+                  />
+                )}
               </Link>
             )
           })}
         </nav>
-
-        <Link
-          href="/pro"
-          className={`ml-auto md:ml-2 rounded-lg border px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors ${
-            pathname === '/pro'
-              ? 'border-[#CC0033]/60 bg-[#CC0033]/15 text-[#ff4d6d]'
-              : 'text-zinc-200 hover:text-white'
-          }`}
-          style={pathname !== '/pro' ? { borderColor: 'var(--border)', background: 'var(--card-2)' } : {}}
-        >
-          Pro
-        </Link>
-
-        {!loading && (
-          user ? (
-            <div className="hidden md:flex items-center gap-2 ml-1">
-              <span className="text-xs text-zinc-500 max-w-[120px] truncate">{user.email}</span>
-              <button
-                onClick={handleSignOut}
-                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <Link
-              href="/login"
-              className="hidden md:block text-xs text-zinc-500 hover:text-zinc-300 transition-colors ml-1"
-            >
-              Sign in
-            </Link>
-          )
-        )}
       </div>
-
-      <nav className="md:hidden mt-3 -mx-1 flex items-center gap-1 overflow-x-auto px-1">
-        {NAV.map(item => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex-1 min-w-fit px-3 py-2 rounded-lg text-center text-xs font-semibold whitespace-nowrap transition-colors ${
-                active
-                  ? 'text-white bg-zinc-800'
-                  : 'text-zinc-400 bg-zinc-950 hover:text-white'
-              }`}
-            >
-              {item.short}
-            </Link>
-          )
-        })}
-      </nav>
     </header>
   )
 }
