@@ -220,8 +220,10 @@ function abbrevSchool(school: string): string | null {
   if (/bloustein|planning.+public.+policy/i.test(school)) return 'Bloustein'
   if (/graduate.+studies/i.test(school)) return 'SGS'
   if (/education/i.test(school)) return 'GSE'
+  // Test "communication and information" before either word alone so SC&I wins
   if (/communication.+information|information.+communication/i.test(school)) return 'SC&I'
   if (/management.+labor|labor.+relations|smlr/i.test(school)) return 'SMLR'
+  if (/provost/i.test(school)) return 'Provost'
   return null
 }
 
