@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
 import Badge from '@/components/Badge'
@@ -68,6 +68,7 @@ function ShareCompareButton({ ids }: { ids: string[] }) {
 }
 
 function CompareContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const trayItems = useCompareItems()
 
@@ -77,11 +78,16 @@ function CompareContent() {
   }, [])
 
   // URL ids win (shareable links); otherwise use the tray
+  const urlIds = useMemo(
+    () => searchParams.get('ids')?.split(',').map(s => s.trim()).filter(Boolean) ?? [],
+    [searchParams]
+  )
+  const isUrlMode = urlIds.length > 0
+
   const ids = useMemo(() => {
-    const fromUrl = searchParams.get('ids')?.split(',').map(s => s.trim()).filter(Boolean) ?? []
-    if (fromUrl.length > 0) return fromUrl.slice(0, 4)
+    if (isUrlMode) return urlIds.slice(0, 4)
     return trayItems.map(i => i.rmpId)
-  }, [searchParams, trayItems])
+  }, [isUrlMode, urlIds, trayItems])
 
   const [professors, setProfessors] = useState<CompareProfessor[]>([])
   const [missing, setMissing] = useState<string[]>([])
@@ -115,6 +121,19 @@ function CompareContent() {
     load()
     return () => { cancelled = true }
   }, [ids])
+
+  const handleRemove = useCallback((rmpId: string) => {
+    if (isUrlMode) {
+      const next = ids.filter(id => id !== rmpId)
+      if (next.length === 0) {
+        router.push('/compare')
+      } else {
+        router.push(`/compare?ids=${encodeURIComponent(next.join(','))}`)
+      }
+    } else {
+      removeCompareItem(rmpId)
+    }
+  }, [isUrlMode, ids, router])
 
   // Best-value highlighting
   const bestRating = Math.max(...professors.map(p => p.avg_rating ?? -1))
@@ -189,17 +208,25 @@ function CompareContent() {
 
         {!loading && !error && professors.length > 0 && (
           <>
-            {missingFromTray.length > 0 && (
+            {missing.length > 0 && (
               <div className="mb-4 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-900/50 text-xs text-amber-400">
-                Not yet analyzed (open their profile once to include them):{' '}
-                {missingFromTray.map((t, i) => (
-                  <span key={t!.rmpId}>
-                    {i > 0 && ', '}
-                    <Link href={`/professor/${t!.slug}?rmpId=${t!.rmpId}`} className="underline hover:text-amber-300">
-                      {t!.name}
-                    </Link>
-                  </span>
-                ))}
+                {missingFromTray.length > 0 ? (
+                  <>
+                    Not yet analyzed (open their profile once to include them):{' '}
+                    {missingFromTray.map((t, i) => (
+                      <span key={t!.rmpId}>
+                        {i > 0 && ', '}
+                        <Link href={`/professor/${t!.slug}?rmpId=${t!.rmpId}`} className="underline hover:text-amber-300">
+                          {t!.name}
+                        </Link>
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {missing.length} professor{missing.length > 1 ? 's' : ''} not yet analyzed — open their profile once to include them in this comparison.
+                  </>
+                )}
               </div>
             )}
 
@@ -222,7 +249,7 @@ function CompareContent() {
                           <div className="text-xs text-zinc-500 font-normal mt-0.5">{p.department}</div>
                         )}
                         <button
-                          onClick={() => removeCompareItem(p.rmp_id)}
+                          onClick={() => handleRemove(p.rmp_id)}
                           className="mt-1.5 text-[11px] text-zinc-600 hover:text-zinc-300 transition-colors font-normal"
                         >
                           Remove
