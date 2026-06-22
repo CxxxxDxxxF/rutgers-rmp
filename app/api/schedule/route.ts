@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { searchProfessors, makeSlug } from '@/lib/rmp'
+import { makeSlug } from '@/lib/rmp'
+import { lookupProfessorCandidates } from '@/lib/rmp/matching'
 import { supabase } from '@/lib/supabase'
 import type { AIAnalysis } from '@/lib/supabase'
 import {
@@ -41,20 +42,21 @@ export async function POST(req: NextRequest) {
   const settled = await Promise.allSettled(
     unique.map(async (name): Promise<ScheduleProfResult | null> => {
       try {
-        const results = await searchProfessors(name)
-        if (!results.length) return null
-        const top = results[0]
+        const candidates = await lookupProfessorCandidates(name)
+        const top = candidates.find(c => c.matchLevel !== 'weak_candidate')
+        if (!top) return null
+        const prof = top.professor
         return {
           searchedName: name,
-          id: top.id,
-          firstName: top.firstName,
-          lastName: top.lastName,
-          department: top.department ?? 'Unknown Department',
-          avgRating: top.avgRating ?? 0,
-          avgDifficulty: top.avgDifficulty ?? 0,
-          wouldTakeAgainPercent: top.wouldTakeAgainPercent === -1 ? null : top.wouldTakeAgainPercent,
-          numRatings: top.numRatings ?? 0,
-          slug: makeSlug(top.firstName, top.lastName, top.id),
+          id: prof.id,
+          firstName: prof.firstName,
+          lastName: prof.lastName,
+          department: prof.department ?? 'Unknown Department',
+          avgRating: prof.avgRating ?? 0,
+          avgDifficulty: prof.avgDifficulty ?? 0,
+          wouldTakeAgainPercent: prof.wouldTakeAgainPercent,
+          numRatings: prof.numRatings ?? 0,
+          slug: makeSlug(prof.firstName, prof.lastName, prof.id),
           ai_analysis: null,
           student_grade: null,
         }
