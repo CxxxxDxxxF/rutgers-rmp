@@ -1486,6 +1486,23 @@ export default function WatchlistPage() {
           />
         )}
 
+        {/* review nudge — shown when the user has snipes and is waiting */}
+        {!loading && !error && items.length > 0 && (
+          <div className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--card)]/50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-zinc-200">While you wait — rate a professor</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Help other students avoid bad sections before registration opens.</p>
+            </div>
+            <Link
+              href="/departments"
+              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-colors hover:brightness-110"
+              style={{ backgroundColor: '#CC0033' }}
+            >
+              Browse professors
+            </Link>
+          </div>
+        )}
+
         {/* footer explainer */}
         <div className="mt-10 rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/30 p-4 text-[11px] text-zinc-600 leading-relaxed space-y-1.5">
           <p className="font-semibold text-zinc-400 text-xs">How the sniper works</p>

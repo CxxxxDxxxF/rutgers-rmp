@@ -1130,7 +1130,7 @@ return (
             </div>
 
             {data.num_ratings > 0 ? (
-              <div className="flex gap-6 shrink-0">
+              <div className="flex flex-wrap gap-4 shrink-0">
                 <RatingCircle value={data.avg_rating ?? 0} label="Quality" />
                 <RatingCircle value={data.avg_difficulty ?? 0} label="Difficulty" />
                 {data.would_take_again != null && (

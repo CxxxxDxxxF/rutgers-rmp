@@ -224,6 +224,7 @@ function abbrevSchool(school: string): string | null {
   if (/communication.+information|information.+communication/i.test(school)) return 'SC&I'
   if (/management.+labor|labor.+relations|smlr/i.test(school)) return 'SMLR'
   if (/provost/i.test(school)) return 'Provost'
+  if (/^other$/i.test(school)) return 'Other'
   return null
 }
 
