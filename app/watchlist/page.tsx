@@ -924,7 +924,7 @@ function QuickSnipeBox() {
                   inputMode="numeric"
                   value={indexNumber}
                   onChange={e => { setIndexNumber(e.target.value); setError(null) }}
-                  placeholder="Index number (e.g. 26253)"
+                  placeholder="5-digit section index (e.g. 26253)"
                   maxLength={12}
                   className={`w-full min-h-12 rounded-xl border bg-black px-4 py-3 font-mono text-lg font-black tracking-wider text-white outline-none transition-all ${
                     error ? 'border-red-500 focus:border-red-400' : 'border-[var(--border)] focus:border-[#CC0033]'
@@ -954,6 +954,19 @@ function QuickSnipeBox() {
                 ) : 'Snipe it'}
               </button>
             </div>
+
+            <p className="mt-1.5 text-[11px] text-zinc-600">
+              The index number is the 5-digit code listed next to each section in the{' '}
+              <a
+                href="https://sis.rutgers.edu/soc/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-400 underline underline-offset-2 hover:text-white transition-colors"
+              >
+                Rutgers Schedule of Classes ↗
+              </a>
+              {' '}and in WebReg.
+            </p>
 
             <AnimatePresence mode="wait">
               {error && (
@@ -1154,22 +1167,34 @@ function LiveStatusBar({
     return () => window.clearInterval(t)
   }, [])
 
-  const syncLabel = lastWorkerSync != null ? formatRelative(lastWorkerSync, now) : 'awaiting first sync'
-  const stale = lastWorkerSync != null && now - lastWorkerSync > 5 * 60_000
+  const noSync = lastWorkerSync == null
+  const syncLabel = !noSync ? formatRelative(lastWorkerSync!, now) : null
+  const stale = !noSync && now - lastWorkerSync! > 5 * 60_000
 
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 sm:px-5">
       <div className="flex items-center gap-2.5 min-w-0">
         <span className="relative flex h-2 w-2 shrink-0">
-          {!stale && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />}
-          <span className={`relative inline-flex h-2 w-2 rounded-full ${stale ? 'bg-amber-400' : 'bg-green-400'}`} />
+          {!stale && !noSync && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />}
+          <span className={`relative inline-flex h-2 w-2 rounded-full ${stale || noSync ? 'bg-amber-400' : 'bg-green-400'}`} />
         </span>
         <p className="text-xs text-zinc-400 truncate">
-          <span className={stale ? 'text-amber-400 font-semibold' : 'text-zinc-300 font-semibold'}>
-            {stale ? 'Data may be stale' : 'Live'}
-          </span>
-          <span className="text-zinc-600"> · worker synced </span>
-          <span className="tabular-nums text-zinc-300">{syncLabel}</span>
+          {noSync ? (
+            <span className="text-amber-400 font-semibold">Waiting for first worker sync&hellip;</span>
+          ) : stale ? (
+            <>
+              <span className="text-amber-400 font-semibold">Data may be stale</span>
+              <span className="text-zinc-600"> · last sync </span>
+              <span className="tabular-nums text-zinc-300">{syncLabel}</span>
+              <span className="text-zinc-600"> · worker may not be running</span>
+            </>
+          ) : (
+            <>
+              <span className="text-zinc-300 font-semibold">Live</span>
+              <span className="text-zinc-600"> · worker synced </span>
+              <span className="tabular-nums text-zinc-300">{syncLabel}</span>
+            </>
+          )}
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -1345,12 +1370,16 @@ export default function WatchlistPage() {
 
         <FlipBoardBanner />
 
+        {/* Browser alert prompt shown before the first snipe so permission can
+            be granted before a seat opens — it is dismissible and self-hides
+            once granted or denied. */}
+        <BrowserAlertPrompt />
+
         <QuickSnipeBox />
 
         {/* loaded state */}
         {!loading && !error && items.length > 0 && (
           <>
-            <BrowserAlertPrompt />
 
             <StatCards
               total={items.length}
@@ -1438,11 +1467,21 @@ export default function WatchlistPage() {
           <EmptyState
             icon="🎯"
             title="No active snipes yet"
-            subtitle="Paste a 5-digit section index above, or browse courses and hit Watch on any section."
+            subtitle="Paste a 5-digit section index above to start watching. Find the index number on the Rutgers Schedule of Classes (sis.rutgers.edu/soc) next to each section. Or browse courses below and hit Watch on any section."
             action={
-              <Link href="/courses" className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#CC0033' }}>
-                Browse Courses
-              </Link>
+              <div className="flex flex-wrap gap-2 justify-center">
+                <a
+                  href="https://sis.rutgers.edu/soc/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white border border-zinc-600 hover:border-zinc-400 transition-colors"
+                >
+                  Open SOC ↗
+                </a>
+                <Link href="/courses" className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#CC0033' }}>
+                  Browse Courses
+                </Link>
+              </div>
             }
           />
         )}
