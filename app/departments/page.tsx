@@ -347,7 +347,7 @@ export default function DepartmentsPage() {
                     : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
                 }`}
               >
-                {abbrevSchool(school)}
+                {school}
               </button>
             ))}
           </div>
