@@ -88,11 +88,6 @@ const VERDICT = {
 
 export default function SchedulePage() {
   const [text, setText] = useState('')
-
-  useEffect(() => {
-    document.title = 'Schedule Ranker | RU Rate'
-    return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
-  }, [])
   const [chips, setChips] = useState<string[]>([])
   const [step, setStep] = useState<'input' | 'confirm' | 'results'>('input')
   const [loading, setLoading] = useState(false)
@@ -100,6 +95,11 @@ export default function SchedulePage() {
   const [notFound, setNotFound] = useState<string[]>([])
   const [newName, setNewName] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    document.title = 'Schedule Ranker | RU Rate'
+    return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
+  }, [])
 
   function handleParse() {
     const parsed = parseScheduleText(text)
@@ -126,7 +126,7 @@ export default function SchedulePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ names: chips }),
       })
-      if (!res.ok) throw new Error('Analysis failed')
+      if (!res.ok) throw new Error(`Analysis failed (${res.status})`)
       const data = await res.json()
       setResults(data.results ?? [])
       setNotFound(data.notFound ?? [])
