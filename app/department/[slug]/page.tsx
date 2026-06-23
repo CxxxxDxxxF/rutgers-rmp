@@ -246,6 +246,7 @@ function DepartmentContent({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [courseSearch, setCourseSearch] = useState('')
+  const [openOnly, setOpenOnly] = useState(false)
   const [profSort, setProfSort] = useState<ProfSort>('rating')
   const [profSearch, setProfSearch] = useState('')
   const [showAllProfs, setShowAllProfs] = useState(false)
@@ -313,12 +314,14 @@ function DepartmentContent({ slug }: { slug: string }) {
 
   const { department, courses, courseSectionMap = {} } = data
 
-  const filteredCourses = courseSearch.trim()
-    ? courses.filter(c =>
-        c.course_number.toLowerCase().includes(courseSearch.toLowerCase()) ||
-        c.name.toLowerCase().includes(courseSearch.toLowerCase())
-      )
-    : courses
+  const filteredCourses = courses.filter(c => {
+    if (openOnly && !(courseSectionMap[c.id]?.open > 0)) return false
+    if (!courseSearch.trim()) return true
+    const q = courseSearch.toLowerCase()
+    return c.course_number.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+  })
+
+  const hasAnySections = Object.values(courseSectionMap).some(s => s.total > 0)
 
   const totalOpen = Object.values(courseSectionMap).reduce((sum, s) => sum + s.open, 0)
   const totalSections = Object.values(courseSectionMap).reduce((sum, s) => sum + s.total, 0)
@@ -486,7 +489,20 @@ function DepartmentContent({ slug }: { slug: string }) {
                   <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
                     Courses
                   </h2>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {hasAnySections && (
+                      <button
+                        onClick={() => setOpenOnly(v => !v)}
+                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                          openOnly
+                            ? 'border-green-700/60 bg-green-950/50 text-green-400 font-semibold'
+                            : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                        Open only
+                      </button>
+                    )}
                     <input
                       type="text"
                       placeholder="Filter courses…"
@@ -507,7 +523,17 @@ function DepartmentContent({ slug }: { slug: string }) {
                 <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
                   {filteredCourses.length === 0 ? (
                     <div className="px-5 py-8 text-center text-zinc-500 text-sm">
-                      No courses match &ldquo;{courseSearch}&rdquo;
+                      {openOnly
+                        ? 'No open sections right now.'
+                        : `No courses match “${courseSearch}”`}
+                      {(openOnly || courseSearch) && (
+                        <button
+                          onClick={() => { setOpenOnly(false); setCourseSearch('') }}
+                          className="block mx-auto mt-2 text-xs text-[#CC0033] hover:underline"
+                        >
+                          Clear filter
+                        </button>
+                      )}
                     </div>
                   ) : (
                     filteredCourses.map((course, i) => (
