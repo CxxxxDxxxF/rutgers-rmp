@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { useWatchlistSync } from '@/lib/watchlist-client'
 
 const NAV = [
   { href: '/courses', label: 'Courses' },
@@ -16,6 +17,7 @@ const NAV = [
 export default function AppHeader() {
   const pathname = usePathname()
   const { user, loading } = useAuth()
+  useWatchlistSync()
 
   async function handleSignOut() {
     if (!supabase) return

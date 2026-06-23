@@ -1,15 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 
 const ID_KEY = 'ru-rate-watcher-id'
 const CHANGE_EVENT = 'ru-rate-watchlist-change'
 
-/**
- * Anonymous per-browser identity for the watchlist. There is no auth system
- * yet, so the watchlist is keyed by a client-generated UUID. Clearing
- * browser storage clears the watchlist.
- */
 export function getWatcherId(): string | null {
   if (typeof window === 'undefined') return null
   try {
@@ -22,6 +19,66 @@ export function getWatcherId(): string | null {
   } catch {
     return null
   }
+}
+
+function setWatcherId(id: string) {
+  try {
+    localStorage.setItem(ID_KEY, id)
+  } catch { /* ignore */ }
+}
+
+function resetWatcherId() {
+  setWatcherId(crypto.randomUUID())
+  notifyChange()
+}
+
+async function claimWatchlist(userId: string) {
+  const currentId = getWatcherId()
+  if (!currentId) return
+  if (currentId === userId) return // already keyed to this user
+
+  try {
+    if (!supabase) return
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) return
+
+    const res = await fetch('/api/watchlist/claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ from_watcher: currentId }),
+    })
+
+    if (res.ok) {
+      setWatcherId(userId)
+      notifyChange()
+    }
+  } catch { /* non-fatal — watchlist still works as anonymous */ }
+}
+
+/**
+ * Mount once (e.g. in AppHeader) to automatically sync the watchlist with
+ * the signed-in user's account. On sign-in it migrates anonymous rows to
+ * auth.uid; on sign-out it resets to a fresh anonymous UUID.
+ */
+export function useWatchlistSync() {
+  const { user, loading } = useAuth()
+  const claimedRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (loading) return
+
+    if (user && claimedRef.current !== user.id) {
+      claimedRef.current = user.id
+      claimWatchlist(user.id)
+    } else if (!user && claimedRef.current !== null) {
+      claimedRef.current = null
+      resetWatcherId()
+    }
+  }, [user, loading])
 }
 
 export interface WatchedSection {
