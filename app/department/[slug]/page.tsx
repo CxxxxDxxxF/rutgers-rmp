@@ -232,12 +232,17 @@ function LoadingSpinner() {
   )
 }
 
+type VerdictFilter = 'all' | 'take' | 'depends' | 'avoid'
+
 function DepartmentContent({ slug }: { slug: string }) {
   const [data, setData] = useState<DepartmentDetail | null>(null)
   const [related, setRelated] = useState<RelatedDept[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [courseSearch, setCourseSearch] = useState('')
+  const [openOnly, setOpenOnly] = useState(false)
+  const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>('all')
+  const [showAllProfs, setShowAllProfs] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -279,12 +284,22 @@ function DepartmentContent({ slug }: { slug: string }) {
 
   const { department, professors, courses, courseSectionMap = {} } = data
 
-  const filteredCourses = courseSearch.trim()
-    ? courses.filter(c =>
-        c.course_number.toLowerCase().includes(courseSearch.toLowerCase()) ||
-        c.name.toLowerCase().includes(courseSearch.toLowerCase())
-      )
-    : courses
+  const filteredProfessors = professors.filter(p => {
+    if (verdictFilter === 'all') return true
+    return p.verdict === verdictFilter
+  })
+
+  const visibleProfessors = showAllProfs ? filteredProfessors : filteredProfessors.slice(0, 12)
+
+  const filteredCourses = courses.filter(c => {
+    const q = courseSearch.trim().toLowerCase()
+    if (q && !c.course_number.toLowerCase().includes(q) && !c.name.toLowerCase().includes(q)) return false
+    if (openOnly) {
+      const section = courseSectionMap[c.id]
+      if (!section || section.open === 0) return false
+    }
+    return true
+  })
 
   const totalOpen = Object.values(courseSectionMap).reduce((sum, s) => sum + s.open, 0)
   const totalSections = Object.values(courseSectionMap).reduce((sum, s) => sum + s.total, 0)
@@ -341,29 +356,61 @@ function DepartmentContent({ slug }: { slug: string }) {
 
             {/* Top professors */}
             <section>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
                   Professors
                 </h2>
-                <p className="text-xs text-zinc-600">
-                  Click any professor to read reviews or write one
-                </p>
+                {professors.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(['all', 'take', 'depends', 'avoid'] as VerdictFilter[]).map(v => {
+                      const labels: Record<VerdictFilter, string> = { all: 'All', take: 'TAKE', depends: 'DEPENDS', avoid: 'AVOID' }
+                      const active = verdictFilter === v
+                      const colors: Record<VerdictFilter, string> = {
+                        all: active ? 'border-[var(--border)] bg-[var(--card-2)] text-white' : 'border-[var(--border)] text-zinc-500 hover:text-zinc-300',
+                        take: active ? 'border-green-800 bg-green-950 text-green-400' : 'border-[var(--border)] text-zinc-500 hover:text-green-500',
+                        depends: active ? 'border-amber-800 bg-amber-950 text-amber-400' : 'border-[var(--border)] text-zinc-500 hover:text-amber-500',
+                        avoid: active ? 'border-red-900 bg-red-950 text-red-400' : 'border-[var(--border)] text-zinc-500 hover:text-red-500',
+                      }
+                      return (
+                        <button
+                          key={v}
+                          onClick={() => { setVerdictFilter(v); setShowAllProfs(false) }}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all ${colors[v]}`}
+                        >
+                          {labels[v]}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
               {professors.length === 0 ? (
                 <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
                   No professors found for this department yet.
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {professors.slice(0, 12).map((prof) => (
-                    <ProfessorCard key={prof.slug} prof={prof} />
-                  ))}
+              ) : filteredProfessors.length === 0 ? (
+                <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
+                  No professors with a <span className="font-semibold uppercase">{verdictFilter}</span> verdict yet.
+                  <button onClick={() => setVerdictFilter('all')} className="mt-2 block mx-auto text-xs text-[#CC0033] hover:underline">Show all</button>
                 </div>
-              )}
-              {professors.length > 12 && (
-                <p className="mt-3 text-xs text-zinc-600 text-center">
-                  Showing top 12 of {professors.length} professors
-                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {visibleProfessors.map((prof) => (
+                      <ProfessorCard key={prof.slug} prof={prof} />
+                    ))}
+                  </div>
+                  {filteredProfessors.length > 12 && (
+                    <button
+                      onClick={() => setShowAllProfs(prev => !prev)}
+                      className="mt-4 w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors py-2 rounded-lg border border-[var(--border)] hover:border-zinc-600"
+                    >
+                      {showAllProfs
+                        ? `Show less`
+                        : `Show all ${filteredProfessors.length} professors`}
+                    </button>
+                  )}
+                </>
               )}
             </section>
 
@@ -374,14 +421,26 @@ function DepartmentContent({ slug }: { slug: string }) {
                   <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
                     Courses
                   </h2>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <input
                       type="text"
                       placeholder="Filter courses…"
                       value={courseSearch}
                       onChange={e => setCourseSearch(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-44"
+                      className="px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-40"
                     />
+                    {totalSections > 0 && (
+                      <button
+                        onClick={() => setOpenOnly(prev => !prev)}
+                        className={`text-xs px-3 py-1.5 rounded-lg border transition-all font-semibold whitespace-nowrap ${
+                          openOnly
+                            ? 'border-green-800 bg-green-950 text-green-400'
+                            : 'border-[var(--border)] text-zinc-500 hover:text-green-500 hover:border-green-800'
+                        }`}
+                      >
+                        Open only
+                      </button>
+                    )}
                     <Link
                       href={`/courses?dept=${department.slug}`}
                       className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors whitespace-nowrap"

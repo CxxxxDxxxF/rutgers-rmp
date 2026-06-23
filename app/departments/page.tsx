@@ -197,6 +197,7 @@ function RateProfessorSearch() {
 }
 
 type SortKey = 'name' | 'rating' | 'professors' | 'courses'
+type MinRating = 'any' | '3' | '3.5' | '4'
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'name', label: 'A–Z' },
@@ -235,6 +236,7 @@ export default function DepartmentsPage() {
   const [search, setSearch] = useState('')
   const [activeSchool, setActiveSchool] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('name')
+  const [minRating, setMinRating] = useState<MinRating>('any')
 
   useEffect(() => {
     fetch('/api/departments')
@@ -266,16 +268,20 @@ export default function DepartmentsPage() {
         d.full_name.toLowerCase().includes(q)
       )
     }
+    if (minRating !== 'any') {
+      const threshold = parseFloat(minRating)
+      list = list.filter(d => d.avg_rating != null && d.avg_rating >= threshold)
+    }
     return [...list].sort((a, b) => {
       if (sort === 'rating') return (b.avg_rating ?? -1) - (a.avg_rating ?? -1)
       if (sort === 'professors') return b.professor_count - a.professor_count
       if (sort === 'courses') return b.course_count - a.course_count
       return a.name.localeCompare(b.name)
     })
-  }, [departments, activeSchool, search, sort])
+  }, [departments, activeSchool, search, sort, minRating])
 
   const grouped = useMemo(() => {
-    if (activeSchool || search.trim()) return null
+    if (activeSchool || search.trim() || minRating !== 'any') return null
     const groups: Record<string, DepartmentRow[]> = {}
     for (const d of filtered) {
       const s = abbrevSchool(d.school) ?? 'Other'
@@ -283,7 +289,7 @@ export default function DepartmentsPage() {
       groups[s].push(d)
     }
     return groups
-  }, [filtered, activeSchool, search])
+  }, [filtered, activeSchool, search, minRating])
 
   const statsProfs = departments.reduce((s, d) => s + d.professor_count, 0)
   const statsCourses = departments.reduce((s, d) => s + d.course_count, 0)
@@ -358,6 +364,26 @@ export default function DepartmentsPage() {
           </div>
         )}
 
+        {/* Rating filter chips */}
+        {!loading && departments.length > 0 && (
+          <div className="flex items-center gap-2 mb-5 flex-wrap">
+            <span className="text-xs text-zinc-600 font-semibold uppercase tracking-wider">Rating:</span>
+            {([['any', 'Any'], ['3', '3.0+'], ['3.5', '3.5+'], ['4', '4.0+']] as [MinRating, string][]).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setMinRating(val)}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-all font-semibold ${
+                  minRating === val
+                    ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d]'
+                    : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Search + sort row */}
         {!loading && departments.length > 0 && (
           <div className="flex flex-col sm:flex-row gap-3 mb-8">
@@ -419,7 +445,7 @@ export default function DepartmentsPage() {
             <div className="text-3xl mb-3">🔍</div>
             <p className="text-zinc-400 text-sm">No departments match your filter.</p>
             <button
-              onClick={() => { setSearch(''); setActiveSchool(null) }}
+              onClick={() => { setSearch(''); setActiveSchool(null); setMinRating('any') }}
               className="mt-3 text-xs text-[#CC0033] hover:underline"
             >
               Clear filters
