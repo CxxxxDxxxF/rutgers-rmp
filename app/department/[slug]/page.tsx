@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, useMemo, use } from 'react'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
 
@@ -146,7 +146,7 @@ function ProfessorCard({ prof }: { prof: ProfessorRow }) {
   )
 }
 
-function CourseRow({
+function CourseLine({
   course,
   section,
 }: {
@@ -164,7 +164,6 @@ function CourseRow({
       className="flex flex-col gap-2 px-5 py-3.5 hover:bg-[var(--card)]/50 transition-colors group border-b border-[var(--border)] last:border-b-0"
     >
       <div className="flex items-center gap-3">
-        {/* Availability dot */}
         {hasTotal && (
           <div
             className="shrink-0 w-2 h-2 rounded-full"
@@ -232,12 +231,25 @@ function LoadingSpinner() {
   )
 }
 
+type ProfSort = 'rating' | 'difficulty' | 'name' | 'take_again'
+
+const PROF_SORT_OPTIONS: { value: ProfSort; label: string }[] = [
+  { value: 'rating', label: 'Top Rated' },
+  { value: 'difficulty', label: 'Easiest' },
+  { value: 'take_again', label: 'Take Again' },
+  { value: 'name', label: 'A–Z' },
+]
+
 function DepartmentContent({ slug }: { slug: string }) {
   const [data, setData] = useState<DepartmentDetail | null>(null)
   const [related, setRelated] = useState<RelatedDept[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [courseSearch, setCourseSearch] = useState('')
+  const [profSort, setProfSort] = useState<ProfSort>('rating')
+  const [profSearch, setProfSearch] = useState('')
+  const [showAllProfs, setShowAllProfs] = useState(false)
+  const [ratedOnly, setRatedOnly] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -258,6 +270,28 @@ function DepartmentContent({ slug }: { slug: string }) {
     load()
   }, [slug])
 
+  const sortedProfs = useMemo(() => {
+    if (!data) return []
+    let list = data.professors
+    if (ratedOnly) list = list.filter(p => p.avg_rating != null)
+    if (profSearch.trim()) {
+      const q = profSearch.toLowerCase()
+      list = list.filter(p =>
+        `${p.first_name} ${p.last_name}`.toLowerCase().includes(q)
+      )
+    }
+    return [...list].sort((a, b) => {
+      if (profSort === 'rating') return (b.avg_rating ?? -1) - (a.avg_rating ?? -1)
+      if (profSort === 'difficulty') return (a.avg_difficulty ?? 6) - (b.avg_difficulty ?? 6)
+      if (profSort === 'take_again') return (b.would_take_again ?? -1) - (a.would_take_again ?? -1)
+      return a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name)
+    })
+  }, [data, profSort, profSearch, ratedOnly])
+
+  const PROF_PAGE = 12
+  const visibleProfs = showAllProfs ? sortedProfs : sortedProfs.slice(0, PROF_PAGE)
+  const hiddenCount = sortedProfs.length - PROF_PAGE
+
   if (loading) return <LoadingSpinner />
 
   if (error || !data) {
@@ -277,7 +311,7 @@ function DepartmentContent({ slug }: { slug: string }) {
     )
   }
 
-  const { department, professors, courses, courseSectionMap = {} } = data
+  const { department, courses, courseSectionMap = {} } = data
 
   const filteredCourses = courseSearch.trim()
     ? courses.filter(c =>
@@ -288,6 +322,7 @@ function DepartmentContent({ slug }: { slug: string }) {
 
   const totalOpen = Object.values(courseSectionMap).reduce((sum, s) => sum + s.open, 0)
   const totalSections = Object.values(courseSectionMap).reduce((sum, s) => sum + s.total, 0)
+  const ratedCount = data.professors.filter(p => p.avg_rating != null).length
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -322,7 +357,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                 <p className="text-zinc-400 text-sm mt-4 leading-relaxed">{department.description}</p>
               )}
               <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-400">
-                <span className="font-medium">{professors.length} professor{professors.length !== 1 ? 's' : ''}</span>
+                <span className="font-medium">{data.professors.length} professor{data.professors.length !== 1 ? 's' : ''}</span>
                 <span className="w-1 h-1 rounded-full bg-zinc-700" />
                 <span className="font-medium">{courses.length} course{courses.length !== 1 ? 's' : ''}</span>
                 {totalSections > 0 && (
@@ -339,31 +374,108 @@ function DepartmentContent({ slug }: { slug: string }) {
               </div>
             </div>
 
-            {/* Top professors */}
+            {/* Professors */}
             <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider shrink-0">
                   Professors
                 </h2>
-                <p className="text-xs text-zinc-600">
-                  Click any professor to read reviews or write one
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Search */}
+                  <div className="relative">
+                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Filter by name…"
+                      value={profSearch}
+                      onChange={e => { setProfSearch(e.target.value); setShowAllProfs(false) }}
+                      className="pl-8 pr-3 py-1.5 rounded-lg text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-36"
+                      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                    />
+                  </div>
+
+                  {/* Rated only toggle */}
+                  {ratedCount > 0 && ratedCount < data.professors.length && (
+                    <button
+                      onClick={() => { setRatedOnly(v => !v); setShowAllProfs(false) }}
+                      className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                        ratedOnly
+                          ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d] font-semibold'
+                          : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      Rated only
+                    </button>
+                  )}
+
+                  {/* Sort */}
+                  <div className="flex items-center gap-1">
+                    {PROF_SORT_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setProfSort(opt.value)}
+                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
+                          profSort === opt.value
+                            ? 'border-[var(--border)] bg-[var(--card-2,var(--card))] text-white font-semibold'
+                            : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              {professors.length === 0 ? (
-                <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
-                  No professors found for this department yet.
+
+              {sortedProfs.length === 0 ? (
+                <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center">
+                  <p className="text-zinc-500 text-sm">
+                    {profSearch || ratedOnly ? 'No professors match your filter.' : 'No professors found for this department yet.'}
+                  </p>
+                  {(profSearch || ratedOnly) && (
+                    <button
+                      onClick={() => { setProfSearch(''); setRatedOnly(false) }}
+                      className="mt-2 text-xs text-[#CC0033] hover:underline"
+                    >
+                      Clear filters
+                    </button>
+                  )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {professors.slice(0, 12).map((prof) => (
-                    <ProfessorCard key={prof.slug} prof={prof} />
-                  ))}
-                </div>
-              )}
-              {professors.length > 12 && (
-                <p className="mt-3 text-xs text-zinc-600 text-center">
-                  Showing top 12 of {professors.length} professors
-                </p>
+                <>
+                  {(profSearch || ratedOnly) && (
+                    <p className="text-xs text-zinc-600 mb-3">
+                      {sortedProfs.length} result{sortedProfs.length !== 1 ? 's' : ''}
+                      {ratedOnly && <> · rated only</>}
+                      {profSearch && <> · matching &ldquo;{profSearch}&rdquo;</>}
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {visibleProfs.map((prof) => (
+                      <ProfessorCard key={prof.slug} prof={prof} />
+                    ))}
+                  </div>
+                  {!showAllProfs && hiddenCount > 0 && (
+                    <button
+                      onClick={() => setShowAllProfs(true)}
+                      className="mt-4 w-full py-2.5 rounded-xl border text-sm text-zinc-400 hover:text-white hover:border-zinc-500 transition-all"
+                      style={{ borderColor: 'var(--border)' }}
+                    >
+                      Show all {sortedProfs.length} professors
+                    </button>
+                  )}
+                  {showAllProfs && sortedProfs.length > PROF_PAGE && (
+                    <button
+                      onClick={() => setShowAllProfs(false)}
+                      className="mt-4 w-full py-2.5 rounded-xl border text-sm text-zinc-600 hover:text-zinc-400 transition-all"
+                      style={{ borderColor: 'var(--border)' }}
+                    >
+                      Show less
+                    </button>
+                  )}
+                </>
               )}
             </section>
 
@@ -380,7 +492,8 @@ function DepartmentContent({ slug }: { slug: string }) {
                       placeholder="Filter courses…"
                       value={courseSearch}
                       onChange={e => setCourseSearch(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-44"
+                      className="px-3 py-1.5 rounded-lg text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-44"
+                      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
                     />
                     <Link
                       href={`/courses?dept=${department.slug}`}
@@ -398,7 +511,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                     </div>
                   ) : (
                     filteredCourses.map((course, i) => (
-                      <CourseRow
+                      <CourseLine
                         key={course.id}
                         course={course}
                         section={courseSectionMap[course.id]}
