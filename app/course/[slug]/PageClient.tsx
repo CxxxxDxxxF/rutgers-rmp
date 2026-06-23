@@ -80,6 +80,75 @@ function professorHref(prof: Professor) {
     : `/professor/${prof.slug}?socId=${prof.id}`
 }
 
+function TopPickBanner({
+  professors,
+  visibleSections,
+}: {
+  professors: Professor[]
+  visibleSections: SectionRow[]
+}) {
+  const ratedProfs = professors.filter(p => p.avg_rating != null)
+  if (ratedProfs.length < 2) return null
+
+  const top = ratedProfs[0]
+  const second = ratedProfs[1]
+
+  const ratingGap = top.avg_rating! - (second.avg_rating ?? top.avg_rating!)
+  const hasVerdict = !!top.verdict
+
+  // Only surface the banner when the choice is clear-cut
+  if (!hasVerdict && ratingGap < 0.4) return null
+
+  const vc = top.verdict ? VERDICT_CONFIG[top.verdict] : null
+  const qColor = ratingColor(top.avg_rating!)
+
+  const profSections = visibleSections.filter(s => s.professor?.id === top.id)
+  const openCount = profSections.filter(s => s.open_status === true).length
+
+  const borderColor = vc?.tone === 'green' ? 'rgba(34,197,94,0.35)' : vc?.tone === 'red' ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)'
+  const bgColor = vc?.tone === 'green' ? 'rgba(34,197,94,0.06)' : vc?.tone === 'red' ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)'
+
+  return (
+    <div
+      className="rounded-xl border p-4 flex flex-wrap items-center gap-3 justify-between"
+      style={{ borderColor, background: bgColor }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="shrink-0 text-center">
+          <div className="text-xl font-black leading-none" style={{ color: qColor }}>
+            {top.avg_rating!.toFixed(1)}
+          </div>
+          <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Best Choice</span>
+            {vc && <Badge tone={vc.tone}>{vc.label}</Badge>}
+          </div>
+          <div className="font-semibold text-white leading-tight truncate">
+            {top.first_name} {top.last_name}
+          </div>
+          <div className="text-xs text-zinc-500 mt-0.5">
+            {profSections.length > 0
+              ? openCount > 0
+                ? `${openCount} open section${openCount !== 1 ? 's' : ''} this semester`
+                : `${profSections.length} section${profSections.length !== 1 ? 's' : ''} listed — all currently closed`
+              : ratingGap >= 0.4
+                ? `${ratingGap.toFixed(1)} pts ahead of next-highest rated`
+                : 'Top rated for this course'}
+          </div>
+        </div>
+      </div>
+      <Link
+        href={professorHref(top)}
+        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+      >
+        Full analysis →
+      </Link>
+    </div>
+  )
+}
+
 function ProfessorOptionCard({ prof }: { prof: Professor }) {
   const vc = prof.verdict ? VERDICT_CONFIG[prof.verdict] : null
   const qColor = prof.avg_rating != null ? ratingColor(prof.avg_rating) : '#52525b'
@@ -572,10 +641,13 @@ function CourseContent({ slug }: { slug: string }) {
           </div>
 
           {professors.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {professors.map(prof => (
-                <ProfessorOptionCard key={prof.slug} prof={prof} />
-              ))}
+            <div className="space-y-3">
+              <TopPickBanner professors={professors} visibleSections={visibleSections} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {professors.map(prof => (
+                  <ProfessorOptionCard key={prof.slug} prof={prof} />
+                ))}
+              </div>
             </div>
           ) : (
             <EmptyState
