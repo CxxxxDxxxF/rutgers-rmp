@@ -93,6 +93,58 @@ function VerdictBadge({ verdict }: { verdict: string | null }) {
   )
 }
 
+function VerdictBreakdown({ professors }: { professors: ProfessorRow[] }) {
+  const takes = professors.filter(p => p.verdict === 'take').length
+  const depends = professors.filter(p => p.verdict === 'depends').length
+  const avoids = professors.filter(p => p.verdict === 'avoid').length
+  const analyzed = takes + depends + avoids
+  if (analyzed === 0) return null
+
+  const takePct = (takes / analyzed) * 100
+  const dependsPct = (depends / analyzed) * 100
+  const avoidPct = (avoids / analyzed) * 100
+
+  return (
+    <div className="mt-5 pt-5 border-t border-[var(--border)]">
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">AI verdict breakdown</span>
+        <span className="text-[10px] text-zinc-700">{analyzed} of {professors.length} analyzed</span>
+      </div>
+      <div className="flex h-2 rounded-full overflow-hidden bg-zinc-900">
+        {takes > 0 && (
+          <div style={{ width: `${takePct}%`, backgroundColor: '#22c55e' }} />
+        )}
+        {depends > 0 && (
+          <div style={{ width: `${dependsPct}%`, backgroundColor: '#f59e0b', marginLeft: takes > 0 ? '2px' : undefined }} />
+        )}
+        {avoids > 0 && (
+          <div style={{ width: `${avoidPct}%`, backgroundColor: '#ef4444', marginLeft: depends > 0 || takes > 0 ? '2px' : undefined }} />
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+        {takes > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#22c55e' }} />
+            <span className="font-bold text-green-400">{takes}</span> TAKE ({Math.round(takePct)}%)
+          </span>
+        )}
+        {depends > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#f59e0b' }} />
+            <span className="font-bold text-amber-400">{depends}</span> DEPENDS ({Math.round(dependsPct)}%)
+          </span>
+        )}
+        {avoids > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#ef4444' }} />
+            <span className="font-bold text-red-400">{avoids}</span> AVOID ({Math.round(avoidPct)}%)
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ProfessorCard({ prof }: { prof: ProfessorRow }) {
   const href = `/professor/${prof.slug}${prof.rmp_id ? `?rmpId=${prof.rmp_id}` : ''}`
   const qColor = ratingColor(prof.avg_rating)
@@ -337,6 +389,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                   </>
                 )}
               </div>
+              <VerdictBreakdown professors={professors} />
             </div>
 
             {/* Top professors */}
