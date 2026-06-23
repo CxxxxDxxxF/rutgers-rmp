@@ -33,6 +33,14 @@ interface CourseSuggestion {
 
 const CREDIT_OPTIONS = ['', '1', '2', '3', '4', '5', '6']
 
+const CAMPUS_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All campuses' },
+  { value: 'COLLEGE AVENUE', label: 'College Ave' },
+  { value: 'BUSCH', label: 'Busch' },
+  { value: 'LIVINGSTON', label: 'Livingston' },
+  { value: 'COOK/DOUGLASS', label: 'Cook/Doug' },
+]
+
 function CoursesContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -52,6 +60,7 @@ function CoursesContent() {
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
   const [onlyWithSections, setOnlyWithSections] = useState(searchParams.get('open') === '1')
   const [onlyWithOpen, setOnlyWithOpen] = useState(searchParams.get('openonly') === '1')
+  const [campus, setCampus] = useState<string>(searchParams.get('campus') ?? '')
   const [sortBy, setSortBy] = useState<'number' | 'open' | 'rating'>(
     (searchParams.get('sort') as 'number' | 'open' | 'rating') ?? 'number'
   )
@@ -111,12 +120,13 @@ function CoursesContent() {
     if (serverQuery) params.set('q', serverQuery)
     if (credits) params.set('credits', credits)
     if (level) params.set('level', level)
+    if (campus) params.set('campus', campus)
     if (onlyWithSections) params.set('open', '1')
     if (onlyWithOpen) params.set('openonly', '1')
     if (sortBy !== 'number') params.set('sort', sortBy)
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, campus, onlyWithSections, onlyWithOpen, sortBy, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -189,6 +199,7 @@ function CoursesContent() {
         if (serverQuery.length >= 2) params.set('q', serverQuery)
         if (credits) params.set('credits', credits)
         if (level) params.set('level', level)
+        if (campus) params.set('campus', campus)
         const qs = params.toString()
         const res = await fetch(qs ? `/api/courses?${qs}` : '/api/courses')
         if (!res.ok) throw new Error('Failed to load courses')
@@ -201,7 +212,7 @@ function CoursesContent() {
       }
     }
     loadCourses()
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, campus, loadKey])
 
   // Instant client-side narrowing while typing + section filter + sort
   const filtered = useMemo(() => {
@@ -236,7 +247,7 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
+  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || campus || onlyWithSections || onlyWithOpen || sortBy !== 'number')
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -402,6 +413,25 @@ function CoursesContent() {
               Has sections
             </button>
 
+            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
+
+            {CAMPUS_OPTIONS.map(opt => (
+              <button
+                key={opt.value || 'all'}
+                onClick={() => setCampus(opt.value)}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                  campus === opt.value
+                    ? 'bg-blue-950 border-blue-800 text-blue-300'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                style={campus !== opt.value ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
+              >
+                {opt.label}
+              </button>
+            ))}
+
+            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
+
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
@@ -420,7 +450,7 @@ function CoursesContent() {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -474,7 +504,7 @@ function CoursesContent() {
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >

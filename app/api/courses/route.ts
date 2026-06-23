@@ -16,6 +16,18 @@ export async function GET(req: NextRequest) {
   const semester = req.nextUrl.searchParams.get('semester')?.trim()
   const offsetParam = req.nextUrl.searchParams.get('offset')?.trim()
   const openOnly = req.nextUrl.searchParams.get('openonly') === '1'
+  const campusParam = req.nextUrl.searchParams.get('campus')?.trim() ?? null
+  // Whitelist campus values to prevent injection
+  const VALID_CAMPUS: Record<string, string> = {
+    'COLLEGE AVENUE': 'COLLEGE AVENUE',
+    'BUSCH': 'BUSCH',
+    'LIVINGSTON': 'LIVINGSTON',
+    'COOK/DOUGLASS': 'COOK/DOUGLASS',
+    'ONLINE': 'ONLINE',
+  }
+  const campus = campusParam && VALID_CAMPUS[campusParam.toUpperCase()]
+    ? campusParam.toUpperCase()
+    : null
   const PAGE_SIZE = 160
   const offset = Math.max(0, parseInt(offsetParam ?? '0', 10) || 0)
 
@@ -40,6 +52,36 @@ export async function GET(req: NextRequest) {
       }
       const { data: openData } = await openQuery
       openCourseIds = openData ? [...new Set(openData.map((r: { course_id: string }) => r.course_id))] : []
+    }
+
+    // When campus filter is set, pre-fetch course IDs that have sections at that campus
+    let campusCourseIds: string[] | null = null
+    if (campus) {
+      let campusQuery = supabase
+        .from('teaching_assignments')
+        .select('course_id, semesters!inner ( slug, is_current )')
+        .eq('campus', campus)
+        .eq('status', 'active')
+      if (semester) {
+        campusQuery = campusQuery.eq('semesters.slug', semester)
+      } else {
+        campusQuery = campusQuery.eq('semesters.is_current', true)
+      }
+      const { data: campusData } = await campusQuery
+      campusCourseIds = campusData
+        ? [...new Set((campusData as { course_id: string }[]).map(r => r.course_id))]
+        : []
+    }
+
+    // Compute effective ID filter — intersection when both openOnly and campus apply
+    let idFilter: string[] | null = null
+    if (openCourseIds !== null || campusCourseIds !== null) {
+      if (openCourseIds !== null && campusCourseIds !== null) {
+        const openSet = new Set(openCourseIds)
+        idFilter = campusCourseIds.filter(id => openSet.has(id))
+      } else {
+        idFilter = openCourseIds ?? campusCourseIds!
+      }
     }
 
     // Use !inner only when filtering by dept (excludes non-matching courses).
@@ -72,11 +114,11 @@ export async function GET(req: NextRequest) {
     if (dept) {
       query = query.eq('course_departments.departments.slug', dept)
     }
-    if (openCourseIds && openCourseIds.length > 0) {
-      query = query.in('id', openCourseIds)
-    } else if (openCourseIds !== null) {
-      // openonly requested but no open courses found — return empty
-      return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+    if (idFilter !== null) {
+      if (idFilter.length === 0) {
+        return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+      }
+      query = query.in('id', idFilter)
     }
     if (q && q.length >= 2) {
       // Multi-word queries: every word must appear in the title, or the
@@ -125,7 +167,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const sectionSummary = await loadSectionSummary(courseIds, semester)
+    const sectionSummary = await loadSectionSummary(courseIds, semester, campus)
 
     const courses = (data ?? []).map((row: CourseRow) => {
       const deptJoin = Array.isArray(row.course_departments)
@@ -176,7 +218,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function loadSectionSummary(courseIds: string[], semesterSlug?: string | null) {
+async function loadSectionSummary(courseIds: string[], semesterSlug?: string | null, campusFilter?: string | null) {
   const summary = new Map<string, CourseSectionSummary>()
   if (!supabase || courseIds.length === 0) return summary
 
@@ -216,6 +258,9 @@ async function loadSectionSummary(courseIds: string[], semesterSlug?: string | n
   } else {
     // Default to current semester only to avoid mixing F2025 (null open_status) with F2026
     query = query.eq('semesters.is_current', true)
+  }
+  if (campusFilter) {
+    query = query.eq('campus', campusFilter)
   }
 
   const { data, error } = await query
