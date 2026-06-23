@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 
 const NAV = [
   { href: '/courses', label: 'Courses' },
+  { href: '/professors', label: 'Professors' },
   { href: '/departments', label: 'Departments' },
   { href: '/watchlist', label: 'Sniper' },
   { href: '/compare', label: 'Compare' },
@@ -129,7 +130,7 @@ export default function AppHeader() {
         <nav className="md:hidden flex gap-0.5 pb-2.5 -mx-1 px-1 overflow-x-auto">
           {NAV.map(({ href, label }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`)
-            const short = label === 'Departments' ? 'Depts' : label
+            const short = label === 'Departments' ? 'Depts' : label === 'Professors' ? 'Profs' : label
             return (
               <Link
                 key={href}
