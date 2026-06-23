@@ -16,6 +16,7 @@ import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import { supabase } from '@/lib/supabase'
 import type { ProfessorCache, AIAnalysis, Rating } from '@/lib/supabase'
 import { buildProfessorGrade, summarizeNativeReviews } from '@/lib/professor-grade'
+import { trackView } from '@/lib/recently-viewed'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -901,7 +902,7 @@ function SocRelatedSection({ professorId }: { professorId: string }) {
 // SOC professor profile (3B)
 // ---------------------------------------------------------------------------
 
-function SocProfessorContent({ socId }: { socId: string }) {
+function SocProfessorContent({ socId, slug }: { socId: string; slug: string }) {
   const [prof, setProf] = useState<{ first_name: string; last_name: string; department: string | null; teaching_count: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -931,6 +932,13 @@ function SocProfessorContent({ socId }: { socId: string }) {
 
         setProf({ first_name: profRow.first_name, last_name: profRow.last_name, department: deptName, teaching_count: count ?? 0 })
         document.title = `${profRow.first_name} ${profRow.last_name} | RU Rate`
+        trackView({
+          type: 'professor',
+          slug,
+          name: `${profRow.first_name} ${profRow.last_name}`,
+          subtitle: deptName,
+          href: `/professor/${slug}?socId=${socId}`,
+        })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -938,7 +946,7 @@ function SocProfessorContent({ socId }: { socId: string }) {
       }
     }
     load()
-  }, [socId])
+  }, [socId, slug])
 
   if (loading) {
     return (
@@ -1042,6 +1050,13 @@ function ProfessorContent() {
       const json = await res.json()
       setData(json)
       document.title = `${json.first_name} ${json.last_name} | RU Rate`
+      trackView({
+        type: 'professor',
+        slug: json.slug,
+        name: `${json.first_name} ${json.last_name}`,
+        subtitle: json.avg_rating != null ? `${Number(json.avg_rating).toFixed(1)}★ · ${json.department ?? ''}`.replace(/ · $/, '') : null,
+        href: `/professor/${json.slug}?rmpId=${rmpId}`,
+      })
       if (json.cached_at) {
         const ageMs = Date.now() - new Date(json.cached_at).getTime()
         const days = Math.floor(ageMs / (24 * 60 * 60 * 1000))
@@ -1336,10 +1351,10 @@ return (
   )
 }
 
-function ProfessorRouter() {
+function ProfessorRouter({ slug }: { slug: string }) {
   const searchParams = useSearchParams()
   const socId = searchParams.get('socId')
-  if (socId) return <SocProfessorContent socId={socId} />
+  if (socId) return <SocProfessorContent socId={socId} slug={slug} />
   return <ProfessorContent />
 }
 
@@ -1359,10 +1374,10 @@ function PageLoading() {
 }
 
 export default function ProfessorPageClient({ params }: { params: Promise<{ slug: string }> }) {
-  void use(params)
+  const { slug } = use(params)
   return (
     <Suspense fallback={<PageLoading />}>
-      <ProfessorRouter />
+      <ProfessorRouter slug={slug} />
     </Suspense>
   )
 }
