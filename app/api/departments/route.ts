@@ -15,10 +15,10 @@ export async function GET() {
         .order('school')
         .order('name'),
 
-      // LEFT join — count all profs in dept, grab rating for those with cache
+      // LEFT join — count all profs in dept, grab rating + verdict for those with cache
       supabase
         .from('professor_departments')
-        .select('department_id, professors(professor_cache(avg_rating))'),
+        .select('department_id, professors(professor_cache(avg_rating, ai_analysis))'),
 
       supabase
         .from('course_departments')
@@ -29,17 +29,22 @@ export async function GET() {
     const departments = deptResult.data ?? []
 
     // Aggregate professor stats per department
-    const deptStats: Record<string, { count: number; ratings: number[] }> = {}
+    const deptStats: Record<string, { count: number; ratings: number[]; take: number; depends: number; avoid: number }> = {}
     for (const row of profResult.data ?? []) {
       const deptId = row.department_id as string
-      if (!deptStats[deptId]) deptStats[deptId] = { count: 0, ratings: [] }
+      if (!deptStats[deptId]) deptStats[deptId] = { count: 0, ratings: [], take: 0, depends: 0, avoid: 0 }
       deptStats[deptId].count++
 
       const prof = row.professors as unknown as {
-        professor_cache: { avg_rating: number | null } | null
+        professor_cache: { avg_rating: number | null; ai_analysis: { verdict?: string } | null } | null
       } | null
-      const rating = prof?.professor_cache?.avg_rating
+      const cache = prof?.professor_cache
+      const rating = cache?.avg_rating
       if (rating != null) deptStats[deptId].ratings.push(Number(rating))
+      const verdict = cache?.ai_analysis?.verdict
+      if (verdict === 'take') deptStats[deptId].take++
+      else if (verdict === 'depends') deptStats[deptId].depends++
+      else if (verdict === 'avoid') deptStats[deptId].avoid++
     }
 
     // Course counts per department
@@ -66,6 +71,9 @@ export async function GET() {
         professor_count: stats?.count ?? 0,
         course_count: courseCounts[d.id] ?? 0,
         avg_rating: avgRaw != null ? Math.round(avgRaw * 10) / 10 : null,
+        take_count: stats?.take ?? 0,
+        depends_count: stats?.depends ?? 0,
+        avoid_count: stats?.avoid ?? 0,
       }
     })
 
