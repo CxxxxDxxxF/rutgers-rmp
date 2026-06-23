@@ -7,6 +7,59 @@ import type { ProfessorCache } from '@/lib/supabase'
 
 export const revalidate = 120
 
+interface TopProf {
+  rmp_id: string
+  slug: string
+  first_name: string
+  last_name: string
+  department: string
+  avg_rating: number
+  num_ratings: number
+  verdict: string | null
+}
+
+async function getTopRatedThisSemester(): Promise<TopProf[]> {
+  if (!supabase) return []
+  try {
+    const { data: semData } = await supabase
+      .from('semesters')
+      .select('id')
+      .eq('is_current', true)
+      .single()
+    if (!semData) return []
+
+    const { data: rows } = await supabase
+      .from('teaching_assignments')
+      .select('professors ( rmp_id, slug, professor_cache ( first_name, last_name, department, avg_rating, num_ratings, ai_analysis ) )')
+      .eq('semester_id', semData.id)
+      .eq('status', 'active')
+      .limit(800)
+
+    const seen = new Set<string>()
+    const profs: TopProf[] = []
+    for (const row of rows ?? []) {
+      const prof = Array.isArray(row.professors) ? row.professors[0] : row.professors
+      if (!prof?.rmp_id || seen.has(prof.rmp_id)) continue
+      const cache = Array.isArray(prof.professor_cache) ? prof.professor_cache[0] : prof.professor_cache
+      if (!cache?.avg_rating || cache.num_ratings < 5) continue
+      seen.add(prof.rmp_id)
+      profs.push({
+        rmp_id: prof.rmp_id,
+        slug: prof.slug,
+        first_name: cache.first_name,
+        last_name: cache.last_name,
+        department: cache.department ?? '',
+        avg_rating: Number(cache.avg_rating),
+        num_ratings: cache.num_ratings,
+        verdict: (cache.ai_analysis as { verdict?: string } | null)?.verdict ?? null,
+      })
+    }
+    return profs.sort((a, b) => b.avg_rating - a.avg_rating).slice(0, 6)
+  } catch {
+    return []
+  }
+}
+
 async function getPopular(): Promise<ProfessorCache[]> {
   if (!supabase) return []
   try {
@@ -124,9 +177,9 @@ const TOOLS: {
     ),
   },
   {
-    href: '/departments',
-    title: 'Professor Reviews',
-    description: 'Browse by department to find professors, read AI summaries, and leave RU Rate reviews',
+    href: '/professors',
+    title: 'Browse Professors',
+    description: 'Filter all rated Rutgers professors by AI verdict, department, and rating',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -136,7 +189,7 @@ const TOOLS: {
 ]
 
 export default async function HomePage() {
-  const [popular, hotCourses] = await Promise.all([getPopular(), getHotCourses()])
+  const [popular, hotCourses, topRated] = await Promise.all([getPopular(), getHotCourses(), getTopRatedThisSemester()])
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
@@ -189,7 +242,7 @@ export default async function HomePage() {
             Browse courses
           </Link>
           <Link
-            href="/departments"
+            href="/professors"
             className="rounded-xl border px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-colors hover:border-zinc-500 hover:text-white"
             style={{ borderColor: 'var(--border)', background: 'var(--card-2)' }}
           >
@@ -282,6 +335,64 @@ export default async function HomePage() {
         </section>
       )}
 
+      {/* Top Rated This Semester */}
+      {topRated.length > 0 && (
+        <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
+              Top Rated Teachers This Semester
+            </h2>
+            <Link
+              href="/professors?sort=rating"
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              Browse all →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {topRated.map(prof => {
+              const color = prof.avg_rating >= 4 ? '#22c55e' : prof.avg_rating >= 3 ? '#f59e0b' : '#ef4444'
+              const verdictStyles: Record<string, string> = {
+                take: 'bg-green-950 border-green-800 text-green-400',
+                depends: 'bg-amber-950 border-amber-800 text-amber-400',
+                avoid: 'bg-red-950 border-red-900 text-red-400',
+              }
+              return (
+                <Link
+                  key={prof.rmp_id}
+                  href={`/professor/${prof.slug}?rmpId=${prof.rmp_id}`}
+                  className="relative block rounded-xl overflow-hidden hover:border-[#CC0033]/40 transition-all group"
+                  style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                >
+                  <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: color }} />
+                  <div className="pl-4 pr-4 pt-3 pb-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-white group-hover:text-[#CC0033] transition-colors text-sm leading-tight truncate">
+                        {prof.first_name} {prof.last_name}
+                      </div>
+                      <div className="text-xs text-zinc-500 truncate mt-0.5">{prof.department}</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                      <div className="text-center">
+                        <div className="text-xl font-black leading-none tabular-nums" style={{ color }}>
+                          {prof.avg_rating.toFixed(1)}
+                        </div>
+                        <div className="text-[10px] text-zinc-600 mt-0.5">{prof.num_ratings} ratings</div>
+                      </div>
+                      {prof.verdict && verdictStyles[prof.verdict] && (
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${verdictStyles[prof.verdict]}`}>
+                          {prof.verdict.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Popular */}
       {popular.length > 0 && (
         <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
@@ -290,7 +401,7 @@ export default async function HomePage() {
               Most Searched Professors
             </h2>
             <Link
-              href="/departments"
+              href="/professors"
               className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
             >
               All professors →
