@@ -34,6 +34,12 @@ function professorHref(p: NonNullable<SectionRow['professor']>) {
     : `/professor/${p.slug}?socId=${p.id}`
 }
 
+function ratingColor(r: number): string {
+  if (r >= 4) return '#22c55e'
+  if (r >= 3) return '#f59e0b'
+  return '#ef4444'
+}
+
 function StatusBadge({ section }: { section: SectionRow }) {
   if (section.open_status === true) return <Badge tone="green">OPEN</Badge>
   if (section.open_status === false) return <Badge tone="red">CLOSED</Badge>
@@ -174,7 +180,7 @@ export default function SectionTable({
                     >
                       {s.professor.first_name} {s.professor.last_name}
                       {s.professor.avg_rating != null && (
-                        <span className="ml-1.5 text-xs text-zinc-500">
+                        <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
                           {Number(s.professor.avg_rating).toFixed(1)}★
                         </span>
                       )}
@@ -241,7 +247,7 @@ export default function SectionTable({
                 <Link href={professorHref(s.professor)} className="text-zinc-200 font-medium hover:text-[#ff4d6d]">
                   {s.professor.first_name} {s.professor.last_name}
                   {s.professor.avg_rating != null && (
-                    <span className="ml-1.5 text-xs text-zinc-500">
+                    <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
                       {Number(s.professor.avg_rating).toFixed(1)}★
                     </span>
                   )}
