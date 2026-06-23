@@ -406,6 +406,12 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
               )}
             </AnimatePresence>
 
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              By submitting you agree to our{' '}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300 transition-colors">Terms of Service</a>.
+              {' '}Reviews must be honest and based on your personal experience.
+            </p>
+
             {/* Submit */}
             <button
               type="submit"
