@@ -354,7 +354,11 @@ export default async function HomePage() {
       <footer className="mt-auto border-t border-zinc-900 px-6 py-6">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
           <span>RU Rate — Rutgers Registration Command Center</span>
-          <span>Reviews from RateMyProfessors · Courses from Rutgers SOC · Not affiliated with Rutgers</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span>Reviews from RateMyProfessors · Courses from Rutgers SOC · Not affiliated with Rutgers</span>
+            <Link href="/privacy" className="hover:text-zinc-400 transition-colors underline underline-offset-2">Privacy</Link>
+            <Link href="/terms" className="hover:text-zinc-400 transition-colors underline underline-offset-2">Terms</Link>
+          </div>
         </div>
       </footer>
     </div>
