@@ -238,6 +238,7 @@ function DepartmentContent({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [courseSearch, setCourseSearch] = useState('')
+  const [profSearch, setProfSearch] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -285,6 +286,12 @@ function DepartmentContent({ slug }: { slug: string }) {
         c.name.toLowerCase().includes(courseSearch.toLowerCase())
       )
     : courses
+
+  const filteredProfessors = profSearch.trim()
+    ? professors.filter(p =>
+        `${p.first_name} ${p.last_name}`.toLowerCase().includes(profSearch.toLowerCase())
+      )
+    : professors
 
   const totalOpen = Object.values(courseSectionMap).reduce((sum, s) => sum + s.open, 0)
   const totalSections = Object.values(courseSectionMap).reduce((sum, s) => sum + s.total, 0)
@@ -341,28 +348,44 @@ function DepartmentContent({ slug }: { slug: string }) {
 
             {/* Top professors */}
             <section>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
                   Professors
+                  {profSearch.trim() && filteredProfessors.length !== professors.length && (
+                    <span className="ml-2 font-normal text-zinc-600 normal-case tracking-normal">
+                      {filteredProfessors.length} of {professors.length}
+                    </span>
+                  )}
                 </h2>
-                <p className="text-xs text-zinc-600">
-                  Click any professor to read reviews or write one
-                </p>
+                {professors.length > 4 && (
+                  <input
+                    type="text"
+                    placeholder="Filter professors…"
+                    value={profSearch}
+                    onChange={e => setProfSearch(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-full sm:w-44"
+                  />
+                )}
               </div>
               {professors.length === 0 ? (
                 <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
                   No professors found for this department yet.
                 </div>
+              ) : filteredProfessors.length === 0 ? (
+                <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
+                  No professors match &ldquo;{profSearch}&rdquo;
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {professors.slice(0, 12).map((prof) => (
+                  {filteredProfessors.slice(0, 12).map((prof) => (
                     <ProfessorCard key={prof.slug} prof={prof} />
                   ))}
                 </div>
               )}
-              {professors.length > 12 && (
+              {filteredProfessors.length > 12 && (
                 <p className="mt-3 text-xs text-zinc-600 text-center">
-                  Showing top 12 of {professors.length} professors
+                  Showing top 12 of {filteredProfessors.length}
+                  {profSearch.trim() ? ' matching' : ''} professors
                 </p>
               )}
             </section>
