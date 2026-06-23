@@ -16,6 +16,7 @@ import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import { supabase } from '@/lib/supabase'
 import type { ProfessorCache, AIAnalysis, Rating } from '@/lib/supabase'
 import { buildProfessorGrade, summarizeNativeReviews } from '@/lib/professor-grade'
+import { addRecentItem } from '@/lib/recently-viewed'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1056,6 +1057,19 @@ function ProfessorContent() {
   }, [rmpId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  useEffect(() => {
+    if (!data || !rmpId) return
+    addRecentItem({
+      type: 'professor',
+      id: rmpId,
+      name: `${data.first_name} ${data.last_name}`,
+      slug: data.slug,
+      href: `/professor/${data.slug}?rmpId=${rmpId}`,
+      subtitle: data.department ?? null,
+      rating: data.avg_rating != null ? Number(data.avg_rating) : null,
+    })
+  }, [data, rmpId])
 
   if (loading) {
     return (

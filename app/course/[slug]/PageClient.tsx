@@ -12,6 +12,7 @@ import SectionTable, { CopyButton, type SectionRow } from '@/components/SectionT
 import { SkeletonBlock, RowListSkeleton } from '@/components/LoadingSkeleton'
 import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
 import type { ProfessorGrade } from '@/lib/professor-grade'
+import { addRecentItem } from '@/lib/recently-viewed'
 
 interface Department {
   id: string
@@ -361,6 +362,20 @@ function CourseContent({ slug }: { slug: string }) {
     const current = requested ?? data.semesters.find(sem => sem.is_current) ?? data.semesters[0]
     if (current) setSelectedSemesterId(current.id)
   }, [data, selectedSemesterId, selectedSemesterSlug])
+
+  useEffect(() => {
+    if (!data) return
+    const c = data.course
+    addRecentItem({
+      type: 'course',
+      id: c.id,
+      name: `${c.course_number} ${c.name}`,
+      slug: c.slug,
+      href: `/course/${c.slug}`,
+      subtitle: data.department?.name ?? null,
+      rating: null,
+    })
+  }, [data])
 
   if (loading) {
     return (

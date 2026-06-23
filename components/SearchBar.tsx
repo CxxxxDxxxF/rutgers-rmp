@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Toast from './Toast'
+import { getRecentItems, clearRecentItems, type RecentItem } from '@/lib/recently-viewed'
 
 interface ProfessorResult {
   id: string
@@ -49,14 +50,20 @@ export default function SearchBar() {
   const [items, setItems] = useState<SearchItem[]>([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
   const [selected, setSelected] = useState(-1)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [recentItems, setRecentItems] = useState<RecentItem[]>([])
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchRequestRef = useRef(0)
   const searchAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    setRecentItems(getRecentItems())
+  }, [focused])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -182,14 +189,74 @@ export default function SearchBar() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKey}
-          onFocus={e => { if (items.length > 0) setOpen(true); e.currentTarget.style.borderColor = '#CC0033' }}
-          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+          onFocus={e => {
+            setFocused(true)
+            if (items.length > 0) setOpen(true)
+            e.currentTarget.style.borderColor = '#CC0033'
+          }}
+          onBlur={e => {
+            setFocused(false)
+            e.currentTarget.style.borderColor = 'var(--border)'
+          }}
           placeholder="Search courses first — number, title, or Rutgers NB professor..."
           className="w-full pl-12 pr-4 py-4 rounded-2xl text-white placeholder-zinc-500 text-base sm:text-lg focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
           style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
           autoComplete="off"
         />
       </div>
+
+      {focused && !query.trim() && recentItems.length > 0 && (
+        <div
+          className="absolute top-full mt-2 w-full rounded-2xl overflow-hidden shadow-2xl z-50"
+          style={{ background: 'var(--card-2)', border: '1px solid var(--border)' }}
+        >
+          <div className="flex items-center justify-between px-5 pt-3 pb-1.5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Recently Viewed</span>
+            <button
+              onMouseDown={e => { e.preventDefault(); clearRecentItems(); setRecentItems([]) }}
+              className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          {recentItems.map(item => (
+            <button
+              key={`${item.type}-${item.id}`}
+              onMouseDown={e => { e.preventDefault(); router.push(item.href) }}
+              className="w-full text-left px-5 py-2.5 flex items-center justify-between gap-4 transition-colors hover:bg-white/[0.03]"
+              style={{ borderTop: '1px solid var(--border)' }}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {item.type === 'professor' ? (
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-zinc-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                    </svg>
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: '#CC0033' }}>
+                    {item.name.split(' ')[0] ?? 'CRSE'}
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-zinc-200 truncate">
+                    {item.type === 'course' ? item.name.split(' ').slice(1).join(' ') || item.name : item.name}
+                  </div>
+                  {item.subtitle && <div className="text-xs text-zinc-500 truncate">{item.subtitle}</div>}
+                </div>
+              </div>
+              {item.rating != null && (
+                <span
+                  className="text-sm font-black shrink-0 tabular-nums"
+                  style={{ color: item.rating >= 4 ? '#22c55e' : item.rating >= 3 ? '#f59e0b' : '#ef4444' }}
+                >
+                  {item.rating.toFixed(1)}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {open && items.length > 0 && (
         <div className="absolute top-full mt-2 w-full rounded-2xl overflow-hidden shadow-2xl z-50 max-h-[28rem] overflow-y-auto" style={{ background: 'var(--card-2)', border: '1px solid var(--border)' }}>
