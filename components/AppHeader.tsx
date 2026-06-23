@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 
 const NAV = [
   { href: '/courses', label: 'Courses' },
+  { href: '/professors', label: 'Professors' },
   { href: '/departments', label: 'Departments' },
   { href: '/watchlist', label: 'Sniper' },
   { href: '/compare', label: 'Compare' },
