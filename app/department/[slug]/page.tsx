@@ -251,6 +251,7 @@ function DepartmentContent({ slug }: { slug: string }) {
   const [profSearch, setProfSearch] = useState('')
   const [showAllProfs, setShowAllProfs] = useState(false)
   const [ratedOnly, setRatedOnly] = useState(false)
+  const [verdictFilter, setVerdictFilter] = useState<'' | 'take' | 'depends' | 'avoid'>('')
 
   useEffect(() => {
     async function load() {
@@ -275,6 +276,7 @@ function DepartmentContent({ slug }: { slug: string }) {
     if (!data) return []
     let list = data.professors
     if (ratedOnly) list = list.filter(p => p.avg_rating != null)
+    if (verdictFilter) list = list.filter(p => p.verdict === verdictFilter)
     if (profSearch.trim()) {
       const q = profSearch.toLowerCase()
       list = list.filter(p =>
@@ -287,7 +289,7 @@ function DepartmentContent({ slug }: { slug: string }) {
       if (profSort === 'take_again') return (b.would_take_again ?? -1) - (a.would_take_again ?? -1)
       return a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name)
     })
-  }, [data, profSort, profSearch, ratedOnly])
+  }, [data, profSort, profSearch, ratedOnly, verdictFilter])
 
   const PROF_PAGE = 12
   const visibleProfs = showAllProfs ? sortedProfs : sortedProfs.slice(0, PROF_PAGE)
@@ -413,6 +415,27 @@ function DepartmentContent({ slug }: { slug: string }) {
                     </button>
                   )}
 
+                  {/* Verdict filter chips */}
+                  {(['take', 'depends', 'avoid'] as const).map(v => {
+                    const active = verdictFilter === v
+                    const styles = {
+                      take:    { active: 'border-green-700 bg-green-950 text-green-400',  label: 'TAKE' },
+                      depends: { active: 'border-amber-700 bg-amber-950 text-amber-400',  label: 'DEPENDS' },
+                      avoid:   { active: 'border-red-800 bg-red-950 text-red-400',        label: 'AVOID' },
+                    }
+                    return (
+                      <button
+                        key={v}
+                        onClick={() => { setVerdictFilter(active ? '' : v); setShowAllProfs(false) }}
+                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all font-bold ${
+                          active ? styles[v].active : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {styles[v].label}
+                      </button>
+                    )
+                  })}
+
                   {/* Sort */}
                   <div className="flex items-center gap-1">
                     {PROF_SORT_OPTIONS.map(opt => (
@@ -435,11 +458,11 @@ function DepartmentContent({ slug }: { slug: string }) {
               {sortedProfs.length === 0 ? (
                 <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center">
                   <p className="text-zinc-500 text-sm">
-                    {profSearch || ratedOnly ? 'No professors match your filter.' : 'No professors found for this department yet.'}
+                    {profSearch || ratedOnly || verdictFilter ? 'No professors match your filter.' : 'No professors found for this department yet.'}
                   </p>
-                  {(profSearch || ratedOnly) && (
+                  {(profSearch || ratedOnly || verdictFilter) && (
                     <button
-                      onClick={() => { setProfSearch(''); setRatedOnly(false) }}
+                      onClick={() => { setProfSearch(''); setRatedOnly(false); setVerdictFilter('') }}
                       className="mt-2 text-xs text-[#CC0033] hover:underline"
                     >
                       Clear filters
@@ -448,10 +471,11 @@ function DepartmentContent({ slug }: { slug: string }) {
                 </div>
               ) : (
                 <>
-                  {(profSearch || ratedOnly) && (
+                  {(profSearch || ratedOnly || verdictFilter) && (
                     <p className="text-xs text-zinc-600 mb-3">
                       {sortedProfs.length} result{sortedProfs.length !== 1 ? 's' : ''}
                       {ratedOnly && <> · rated only</>}
+                      {verdictFilter && <> · verdict: <span className="uppercase font-bold">{verdictFilter}</span></>}
                       {profSearch && <> · matching &ldquo;{profSearch}&rdquo;</>}
                     </p>
                   )}

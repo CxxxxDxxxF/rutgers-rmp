@@ -239,6 +239,10 @@ function DepartmentsContent() {
   const [activeSchool, setActiveSchool] = useState<string | null>(searchParams.get('school') ?? null)
   const [sort, setSort] = useState<SortKey>((searchParams.get('sort') as SortKey) ?? 'name')
   const [ratedOnly, setRatedOnly] = useState(searchParams.get('rated') === '1')
+  const [minRating, setMinRating] = useState<'' | '3' | '4'>(
+    (searchParams.get('minr') as '' | '3' | '4') ?? ''
+  )
+  const [hasCourses, setHasCourses] = useState(searchParams.get('courses') === '1')
 
   useEffect(() => {
     fetch('/api/departments')
@@ -253,8 +257,10 @@ function DepartmentsContent() {
     if (sort !== 'name') sp.set('sort', sort)
     if (search.trim()) sp.set('q', search.trim())
     if (ratedOnly) sp.set('rated', '1')
+    if (minRating) sp.set('minr', minRating)
+    if (hasCourses) sp.set('courses', '1')
     router.replace(`/departments${sp.toString() ? `?${sp}` : ''}`, { scroll: false })
-  }, [activeSchool, sort, search, ratedOnly, router])
+  }, [activeSchool, sort, search, ratedOnly, minRating, hasCourses, router])
 
   const schools = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -272,6 +278,8 @@ function DepartmentsContent() {
     let list = departments.filter(d => abbrevSchool(d.school) !== null)
     if (activeSchool) list = list.filter(d => abbrevSchool(d.school) === activeSchool)
     if (ratedOnly) list = list.filter(d => d.avg_rating != null)
+    if (minRating) list = list.filter(d => d.avg_rating != null && d.avg_rating >= Number(minRating))
+    if (hasCourses) list = list.filter(d => d.course_count > 0)
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter(d =>
@@ -286,10 +294,10 @@ function DepartmentsContent() {
       if (sort === 'courses') return b.course_count - a.course_count
       return a.name.localeCompare(b.name)
     })
-  }, [departments, activeSchool, search, sort, ratedOnly])
+  }, [departments, activeSchool, search, sort, ratedOnly, minRating, hasCourses])
 
   const grouped = useMemo(() => {
-    if (activeSchool || search.trim() || ratedOnly) return null
+    if (activeSchool || search.trim() || ratedOnly || minRating || hasCourses) return null
     const groups: Record<string, DepartmentRow[]> = {}
     for (const d of filtered) {
       const s = abbrevSchool(d.school) ?? 'Other'
@@ -297,7 +305,7 @@ function DepartmentsContent() {
       groups[s].push(d)
     }
     return groups
-  }, [filtered, activeSchool, search, ratedOnly])
+  }, [filtered, activeSchool, search, ratedOnly, minRating, hasCourses])
 
   const statsProfs = departments.reduce((s, d) => s + d.professor_count, 0)
   const statsCourses = departments.reduce((s, d) => s + d.course_count, 0)
@@ -392,10 +400,21 @@ function DepartmentsContent() {
                 autoComplete="off"
               />
             </div>
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex flex-wrap items-center gap-1 shrink-0">
+              <button
+                onClick={() => setHasCourses(v => !v)}
+                className={`text-xs px-3 py-2 rounded-lg border transition-all ${
+                  hasCourses
+                    ? 'border-zinc-600 bg-zinc-800 text-zinc-200 font-semibold'
+                    : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                Has courses
+              </button>
+
               <button
                 onClick={() => setRatedOnly(v => !v)}
-                className={`text-xs px-3 py-2 rounded-lg border transition-all mr-1 ${
+                className={`text-xs px-3 py-2 rounded-lg border transition-all ${
                   ratedOnly
                     ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d] font-semibold'
                     : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
@@ -403,6 +422,29 @@ function DepartmentsContent() {
               >
                 Rated
               </button>
+
+              {/* Min-rating chips */}
+              {(['3', '4'] as const).map(r => {
+                const active = minRating === r
+                return (
+                  <button
+                    key={r}
+                    onClick={() => setMinRating(active ? '' : r)}
+                    className={`text-xs px-3 py-2 rounded-lg border transition-all font-semibold ${
+                      active
+                        ? r === '4'
+                          ? 'border-green-700 bg-green-950 text-green-400'
+                          : 'border-amber-700 bg-amber-950 text-amber-400'
+                        : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {r}+★
+                  </button>
+                )
+              })}
+
+              <div className="w-px h-5 shrink-0" style={{ background: 'var(--border)' }} />
+
               {SORT_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
@@ -443,7 +485,7 @@ function DepartmentsContent() {
             <div className="text-3xl mb-3">🔍</div>
             <p className="text-zinc-400 text-sm">No departments match your filter.</p>
             <button
-              onClick={() => { setSearch(''); setActiveSchool(null); setRatedOnly(false) }}
+              onClick={() => { setSearch(''); setActiveSchool(null); setRatedOnly(false); setMinRating(''); setHasCourses(false) }}
               className="mt-3 text-xs text-[#CC0033] hover:underline"
             >
               Clear filters
@@ -474,12 +516,14 @@ function DepartmentsContent() {
         ) : (
           /* Flat list (when filtering/searching) */
           <div>
-            {(activeSchool || search.trim() || ratedOnly) && (
+            {(activeSchool || search.trim() || ratedOnly || minRating || hasCourses) && (
               <div className="text-xs text-zinc-500 mb-4">
                 {filtered.length} result{filtered.length !== 1 ? 's' : ''}
                 {activeSchool && <> in <span className="text-zinc-300">{activeSchool}</span></>}
                 {search.trim() && <> matching <span className="text-zinc-300">&ldquo;{search}&rdquo;</span></>}
                 {ratedOnly && <> · rated only</>}
+                {minRating && <> · avg ≥ {minRating}</>}
+                {hasCourses && <> · has courses</>}
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
