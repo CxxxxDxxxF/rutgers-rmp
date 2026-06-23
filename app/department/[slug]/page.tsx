@@ -232,12 +232,16 @@ function LoadingSpinner() {
   )
 }
 
+type ProfSort = 'rating' | 'difficulty' | 'name' | 'again'
+
 function DepartmentContent({ slug }: { slug: string }) {
   const [data, setData] = useState<DepartmentDetail | null>(null)
   const [related, setRelated] = useState<RelatedDept[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [courseSearch, setCourseSearch] = useState('')
+  const [profSort, setProfSort] = useState<ProfSort>('rating')
+  const [showAllProfs, setShowAllProfs] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -288,6 +292,16 @@ function DepartmentContent({ slug }: { slug: string }) {
 
   const totalOpen = Object.values(courseSectionMap).reduce((sum, s) => sum + s.open, 0)
   const totalSections = Object.values(courseSectionMap).reduce((sum, s) => sum + s.total, 0)
+
+  const sortedProfessors = [...professors].sort((a, b) => {
+    if (profSort === 'rating') return (b.avg_rating ?? -1) - (a.avg_rating ?? -1)
+    if (profSort === 'difficulty') return (a.avg_difficulty ?? 99) - (b.avg_difficulty ?? 99)
+    if (profSort === 'name') return `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
+    if (profSort === 'again') return (b.would_take_again ?? -1) - (a.would_take_again ?? -1)
+    return 0
+  })
+  const PROF_PAGE = 12
+  const displayedProfessors = showAllProfs ? sortedProfessors : sortedProfessors.slice(0, PROF_PAGE)
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -341,29 +355,55 @@ function DepartmentContent({ slug }: { slug: string }) {
 
             {/* Top professors */}
             <section>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
                   Professors
                 </h2>
-                <p className="text-xs text-zinc-600">
-                  Click any professor to read reviews or write one
-                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { key: 'rating', label: 'Rating' },
+                    { key: 'difficulty', label: 'Easiest' },
+                    { key: 'again', label: '% Again' },
+                    { key: 'name', label: 'Name' },
+                  ] as { key: ProfSort; label: string }[]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setProfSort(key)}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                        profSort === key
+                          ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
+                          : 'bg-[var(--card)] border-[var(--border)] text-zinc-500 hover:text-zinc-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
               {professors.length === 0 ? (
                 <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-8 text-center text-zinc-500 text-sm">
                   No professors found for this department yet.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {professors.slice(0, 12).map((prof) => (
-                    <ProfessorCard key={prof.slug} prof={prof} />
-                  ))}
-                </div>
-              )}
-              {professors.length > 12 && (
-                <p className="mt-3 text-xs text-zinc-600 text-center">
-                  Showing top 12 of {professors.length} professors
-                </p>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {displayedProfessors.map((prof) => (
+                      <ProfessorCard key={prof.slug} prof={prof} />
+                    ))}
+                  </div>
+                  {professors.length > PROF_PAGE && (
+                    <div className="mt-4 text-center">
+                      <button
+                        onClick={() => setShowAllProfs(v => !v)}
+                        className="text-xs font-semibold text-zinc-500 hover:text-zinc-200 transition-colors px-4 py-2 rounded-lg border border-[var(--border)] hover:border-zinc-500"
+                      >
+                        {showAllProfs
+                          ? 'Show fewer professors'
+                          : `Show all ${professors.length} professors`}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
 
