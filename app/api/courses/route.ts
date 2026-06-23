@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const semester = req.nextUrl.searchParams.get('semester')?.trim()
   const offsetParam = req.nextUrl.searchParams.get('offset')?.trim()
   const openOnly = req.nextUrl.searchParams.get('openonly') === '1'
+  const instructor = req.nextUrl.searchParams.get('instructor')?.trim()
   const PAGE_SIZE = 160
   const offset = Math.max(0, parseInt(offsetParam ?? '0', 10) || 0)
 
@@ -24,6 +25,38 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // When instructor filter is set, pre-fetch course IDs taught by matching professors.
+    // Searches both instructor_name_raw (SOC raw text) and the linked professors table.
+    let instructorCourseIds: string[] | null = null
+    if (instructor && instructor.length >= 2) {
+      const safe = instructor.replace(/[%_]/g, '\\$&')
+      const [rawResult, profResult] = await Promise.all([
+        supabase
+          .from('teaching_assignments')
+          .select('course_id')
+          .ilike('instructor_name_raw', `%${safe}%`)
+          .eq('status', 'active'),
+        supabase
+          .from('professors')
+          .select('id')
+          .or(`first_name.ilike.%${safe}%,last_name.ilike.%${safe}%`),
+      ])
+
+      const merged = new Set((rawResult.data ?? []).map((r: { course_id: string }) => r.course_id))
+
+      const profIds = (profResult.data ?? []).map((p: { id: string }) => p.id)
+      if (profIds.length > 0) {
+        const { data: profCourses } = await supabase
+          .from('teaching_assignments')
+          .select('course_id')
+          .in('professor_id', profIds)
+          .eq('status', 'active')
+        for (const r of profCourses ?? []) merged.add((r as { course_id: string }).course_id)
+      }
+
+      instructorCourseIds = [...merged]
+    }
+
     // When openonly=1, pre-fetch course IDs that have at least one open section
     // so pagination correctly skips courses with no seats available.
     let openCourseIds: string[] | null = null
@@ -71,6 +104,13 @@ export async function GET(req: NextRequest) {
 
     if (dept) {
       query = query.eq('course_departments.departments.slug', dept)
+    }
+    if (instructorCourseIds !== null) {
+      if (instructorCourseIds.length > 0) {
+        query = query.in('id', instructorCourseIds)
+      } else {
+        return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+      }
     }
     if (openCourseIds && openCourseIds.length > 0) {
       query = query.in('id', openCourseIds)

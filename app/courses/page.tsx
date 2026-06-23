@@ -48,6 +48,7 @@ function CoursesContent() {
   const [selectedDept, setSelectedDept] = useState<string>(searchParams.get('dept') ?? '')
   const [selectedSemester, setSelectedSemester] = useState<string>(searchParams.get('semester') ?? '')
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  const [instructor, setInstructor] = useState(searchParams.get('instructor') ?? '')
   const [credits, setCredits] = useState<string>(searchParams.get('credits') ?? '')
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
   const [onlyWithSections, setOnlyWithSections] = useState(searchParams.get('open') === '1')
@@ -60,6 +61,8 @@ function CoursesContent() {
   const [loadKey, setLoadKey] = useState(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [serverQuery, setServerQuery] = useState(searchParams.get('q') ?? '')
+  const [serverInstructor, setServerInstructor] = useState(searchParams.get('instructor') ?? '')
+  const instructorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Autocomplete dropdown
   const [suggestions, setSuggestions] = useState<CourseSuggestion[]>([])
@@ -103,12 +106,20 @@ function CoursesContent() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search])
 
+  // Debounce the instructor filter before hitting the server
+  useEffect(() => {
+    if (instructorDebounceRef.current) clearTimeout(instructorDebounceRef.current)
+    instructorDebounceRef.current = setTimeout(() => setServerInstructor(instructor.trim()), 350)
+    return () => { if (instructorDebounceRef.current) clearTimeout(instructorDebounceRef.current) }
+  }, [instructor])
+
   // Keep the URL in sync so course pages and shares can deep-link filters
   useEffect(() => {
     const params = new URLSearchParams()
     if (selectedDept) params.set('dept', selectedDept)
     if (selectedSemester) params.set('semester', selectedSemester)
     if (serverQuery) params.set('q', serverQuery)
+    if (serverInstructor) params.set('instructor', serverInstructor)
     if (credits) params.set('credits', credits)
     if (level) params.set('level', level)
     if (onlyWithSections) params.set('open', '1')
@@ -116,7 +127,7 @@ function CoursesContent() {
     if (sortBy !== 'number') params.set('sort', sortBy)
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
+  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -187,6 +198,7 @@ function CoursesContent() {
         if (selectedDept) params.set('dept', selectedDept)
         if (selectedSemester) params.set('semester', selectedSemester)
         if (serverQuery.length >= 2) params.set('q', serverQuery)
+        if (serverInstructor.length >= 2) params.set('instructor', serverInstructor)
         if (credits) params.set('credits', credits)
         if (level) params.set('level', level)
         const qs = params.toString()
@@ -201,7 +213,7 @@ function CoursesContent() {
       }
     }
     loadCourses()
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
+  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, loadKey])
 
   // Instant client-side narrowing while typing + section filter + sort
   const filtered = useMemo(() => {
@@ -236,7 +248,7 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
+  const hasActiveFilters = !!(search || instructor || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -355,6 +367,27 @@ function CoursesContent() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Instructor filter */}
+            <div className="relative">
+              <svg
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <input
+                type="text"
+                value={instructor}
+                onChange={e => setInstructor(e.target.value)}
+                placeholder="Instructor name..."
+                className={`pl-7 pr-3 py-2 rounded-lg text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors w-40 ${
+                  instructor ? 'ring-1 ring-[#CC0033]/50' : ''
+                }`}
+                style={{ background: 'var(--card)', border: `1px solid ${instructor ? 'rgba(204,0,51,0.5)' : 'var(--border)'}` }}
+              />
+            </div>
+
             <select
               value={credits}
               onChange={e => setCredits(e.target.value)}
@@ -420,7 +453,7 @@ function CoursesContent() {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -434,6 +467,9 @@ function CoursesContent() {
         {!loading && !error && (
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
             <span>{filtered.length} course{filtered.length !== 1 ? 's' : ''} found</span>
+            {serverInstructor && (
+              <span>· taught by &quot;{serverInstructor}&quot;</span>
+            )}
             {selectedSemester && (
               <span>
                 · scoped to {semesters.find(s => s.slug === selectedSemester)?.name ?? selectedSemester}
@@ -469,12 +505,12 @@ function CoursesContent() {
           <EmptyState
             icon="📚"
             title="No courses found"
-            subtitle={search ? `No results for "${search}"` : 'No courses match these filters'}
+            subtitle={search ? `No results for "${search}"` : instructor ? `No courses found for instructor "${instructor}"` : 'No courses match these filters'}
             action={
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
