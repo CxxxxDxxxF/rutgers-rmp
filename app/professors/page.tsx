@@ -21,6 +21,7 @@ interface ProfRow {
 }
 
 type SortKey = 'rating' | 'difficulty' | 'take_again' | 'ratings'
+type VerdictFilter = 'take' | 'avoid' | 'depends' | ''
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'rating', label: 'Top Rated' },
@@ -127,6 +128,7 @@ function ProfessorsContent() {
   const [sort, setSort] = useState<SortKey>((searchParams.get('sort') as SortKey) ?? 'rating')
   const [minRatings, setMinRatings] = useState(searchParams.get('minRatings') ?? '3')
   const [deptFilter, setDeptFilter] = useState(searchParams.get('dept') ?? '')
+  const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>((searchParams.get('verdict') as VerdictFilter) ?? '')
   const [professors, setProfessors] = useState<ProfRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -136,7 +138,7 @@ function ProfessorsContent() {
   const abortRef = useRef<AbortController | null>(null)
 
   const load = useCallback(async (opts: {
-    sort: SortKey; minRatings: string; dept: string; page: number; append: boolean
+    sort: SortKey; minRatings: string; dept: string; verdict: VerdictFilter; page: number; append: boolean
   }) => {
     abortRef.current?.abort()
     const ctrl = new AbortController()
@@ -151,6 +153,7 @@ function ProfessorsContent() {
       page: String(opts.page),
     })
     if (opts.dept) params.set('dept', opts.dept)
+    if (opts.verdict) params.set('verdict', opts.verdict)
 
     try {
       const res = await fetch(`/api/professors?${params}`, { signal: ctrl.signal })
@@ -171,22 +174,24 @@ function ProfessorsContent() {
 
   useEffect(() => {
     setPage(1)
-    load({ sort, minRatings, dept: deptFilter, page: 1, append: false })
-  }, [sort, minRatings, deptFilter, load])
+    load({ sort, minRatings, dept: deptFilter, verdict: verdictFilter, page: 1, append: false })
+  }, [sort, minRatings, deptFilter, verdictFilter, load])
 
   useEffect(() => {
     document.title = 'Top Professors | RU Rate'
     return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
   }, [])
 
-  function updateUrl(params: { sort?: SortKey; minRatings?: string; dept?: string }) {
+  function updateUrl(params: { sort?: SortKey; minRatings?: string; dept?: string; verdict?: VerdictFilter }) {
     const sp = new URLSearchParams()
     const s = params.sort ?? sort
     const m = params.minRatings ?? minRatings
     const d = params.dept ?? deptFilter
+    const v = params.verdict !== undefined ? params.verdict : verdictFilter
     if (s !== 'rating') sp.set('sort', s)
     if (m !== '3') sp.set('minRatings', m)
     if (d) sp.set('dept', d)
+    if (v) sp.set('verdict', v)
     router.replace(`/professors${sp.toString() ? `?${sp}` : ''}`, { scroll: false })
   }
 
@@ -199,11 +204,14 @@ function ProfessorsContent() {
   function handleDept(d: string) {
     setDeptFilter(d); updateUrl({ dept: d })
   }
+  function handleVerdict(v: VerdictFilter) {
+    setVerdictFilter(v); updateUrl({ verdict: v })
+  }
 
   function loadMore() {
     const next = page + 1
     setPage(next)
-    load({ sort, minRatings, dept: deptFilter, page: next, append: true })
+    load({ sort, minRatings, dept: deptFilter, verdict: verdictFilter, page: next, append: true })
   }
 
   const hasMore = professors.length < total
@@ -256,6 +264,33 @@ function ProfessorsContent() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+        </div>
+
+        {/* Verdict filter */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-xs text-zinc-600 font-semibold uppercase tracking-wider">Verdict</span>
+          {(['', 'take', 'depends', 'avoid'] as VerdictFilter[]).map(v => {
+            const label = v === '' ? 'All' : v === 'take' ? 'TAKE' : v === 'depends' ? 'DEPENDS' : 'AVOID'
+            const active = verdictFilter === v
+            const style = active && v === 'take'
+              ? 'border-green-800 bg-green-950 text-green-400'
+              : active && v === 'depends'
+              ? 'border-amber-800 bg-amber-950 text-amber-400'
+              : active && v === 'avoid'
+              ? 'border-red-900 bg-red-950 text-red-400'
+              : active
+              ? 'border-[var(--border)] bg-[var(--card)] text-white'
+              : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+            return (
+              <button
+                key={v}
+                onClick={() => handleVerdict(v)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${style}`}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
 
         {/* Sort tabs */}

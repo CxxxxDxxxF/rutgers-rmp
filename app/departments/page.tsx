@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
 
 interface DepartmentRow {
@@ -228,14 +228,17 @@ function abbrevSchool(school: string): string | null {
   return null
 }
 
-export default function DepartmentsPage() {
+function DepartmentsContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [departments, setDepartments] = useState<DepartmentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [activeSchool, setActiveSchool] = useState<string | null>(null)
-  const [sort, setSort] = useState<SortKey>('name')
-  const [ratedOnly, setRatedOnly] = useState(false)
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  const [activeSchool, setActiveSchool] = useState<string | null>(searchParams.get('school') ?? null)
+  const [sort, setSort] = useState<SortKey>((searchParams.get('sort') as SortKey) ?? 'name')
+  const [ratedOnly, setRatedOnly] = useState(searchParams.get('rated') === '1')
 
   useEffect(() => {
     fetch('/api/departments')
@@ -243,6 +246,15 @@ export default function DepartmentsPage() {
       .then((data: DepartmentRow[]) => { setDepartments(data); setLoading(false) })
       .catch(() => { setError('Failed to load departments.'); setLoading(false) })
   }, [])
+
+  useEffect(() => {
+    const sp = new URLSearchParams()
+    if (activeSchool) sp.set('school', activeSchool)
+    if (sort !== 'name') sp.set('sort', sort)
+    if (search.trim()) sp.set('q', search.trim())
+    if (ratedOnly) sp.set('rated', '1')
+    router.replace(`/departments${sp.toString() ? `?${sp}` : ''}`, { scroll: false })
+  }, [activeSchool, sort, search, ratedOnly, router])
 
   const schools = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -285,7 +297,7 @@ export default function DepartmentsPage() {
       groups[s].push(d)
     }
     return groups
-  }, [filtered, activeSchool, search])
+  }, [filtered, activeSchool, search, ratedOnly])
 
   const statsProfs = departments.reduce((s, d) => s + d.professor_count, 0)
   const statsCourses = departments.reduce((s, d) => s + d.course_count, 0)
@@ -462,11 +474,12 @@ export default function DepartmentsPage() {
         ) : (
           /* Flat list (when filtering/searching) */
           <div>
-            {(activeSchool || search.trim()) && (
+            {(activeSchool || search.trim() || ratedOnly) && (
               <div className="text-xs text-zinc-500 mb-4">
                 {filtered.length} result{filtered.length !== 1 ? 's' : ''}
                 {activeSchool && <> in <span className="text-zinc-300">{activeSchool}</span></>}
                 {search.trim() && <> matching <span className="text-zinc-300">&ldquo;{search}&rdquo;</span></>}
+                {ratedOnly && <> · rated only</>}
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -485,5 +498,13 @@ export default function DepartmentsPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+export default function DepartmentsPage() {
+  return (
+    <Suspense>
+      <DepartmentsContent />
+    </Suspense>
   )
 }

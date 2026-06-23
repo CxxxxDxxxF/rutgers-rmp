@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   const sort = sp.get('sort') ?? 'rating'
   const dept = sp.get('dept')?.trim() ?? null
   const school = sp.get('school')?.trim() ?? null
+  const verdict = sp.get('verdict')?.trim() ?? null
   const minRatings = Math.max(1, parseInt(sp.get('minRatings') ?? '3', 10))
   const page = Math.max(1, parseInt(sp.get('page') ?? '1', 10))
   const limit = 30
@@ -35,6 +36,9 @@ export async function GET(req: NextRequest) {
 
     if (dept) query = query.ilike('department', `%${dept}%`)
     if (school) query = query.ilike('school_name', `%${school}%`)
+    if (verdict && ['take', 'avoid', 'depends'].includes(verdict)) {
+      query = query.contains('ai_analysis', { verdict })
+    }
 
     if (sort === 'difficulty') {
       query = query.order('avg_difficulty', { ascending: true })
