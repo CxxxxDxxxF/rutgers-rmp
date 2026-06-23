@@ -7,6 +7,50 @@ import type { ProfessorCache } from '@/lib/supabase'
 
 export const revalidate = 120
 
+interface RecentReview {
+  id: string
+  quality_rating: number
+  comment: string
+  created_at: string
+  professor: { first_name: string; last_name: string; slug: string } | null
+  course: { course_number: string; name: string } | null
+}
+
+async function getRecentReviews(): Promise<RecentReview[]> {
+  if (!supabase) return []
+  try {
+    const { data } = await supabase
+      .from('reviews')
+      .select(`
+        id,
+        quality_rating,
+        comment,
+        created_at,
+        professors ( first_name, last_name, slug ),
+        courses ( course_number, name )
+      `)
+      .eq('source', 'native')
+      .eq('is_removed', false)
+      .order('created_at', { ascending: false })
+      .limit(4)
+
+    return (data ?? []).map((r: Record<string, unknown>) => {
+      const prof = r.professors as { first_name: string; last_name: string; slug: string } | null
+      const course = r.courses as { course_number: string; name: string } | null
+      return {
+        id: r.id as string,
+        quality_rating: r.quality_rating as number,
+        comment: r.comment as string,
+        created_at: r.created_at as string,
+        professor: prof,
+        course: course,
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
 async function getPopular(): Promise<ProfessorCache[]> {
   if (!supabase) return []
   try {
@@ -124,19 +168,29 @@ const TOOLS: {
     ),
   },
   {
-    href: '/departments',
+    href: '/professors',
     title: 'Professor Reviews',
-    description: 'Browse by department to find professors, read AI summaries, and leave RU Rate reviews',
+    description: 'Browse Rutgers NB professors, read AI summaries and student reviews, filter by verdict',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
       </svg>
     ),
   },
+  {
+    href: '/reviews',
+    title: 'Student Reviews',
+    description: 'Read the latest native reviews from Rutgers NB students, filtered by rating or professor',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z" />
+      </svg>
+    ),
+  },
 ]
 
 export default async function HomePage() {
-  const [popular, hotCourses] = await Promise.all([getPopular(), getHotCourses()])
+  const [popular, hotCourses, recentReviews] = await Promise.all([getPopular(), getHotCourses(), getRecentReviews()])
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
@@ -189,7 +243,7 @@ export default async function HomePage() {
             Browse courses
           </Link>
           <Link
-            href="/departments"
+            href="/professors"
             className="rounded-xl border px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-colors hover:border-zinc-500 hover:text-white"
             style={{ borderColor: 'var(--border)', background: 'var(--card-2)' }}
           >
@@ -290,7 +344,7 @@ export default async function HomePage() {
               Most Searched Professors
             </h2>
             <Link
-              href="/departments"
+              href="/professors"
               className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
             >
               All professors →
@@ -300,6 +354,67 @@ export default async function HomePage() {
             {popular.map((prof) => (
               <ProfessorCard key={prof.id} professor={prof} compact />
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Recent Reviews */}
+      {recentReviews.length > 0 && (
+        <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
+              Recent Reviews
+            </h2>
+            <Link
+              href="/reviews"
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              All reviews →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {recentReviews.map(review => {
+              const ratingColor = review.quality_rating >= 4 ? '#22c55e' : review.quality_rating >= 3 ? '#f59e0b' : '#ef4444'
+              const snippet = review.comment.length > 140 ? review.comment.slice(0, 140) + '…' : review.comment
+              const diff = Date.now() - new Date(review.created_at).getTime()
+              const days = Math.floor(diff / 86400000)
+              const timeLabel = days < 1 ? 'today' : days === 1 ? 'yesterday' : `${days}d ago`
+
+              return (
+                <Link
+                  key={review.id}
+                  href={review.professor ? `/professor/${review.professor.slug}` : '/reviews'}
+                  className="group rounded-xl p-4 flex gap-3 transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)' }}
+                >
+                  {/* Rating bubble */}
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black shrink-0 mt-0.5"
+                    style={{
+                      background: `${ratingColor}20`,
+                      border: `1.5px solid ${ratingColor}60`,
+                      color: ratingColor,
+                    }}
+                  >
+                    {review.quality_rating}
+                  </div>
+                  <div className="min-w-0 flex flex-col gap-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {review.professor && (
+                        <span className="text-xs font-semibold text-zinc-300 group-hover:text-white transition-colors">
+                          {review.professor.first_name} {review.professor.last_name}
+                        </span>
+                      )}
+                      {review.course && (
+                        <span className="text-[10px] text-zinc-600">{review.course.course_number}</span>
+                      )}
+                      <span className="text-[10px] text-zinc-700 ml-auto">{timeLabel}</span>
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">{snippet}</p>
+                  </div>
+                </Link>
+              )
+            })}
           </div>
         </section>
       )}
@@ -336,7 +451,7 @@ export default async function HomePage() {
             </p>
             <div className="pt-2">
               <Link
-                href="/departments"
+                href="/professors"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
                 style={{ backgroundColor: '#CC0033' }}
               >
