@@ -80,7 +80,15 @@ function professorHref(prof: Professor) {
     : `/professor/${prof.slug}?socId=${prof.id}`
 }
 
-function ProfessorOptionCard({ prof }: { prof: Professor }) {
+function ProfessorOptionCard({
+  prof,
+  isSelected,
+  onSelect,
+}: {
+  prof: Professor
+  isSelected: boolean
+  onSelect: (id: string) => void
+}) {
   const vc = prof.verdict ? VERDICT_CONFIG[prof.verdict] : null
   const qColor = prof.avg_rating != null ? ratingColor(prof.avg_rating) : '#52525b'
   const dColor = prof.avg_difficulty != null
@@ -88,7 +96,13 @@ function ProfessorOptionCard({ prof }: { prof: Professor }) {
     : '#52525b'
 
   return (
-    <div className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden hover:border-[#CC0033]/40 transition-all group/card">
+    <div
+      className={`relative bg-[var(--card)] border rounded-xl overflow-hidden transition-all group/card ${
+        isSelected
+          ? 'border-[#CC0033]/70 shadow-[0_0_0_1px_rgba(204,0,51,0.25)]'
+          : 'border-[var(--border)] hover:border-[#CC0033]/40'
+      }`}
+    >
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
       <div className="pl-4 pr-5 pt-4 pb-3 space-y-3">
@@ -137,15 +151,27 @@ function ProfessorOptionCard({ prof }: { prof: Professor }) {
               <span>{Math.round(prof.would_take_again)}% again</span>
             )}
           </div>
-          {prof.rmp_id && (
-            <CompareButton
-              rmpId={prof.rmp_id}
-              slug={prof.slug}
-              name={`${prof.first_name} ${prof.last_name}`}
-              department={null}
-              compact
-            />
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onSelect(prof.id)}
+              className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all ${
+                isSelected
+                  ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
+                  : 'bg-[var(--card-2)] border-[var(--border)] text-zinc-500 hover:text-zinc-200 hover:border-zinc-500'
+              }`}
+            >
+              {isSelected ? '✕ clear filter' : '⊟ filter sections'}
+            </button>
+            {prof.rmp_id && (
+              <CompareButton
+                rmpId={prof.rmp_id}
+                slug={prof.slug}
+                name={`${prof.first_name} ${prof.last_name}`}
+                department={null}
+                compact
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -334,6 +360,11 @@ function CourseContent({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedSemesterId, setSelectedSemesterId] = useState<string>('')
+  const [selectedProfId, setSelectedProfId] = useState<string | null>(null)
+
+  function toggleProfFilter(id: string) {
+    setSelectedProfId(prev => (prev === id ? null : id))
+  }
 
   useEffect(() => {
     async function load() {
@@ -403,7 +434,11 @@ function CourseContent({ slug }: { slug: string }) {
   const totalSections = semesters.reduce((n, s) => n + s.sections.length, 0)
   const selectedSemester = semesters.find(sem => sem.id === selectedSemesterId) ?? semesters.find(sem => sem.is_current) ?? semesters[0]
   const visibleSemesters = selectedSemester ? [selectedSemester] : semesters
-  const visibleSections = visibleSemesters.flatMap(sem => sem.sections)
+  const allVisibleSections = visibleSemesters.flatMap(sem => sem.sections)
+  const filteredProfessor = selectedProfId ? professors.find(p => p.id === selectedProfId) ?? null : null
+  const visibleSections = selectedProfId
+    ? allVisibleSections.filter(s => s.professor?.id === selectedProfId)
+    : allVisibleSections
   const visibleOpen = visibleSections.filter(section => section.open_status === true).length
   const visibleBuildings = Array.from(new Set(visibleSections.map(section => section.location || section.campus).filter(Boolean))).slice(0, 5)
   const topProfessor = ratedProfessors[0]
@@ -543,18 +578,44 @@ function CourseContent({ slug }: { slug: string }) {
                 ))}
               </div>
             </div>
-            {visibleSemesters.map(sem => (
-              <div key={sem.id} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-white text-sm">{sem.name}</h3>
-                  {sem.is_current && <Badge tone="green">CURRENT</Badge>}
-                  <span className="text-xs text-zinc-600">
-                    {sem.sections.length} section{sem.sections.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <SectionTable sections={sem.sections} courseId={course.id} />
+
+            {filteredProfessor && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#CC0033]/10 border border-[#CC0033]/30 text-sm">
+                <span className="text-zinc-400">Filtered by</span>
+                <span className="font-semibold text-white">
+                  {filteredProfessor.first_name} {filteredProfessor.last_name}
+                </span>
+                <span className="text-zinc-500">·</span>
+                <span className="text-zinc-400">{visibleSections.length} section{visibleSections.length !== 1 ? 's' : ''}</span>
+                <button
+                  onClick={() => setSelectedProfId(null)}
+                  className="ml-auto text-xs text-zinc-400 hover:text-white transition-colors"
+                >
+                  ✕ clear
+                </button>
               </div>
-            ))}
+            )}
+
+            {visibleSemesters.map(sem => {
+              const semSections = selectedProfId
+                ? sem.sections.filter(s => s.professor?.id === selectedProfId)
+                : sem.sections
+              return (
+                <div key={sem.id} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-white text-sm">{sem.name}</h3>
+                    {sem.is_current && <Badge tone="green">CURRENT</Badge>}
+                    <span className="text-xs text-zinc-600">
+                      {semSections.length} section{semSections.length !== 1 ? 's' : ''}
+                      {selectedProfId && semSections.length !== sem.sections.length && (
+                        <span className="text-zinc-700"> of {sem.sections.length}</span>
+                      )}
+                    </span>
+                  </div>
+                  <SectionTable sections={semSections} courseId={course.id} />
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -574,7 +635,12 @@ function CourseContent({ slug }: { slug: string }) {
           {professors.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {professors.map(prof => (
-                <ProfessorOptionCard key={prof.slug} prof={prof} />
+                <ProfessorOptionCard
+                  key={prof.slug}
+                  prof={prof}
+                  isSelected={selectedProfId === prof.id}
+                  onSelect={toggleProfFilter}
+                />
               ))}
             </div>
           ) : (
