@@ -16,6 +16,9 @@ export async function GET(req: NextRequest) {
   const semester = req.nextUrl.searchParams.get('semester')?.trim()
   const offsetParam = req.nextUrl.searchParams.get('offset')?.trim()
   const openOnly = req.nextUrl.searchParams.get('openonly') === '1'
+  const verdictParam = req.nextUrl.searchParams.get('verdict')?.trim().toLowerCase()
+  const verdict = verdictParam === 'take' || verdictParam === 'depends' || verdictParam === 'avoid'
+    ? verdictParam : null
   const PAGE_SIZE = 160
   const offset = Math.max(0, parseInt(offsetParam ?? '0', 10) || 0)
 
@@ -40,6 +43,58 @@ export async function GET(req: NextRequest) {
       }
       const { data: openData } = await openQuery
       openCourseIds = openData ? [...new Set(openData.map((r: { course_id: string }) => r.course_id))] : []
+    }
+
+    // When verdict filter is active, pre-fetch course IDs that have at least
+    // one professor (current semester) matching that AI verdict.
+    let verdictCourseIds: string[] | null = null
+    if (verdict) {
+      // Step 1: professor_cache rmp_ids matching the verdict
+      const { data: cacheData } = await supabase
+        .from('professor_cache')
+        .select('rmp_id')
+        .contains('ai_analysis', { verdict })
+      const rmpIds = (cacheData ?? []).map((r: { rmp_id: string }) => r.rmp_id)
+
+      if (rmpIds.length === 0) {
+        return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+      }
+
+      // Step 2: local professor IDs for those rmp_ids
+      const { data: profData } = await supabase
+        .from('professors')
+        .select('id')
+        .in('rmp_id', rmpIds)
+      const profIds = (profData ?? []).map((p: { id: string }) => p.id)
+
+      if (profIds.length === 0) {
+        return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+      }
+
+      // Step 3: course IDs from teaching_assignments (current semester)
+      let taQuery = supabase
+        .from('teaching_assignments')
+        .select('course_id, semesters!inner ( slug, is_current )')
+        .in('professor_id', profIds)
+        .eq('status', 'active')
+      if (semester) {
+        taQuery = taQuery.eq('semesters.slug', semester)
+      } else {
+        taQuery = taQuery.eq('semesters.is_current', true)
+      }
+      const { data: taData } = await taQuery
+      verdictCourseIds = taData ? [...new Set(taData.map((r: { course_id: string }) => r.course_id))] : []
+    }
+
+    // Intersect verdict + open filters if both are active
+    let idFilter: string[] | null = null
+    if (openCourseIds !== null && verdictCourseIds !== null) {
+      const openSet = new Set(openCourseIds)
+      idFilter = verdictCourseIds.filter(id => openSet.has(id))
+    } else if (openCourseIds !== null) {
+      idFilter = openCourseIds
+    } else if (verdictCourseIds !== null) {
+      idFilter = verdictCourseIds
     }
 
     // Use !inner only when filtering by dept (excludes non-matching courses).
@@ -72,10 +127,10 @@ export async function GET(req: NextRequest) {
     if (dept) {
       query = query.eq('course_departments.departments.slug', dept)
     }
-    if (openCourseIds && openCourseIds.length > 0) {
-      query = query.in('id', openCourseIds)
-    } else if (openCourseIds !== null) {
-      // openonly requested but no open courses found — return empty
+    if (idFilter !== null && idFilter.length > 0) {
+      query = query.in('id', idFilter)
+    } else if (idFilter !== null) {
+      // Filters active but no matching courses
       return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
     }
     if (q && q.length >= 2) {
