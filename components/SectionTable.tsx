@@ -123,6 +123,8 @@ export default function SectionTable({
   courseId?: string
 }) {
   const { items: watchItems } = useWatchlist()
+  const [openFirst, setOpenFirst] = useState(false)
+
   const watchedByAssignment = new Map(
     watchItems
       .filter(w => w.teaching_assignment_id)
@@ -130,6 +132,18 @@ export default function SectionTable({
   )
 
   if (sections.length === 0) return null
+
+  const hasOpen = sections.some(s => s.open_status === true)
+  const hasClosed = sections.some(s => s.open_status === false)
+  const canSort = hasOpen && hasClosed
+
+  const displayed = openFirst
+    ? [...sections].sort((a, b) => {
+        const scoreA = a.open_status === true ? 0 : a.open_status === false ? 2 : 1
+        const scoreB = b.open_status === true ? 0 : b.open_status === false ? 2 : 1
+        return scoreA - scoreB
+      })
+    : sections
 
   const lastSync = sections
     .map(s => s.status_updated_at)
@@ -139,6 +153,20 @@ export default function SectionTable({
 
   return (
     <div className="space-y-2">
+      {canSort && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setOpenFirst(v => !v)}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+              openFirst
+                ? 'bg-green-950 border-green-800 text-green-400'
+                : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+            }`}
+          >
+            {openFirst ? '↑ Open first' : 'Sort: Open first'}
+          </button>
+        </div>
+      )}
       {/* Desktop table */}
       <div className="hidden md:block overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full text-sm">
@@ -154,7 +182,7 @@ export default function SectionTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/70">
-            {sections.map(s => (
+            {displayed.map(s => (
               <tr key={s.id} className="bg-zinc-900/40 hover:bg-zinc-800/40 transition-colors">
                 <td className="px-3 py-2.5">
                   <StatusBadge section={s} />
@@ -214,7 +242,7 @@ export default function SectionTable({
 
       {/* Mobile cards */}
       <div className="md:hidden space-y-2">
-        {sections.map(s => (
+        {displayed.map(s => (
           <div key={s.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
