@@ -1,8 +1,8 @@
 import { createRouteMetadata } from '@/lib/seo'
 
 export const metadata = createRouteMetadata({
-  title: 'RU Rate Pro | Priority Rutgers Registration Tools',
-  description: 'Join RU Rate Pro for priority Rutgers open-seat alerts, watchlists, and schedule decision tools built for registration season.',
+  title: 'RU Rate Pro Waitlist | Rutgers Registration Tools',
+  description: 'Join the RU Rate Pro waitlist for priority Rutgers open-seat alerts, watchlists, and schedule decision tools as checkout becomes available.',
   path: '/pro',
 })
 
