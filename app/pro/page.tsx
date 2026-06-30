@@ -24,8 +24,23 @@ function ProPageContent() {
 
   const [subscribed, setSubscribed] = useState(false)
   const [subLoading, setSubLoading] = useState(true)
+  const [checkoutConfigured, setCheckoutConfigured] = useState<boolean | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/stripe/checkout')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (active) setCheckoutConfigured(Boolean(data?.configured))
+      })
+      .catch(() => {
+        if (active) setCheckoutConfigured(false)
+      })
+
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     if (!user || !supabase) { setSubLoading(false); return }
@@ -119,7 +134,24 @@ function ProPageContent() {
           </div>
 
           <div className="motion-rise rounded-2xl p-5 sm:p-6 shadow-2xl" style={{ border: '1px solid var(--border)', background: 'var(--card-2)' }}>
-            {!user && !loading && !subLoading && (
+            {checkoutConfigured === false && !subscribed && !loading && !subLoading && (
+              <>
+                <div className="mb-5">
+                  <h2 className="text-xl font-black text-white">Pro checkout is almost ready</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Student Pro is being finalized. Join the waitlist and we&apos;ll follow up when checkout opens.
+                  </p>
+                </div>
+                <Link
+                  href="/login"
+                  className="block w-full rounded-xl bg-[#CC0033] px-4 py-3 text-center text-sm font-bold text-white transition-colors hover:bg-[#a8002b]"
+                >
+                  Join the waitlist
+                </Link>
+              </>
+            )}
+
+            {checkoutConfigured !== false && !user && !loading && !subLoading && (
               <>
                 <div className="mb-5">
                   <h2 className="text-xl font-black text-white">Subscribe to Pro</h2>
@@ -140,7 +172,7 @@ function ProPageContent() {
               </>
             )}
 
-            {user && !subscribed && !subLoading && (
+            {checkoutConfigured && user && !subscribed && !subLoading && (
               <>
                 <div className="mb-5">
                   <h2 className="text-xl font-black text-white">Student Pro</h2>
@@ -190,7 +222,7 @@ function ProPageContent() {
               </>
             )}
 
-            {(loading || subLoading) && (
+            {(loading || subLoading || checkoutConfigured === null) && (
               <div className="flex items-center justify-center py-8">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-[#CC0033]" />
               </div>
