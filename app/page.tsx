@@ -5,6 +5,7 @@ import AppHeader from '@/components/AppHeader'
 import SearchBar from '@/components/SearchBar'
 import ProfessorCard from '@/components/ProfessorCard'
 import DeletedBanner from '@/components/DeletedBanner'
+import RecentlyViewed from '@/components/RecentlyViewed'
 import type { ProfessorCache } from '@/lib/supabase'
 
 export const revalidate = 120
@@ -622,6 +623,9 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Recently viewed — client-only, hides when empty */}
+      <RecentlyViewed />
 
       {/* Popular */}
       {popular.length > 0 && (

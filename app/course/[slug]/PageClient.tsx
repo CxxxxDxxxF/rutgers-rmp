@@ -11,6 +11,7 @@ import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import SectionTable, { CopyButton, type SectionRow } from '@/components/SectionTable'
 import { SkeletonBlock, RowListSkeleton } from '@/components/LoadingSkeleton'
 import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
+import { trackView } from '@/lib/recently-viewed'
 import type { ProfessorGrade } from '@/lib/professor-grade'
 
 interface Department {
@@ -375,6 +376,13 @@ function CourseContent({ slug }: { slug: string }) {
         const json = await res.json()
         setData(json)
         document.title = `${json.course.course_number} ${json.course.name} | RU Rate`
+        trackView({
+          type: 'course',
+          slug: json.course.slug,
+          name: json.course.name,
+          subtitle: json.course.course_number,
+          href: `/course/${json.course.slug}`,
+        })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
