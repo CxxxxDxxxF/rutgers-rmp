@@ -68,6 +68,7 @@ interface RecentReview {
   quality_rating: number
   comment: string
   created_at: string
+  time_label: string
   professor: { first_name: string; last_name: string; slug: string } | null
   course: { course_number: string; name: string } | null
 }
@@ -90,14 +91,18 @@ async function getRecentReviews(): Promise<RecentReview[]> {
       .order('created_at', { ascending: false })
       .limit(4)
 
+    const now = Date.now()
     return (data ?? []).map((r: Record<string, unknown>) => {
       const prof = r.professors as { first_name: string; last_name: string; slug: string } | null
       const course = r.courses as { course_number: string; name: string } | null
+      const createdAt = r.created_at as string
+      const days = Math.floor((now - new Date(createdAt).getTime()) / 86400000)
       return {
         id: r.id as string,
         quality_rating: r.quality_rating as number,
         comment: r.comment as string,
-        created_at: r.created_at as string,
+        created_at: createdAt,
+        time_label: days < 1 ? 'today' : days === 1 ? 'yesterday' : `${days}d ago`,
         professor: prof,
         course: course,
       }
@@ -667,9 +672,7 @@ export default async function HomePage() {
             {recentReviews.map(review => {
               const ratingColor = review.quality_rating >= 4 ? '#22c55e' : review.quality_rating >= 3 ? '#f59e0b' : '#ef4444'
               const snippet = review.comment.length > 140 ? review.comment.slice(0, 140) + '…' : review.comment
-              const diff = Date.now() - new Date(review.created_at).getTime()
-              const days = Math.floor(diff / 86400000)
-              const timeLabel = days < 1 ? 'today' : days === 1 ? 'yesterday' : `${days}d ago`
+              const timeLabel = review.time_label
 
               return (
                 <Link

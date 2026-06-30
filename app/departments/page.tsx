@@ -307,7 +307,7 @@ export default function DepartmentsPage() {
       groups[s].push(d)
     }
     return groups
-  }, [filtered, activeSchool, search])
+  }, [filtered, activeSchool, search, ratedOnly])
 
   const statsProfs = departments.reduce((s, d) => s + d.professor_count, 0)
   const statsCourses = departments.reduce((s, d) => s + d.course_count, 0)
