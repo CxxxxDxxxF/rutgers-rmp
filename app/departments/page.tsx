@@ -15,6 +15,9 @@ interface DepartmentRow {
   professor_count: number
   course_count: number
   avg_rating: number | null
+  take_count: number
+  depends_count: number
+  avoid_count: number
 }
 
 function ratingColor(r: number | null) {
@@ -70,6 +73,25 @@ function DeptCard({ dept }: { dept: DepartmentRow }) {
           </>
         )}
       </div>
+      {(() => {
+        const analyzed = dept.take_count + dept.depends_count + dept.avoid_count
+        if (analyzed === 0) return null
+        return (
+          <div className="mt-3">
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-900 gap-px">
+              {dept.take_count > 0 && (
+                <div style={{ flex: dept.take_count, backgroundColor: '#22c55e' }} title={`${dept.take_count} TAKE`} />
+              )}
+              {dept.depends_count > 0 && (
+                <div style={{ flex: dept.depends_count, backgroundColor: '#f59e0b' }} title={`${dept.depends_count} DEPENDS`} />
+              )}
+              {dept.avoid_count > 0 && (
+                <div style={{ flex: dept.avoid_count, backgroundColor: '#ef4444' }} title={`${dept.avoid_count} AVOID`} />
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </Link>
   )
 }
