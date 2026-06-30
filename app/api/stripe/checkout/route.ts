@@ -2,10 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
+import { checkoutPriceIdForPlan, parseCheckoutPlan } from '@/lib/stripe-plans'
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: 'Stripe not configured' }, { status: 503 })
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const plan = parseCheckoutPlan((body as { plan?: unknown }).plan)
+
+  if (!plan) {
+    return NextResponse.json({ error: 'Unsupported checkout plan' }, { status: 400 })
+  }
+
+  const priceId = checkoutPriceIdForPlan(plan)
+  if (!priceId) {
+    return NextResponse.json({ error: 'Stripe price not configured' }, { status: 503 })
   }
 
   const authHeader = req.headers.get('Authorization')
@@ -37,7 +50,7 @@ export async function POST(req: NextRequest) {
       mode: 'subscription',
       line_items: [
         {
-          price: process.env.STRIPE_PRICE_ID!,
+          price: priceId,
           quantity: 1,
         },
       ],
