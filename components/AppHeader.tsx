@@ -105,7 +105,13 @@ export default function AppHeader() {
             {!loading && (
               user ? (
                 <div className="hidden md:flex items-center gap-2 pl-2 border-l border-white/[0.07]">
-                  <span className="text-[11px] text-zinc-600 max-w-[100px] truncate">{user.email}</span>
+                  <Link
+                    href="/account"
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors max-w-[100px] truncate"
+                    title={user.email}
+                  >
+                    {user.email}
+                  </Link>
                   <button
                     onClick={handleSignOut}
                     className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
