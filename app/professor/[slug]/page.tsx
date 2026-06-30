@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
 import { supabase } from '@/lib/supabase'
+import { absoluteUrl } from '@/lib/seo'
 import ProfessorPageClient from './PageClient'
-
-const BASE_URL = 'https://rurate-web-production.up.railway.app'
 
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> }
@@ -46,7 +45,7 @@ export async function generateMetadata(
   if (ratingNum != null) ogParams.set('rating', ratingNum.toFixed(1))
   if (data.num_ratings) ogParams.set('num', String(data.num_ratings))
   if (verdict) ogParams.set('verdict', verdict)
-  const ogImageUrl = `${BASE_URL}/api/og/professor?${ogParams}`
+  const ogImageUrl = absoluteUrl(`/api/og/professor?${ogParams}`)
 
   return {
     title: `${name} | RU Rate`,

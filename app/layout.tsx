@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 import { Space_Grotesk } from 'next/font/google'
 import CompareTray from '@/components/CompareTray'
+import { SITE_URL } from '@/lib/seo'
 import './globals.css'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: 'RU Rate — Rutgers Registration Command Center',
   description: 'Pick better Rutgers classes. Professor ratings, AI analysis, real course sections, and a registration watchlist for Rutgers University students.',
   keywords: ['Rutgers', 'professor', 'ratings', 'reviews', 'RMP', 'Rate My Professor', 'courses', 'registration', 'WebReg', 'schedule of classes'],
@@ -13,6 +15,11 @@ export const metadata: Metadata = {
     title: 'RU Rate — Rutgers Registration Command Center',
     description: 'Pick better Rutgers classes. Professor ratings, course sections, and registration tools.',
     type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'RU Rate — Rutgers Registration Command Center',
+    description: 'Pick better Rutgers classes with professor ratings, course sections, and registration tools.',
   },
 }
 
