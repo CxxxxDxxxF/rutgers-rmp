@@ -7,13 +7,14 @@ import {
   type NativeReviewStats,
   type ProfessorGrade,
 } from '@/lib/professor-grade'
+import { getSemesterLookupAliases } from '@/lib/semester'
 
 export async function GET(req: NextRequest) {
   const dept = req.nextUrl.searchParams.get('dept')?.trim()
   const q = req.nextUrl.searchParams.get('q')?.trim()
   const credits = req.nextUrl.searchParams.get('credits')?.trim()
   const level = req.nextUrl.searchParams.get('level')?.trim()
-  const semester = req.nextUrl.searchParams.get('semester')?.trim()
+  const semesterParam = req.nextUrl.searchParams.get('semester')?.trim()
   const offsetParam = req.nextUrl.searchParams.get('offset')?.trim()
   const openOnly = req.nextUrl.searchParams.get('openonly') === '1'
   const campusParam = req.nextUrl.searchParams.get('campus')?.trim() ?? null
@@ -40,6 +41,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const semester = await resolveSemesterSlug(semesterParam)
+    if (semesterParam && !semester) {
+      return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE }, {
+        headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=60' },
+      })
+    }
+
     // When instructor filter is set, pre-fetch course IDs taught by matching professors.
     // Searches both instructor_name_raw (SOC raw text) and the linked professors table.
     let instructorCourseIds: string[] | null = null
@@ -295,6 +303,36 @@ export async function GET(req: NextRequest) {
     log.error('Courses error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+async function resolveSemesterSlug(value: string | null | undefined) {
+  if (!supabase) return null
+
+  const aliases = getSemesterLookupAliases(value)
+  if (aliases.length === 0) return null
+
+  const slugAliases = [...new Set(aliases.map(alias => alias.toLowerCase()))]
+  const codeAliases = [...new Set(aliases.map(alias => alias.toUpperCase()))]
+
+  const [slugResult, codeResult] = await Promise.all([
+    supabase
+      .from('semesters')
+      .select('slug')
+      .in('slug', slugAliases)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('semesters')
+      .select('slug')
+      .in('code', codeAliases)
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  if (slugResult.error) log.error('Semester slug lookup error:', slugResult.error)
+  if (codeResult.error) log.error('Semester code lookup error:', codeResult.error)
+
+  return slugResult.data?.slug ?? codeResult.data?.slug ?? null
 }
 
 async function loadSectionSummary(courseIds: string[], semesterSlug?: string | null, campusFilter?: string | null) {
