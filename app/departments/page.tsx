@@ -229,7 +229,7 @@ export default function DepartmentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [activeSchool, setActiveSchool] = useState<string | null>(null)
-  const [sort, setSort] = useState<SortKey>('name')
+  const [sort, setSort] = useState<SortKey>('professors')
 
   useEffect(() => {
     fetch('/api/departments')
@@ -423,7 +423,7 @@ export default function DepartmentsPage() {
         ) : grouped ? (
           /* Grouped by school (default view) */
           <div className="space-y-12">
-            {Object.keys(grouped).sort().map(school => (
+            {schools.filter(s => grouped[s]).map(school => (
               <section key={school}>
                 <div className="flex items-center gap-3 mb-5">
                   <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider whitespace-nowrap">

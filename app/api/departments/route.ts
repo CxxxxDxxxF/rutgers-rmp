@@ -69,6 +69,15 @@ export async function GET() {
       }
     })
 
+    // Rank by popularity so prominent departments lead the list and the
+    // /courses department dropdown doesn't surface empty/niche departments first.
+    result.sort(
+      (a, b) =>
+        b.professor_count - a.professor_count ||
+        b.course_count - a.course_count ||
+        a.name.localeCompare(b.name)
+    )
+
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
     })
