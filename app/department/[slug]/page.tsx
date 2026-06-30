@@ -427,7 +427,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                   </>
                 )}
               </div>
-              <VerdictBreakdown professors={professors} />
+              <VerdictBreakdown professors={data?.professors ?? []} />
             </div>
 
             {/* Professors */}

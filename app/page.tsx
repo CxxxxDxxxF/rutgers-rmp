@@ -62,6 +62,16 @@ async function getTopRatedThisSemester(): Promise<TopProf[]> {
   }
 }
 
+interface TakeProfessor {
+  slug: string
+  first_name: string
+  last_name: string
+  rmp_id: string | null
+  avg_rating: number | null
+  verdict_reason: string | null
+  open_courses: { course_number: string; course_name: string; course_slug: string; open_count: number }[]
+}
+
 async function getPopular(): Promise<ProfessorCache[]> {
   if (!supabase) return []
   try {
@@ -71,6 +81,92 @@ async function getPopular(): Promise<ProfessorCache[]> {
       .order('search_count', { ascending: false })
       .limit(6)
     return data ?? []
+  } catch {
+    return []
+  }
+}
+
+async function getTopTakeProfessors(): Promise<TakeProfessor[]> {
+  if (!supabase) return []
+  try {
+    const { data: semData } = await supabase
+      .from('semesters')
+      .select('id')
+      .eq('is_current', true)
+      .single()
+    if (!semData) return []
+
+    const [cacheResult, assignResult] = await Promise.all([
+      supabase
+        .from('professor_cache')
+        .select('slug, first_name, last_name, rmp_id, avg_rating, ai_analysis')
+        .contains('ai_analysis', { verdict: 'take' })
+        .order('avg_rating', { ascending: false })
+        .limit(60),
+      supabase
+        .from('teaching_assignments')
+        .select(`
+          professor_id, open_status,
+          professors!inner( id, slug ),
+          courses!inner( course_number, name, slug )
+        `)
+        .eq('semester_id', semData.id)
+        .eq('open_status', true)
+        .eq('status', 'active')
+        .limit(400),
+    ])
+
+    const takeCaches = cacheResult.data ?? []
+    const assignments = assignResult.data ?? []
+    if (!takeCaches.length || !assignments.length) return []
+
+    const takeSlugs = new Set(takeCaches.map(c => c.slug))
+
+    // Group open courses by professor slug
+    const openBySlugs = new Map<string, Map<string, { course_number: string; course_name: string; course_slug: string; open_count: number }>>()
+    for (const row of assignments) {
+      const prof = Array.isArray(row.professors) ? row.professors[0] : row.professors
+      const course = Array.isArray(row.courses) ? row.courses[0] : row.courses
+      if (!prof?.slug || !course) continue
+      if (!takeSlugs.has(prof.slug)) continue
+
+      if (!openBySlugs.has(prof.slug)) openBySlugs.set(prof.slug, new Map())
+      const courseMap = openBySlugs.get(prof.slug)!
+      const existing = courseMap.get(course.slug)
+      if (existing) {
+        existing.open_count++
+      } else {
+        courseMap.set(course.slug, {
+          course_number: course.course_number,
+          course_name: course.name,
+          course_slug: course.slug,
+          open_count: 1,
+        })
+      }
+    }
+
+    const cacheMap = new Map(takeCaches.map(c => [c.slug, c]))
+
+    return Array.from(openBySlugs.entries())
+      .map(([slug, courseMap]) => {
+        const cache = cacheMap.get(slug)
+        if (!cache) return null
+        const ai = cache.ai_analysis as { verdict_reason?: string } | null
+        return {
+          slug: cache.slug,
+          first_name: cache.first_name ?? '',
+          last_name: cache.last_name ?? '',
+          rmp_id: cache.rmp_id ?? null,
+          avg_rating: cache.avg_rating ?? null,
+          verdict_reason: ai?.verdict_reason ?? null,
+          open_courses: Array.from(courseMap.values())
+            .sort((a, b) => b.open_count - a.open_count)
+            .slice(0, 3),
+        }
+      })
+      .filter((x): x is TakeProfessor => x !== null)
+      .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+      .slice(0, 6)
   } catch {
     return []
   }
@@ -191,7 +287,12 @@ const TOOLS: {
 ]
 
 export default async function HomePage() {
-  const [popular, hotCourses, topRated] = await Promise.all([getPopular(), getHotCourses(), getTopRatedThisSemester()])
+  const [popular, hotCourses, topRated, takeProfessors] = await Promise.all([
+    getPopular(),
+    getHotCourses(),
+    getTopRatedThisSemester(),
+    getTopTakeProfessors(),
+  ])
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
@@ -392,6 +493,75 @@ export default async function HomePage() {
                     </div>
                   </div>
                 </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* TAKE professors with open seats */}
+      {takeProfessors.length > 0 && (
+        <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
+              TAKE Profs with Open Seats
+              <span className="ml-2 font-normal text-zinc-700 normal-case tracking-normal">
+                · register before they fill
+              </span>
+            </h2>
+            <Link
+              href="/professors?verdict=take"
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              All TAKE profs →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {takeProfessors.map((prof) => {
+              const href = prof.rmp_id
+                ? `/professor/${prof.slug}?rmpId=${prof.rmp_id}`
+                : `/professor/${prof.slug}`
+              return (
+                <div
+                  key={prof.slug}
+                  className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden hover:border-green-800/60 transition-all"
+                >
+                  <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-green-500" />
+                  <div className="pl-4 pr-4 pt-3 pb-3 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <Link href={href} className="min-w-0 group">
+                        <div className="font-semibold text-white group-hover:text-green-400 transition-colors leading-tight truncate">
+                          {prof.first_name} {prof.last_name}
+                        </div>
+                        {prof.verdict_reason && (
+                          <div className="text-xs text-zinc-500 mt-0.5 line-clamp-1">{prof.verdict_reason}</div>
+                        )}
+                      </Link>
+                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                        {prof.avg_rating != null && (
+                          <div className="text-xl font-black leading-none text-green-400">
+                            {prof.avg_rating.toFixed(1)}★
+                          </div>
+                        )}
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-green-950 border-green-800 text-green-400">
+                          TAKE
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {prof.open_courses.map(c => (
+                        <Link
+                          key={c.course_slug}
+                          href={`/course/${c.course_slug}`}
+                          className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg bg-[var(--card-2)] border border-green-900/50 text-zinc-300 hover:text-white hover:border-green-700 transition-colors"
+                        >
+                          <span className="font-mono text-zinc-500">{c.course_number}</span>
+                          <span className="font-bold text-green-400">{c.open_count} open</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               )
             })}
           </div>
