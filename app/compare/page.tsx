@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
@@ -8,7 +8,7 @@ import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import { SkeletonBlock } from '@/components/LoadingSkeleton'
 import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
-import { useCompareItems, removeCompareItem } from '@/lib/compare'
+import { useCompareItems, addCompareItem, removeCompareItem, MAX_COMPARE } from '@/lib/compare'
 import type { AIAnalysis } from '@/lib/supabase'
 import type { ProfessorGrade } from '@/lib/professor-grade'
 
@@ -64,6 +64,127 @@ function ShareCompareButton({ ids }: { ids: string[] }) {
     >
       {copied ? '✓ Copied' : '↗ Share link'}
     </button>
+  )
+}
+
+interface SearchProf {
+  id: string
+  firstName: string
+  lastName: string
+  department: string | null
+  avgRating: number | null
+  slug: string
+}
+
+function AddProfessorSearch({
+  excludeIds,
+  onAdd,
+}: {
+  excludeIds: string[]
+  onAdd: (prof: SearchProf) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<SearchProf[]>([])
+  const [open, setOpen] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value
+    setQuery(v)
+    setOpen(true)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!v.trim()) { setResults([]); setSearching(false); return }
+    setSearching(true)
+    debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort()
+      const ctrl = new AbortController()
+      abortRef.current = ctrl
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(v.trim())}`, { signal: ctrl.signal })
+        const data = await res.json()
+        const profs: SearchProf[] = (data.professors ?? []).filter(
+          (p: SearchProf) => !excludeIds.includes(p.id)
+        )
+        setResults(profs)
+      } catch { /* aborted or network error */ } finally {
+        setSearching(false)
+      }
+    }, 220)
+  }
+
+  function handleSelect(prof: SearchProf) {
+    onAdd(prof)
+    setQuery('')
+    setResults([])
+    setOpen(false)
+  }
+
+  useEffect(() => {
+    function onClickOut(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOut)
+    return () => document.removeEventListener('mousedown', onClickOut)
+  }, [])
+
+  function ratingColor(r: number | null) {
+    if (r == null) return '#71717a'
+    if (r >= 4) return '#22c55e'
+    if (r >= 3) return '#f59e0b'
+    return '#ef4444'
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full max-w-sm">
+      <div className="relative">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          value={query}
+          onChange={handleChange}
+          onFocus={() => query && setOpen(true)}
+          placeholder="Add a professor…"
+          className="w-full pl-9 pr-4 py-2 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+          autoComplete="off"
+        />
+        {searching && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-t-[#CC0033] border-zinc-700 animate-spin" />
+        )}
+      </div>
+
+      {open && results.length > 0 && (
+        <div
+          className="absolute z-50 mt-1.5 w-full rounded-xl overflow-hidden"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
+        >
+          {results.slice(0, 6).map(prof => (
+            <button
+              key={prof.id}
+              onMouseDown={e => { e.preventDefault(); handleSelect(prof) }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#CC0033]/10 transition-colors text-left"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-white truncate">{prof.firstName} {prof.lastName}</div>
+                {prof.department && <div className="text-xs text-zinc-500 truncate">{prof.department}</div>}
+              </div>
+              {prof.avgRating != null && (
+                <span className="text-sm font-black shrink-0 tabular-nums" style={{ color: ratingColor(prof.avgRating) }}>
+                  {prof.avgRating.toFixed(1)}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -135,6 +256,14 @@ function CompareContent() {
     }
   }, [isUrlMode, ids, router])
 
+  const handleAdd = useCallback((prof: SearchProf) => {
+    if (isUrlMode) {
+      router.push(`/compare?ids=${encodeURIComponent([...ids, prof.id].join(','))}`)
+    } else {
+      addCompareItem({ rmpId: prof.id, slug: prof.slug, name: `${prof.firstName} ${prof.lastName}`, department: prof.department })
+    }
+  }, [isUrlMode, ids, router])
+
   // Best-value highlighting
   const bestRating = Math.max(...professors.map(p => p.avg_rating ?? -1))
   const bestDifficulty = Math.min(...professors.map(p => p.avg_difficulty ?? 99))
@@ -170,6 +299,12 @@ function CompareContent() {
           )}
         </div>
 
+        {ids.length < MAX_COMPARE && !loading && !error && (
+          <div className="mb-6">
+            <AddProfessorSearch excludeIds={ids} onAdd={handleAdd} />
+          </div>
+        )}
+
         {loading && (
           <div className="space-y-3">
             <SkeletonBlock className="h-24 w-full" />
@@ -185,16 +320,7 @@ function CompareContent() {
           <EmptyState
             icon="⚖️"
             title="Nothing to compare yet"
-            subtitle="Add professors with the “+ Compare” button on any professor or course page (2–4 at a time)."
-            action={
-              <Link
-                href="/courses"
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                style={{ backgroundColor: '#CC0033' }}
-              >
-                Browse Courses
-              </Link>
-            }
+            subtitle='Search for a professor above, or use the “+ Compare” button on any professor page. Add 2–4 to compare side-by-side.'
           />
         )}
 
