@@ -8,6 +8,8 @@ import Badge from '@/components/Badge'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 
+const CHECKOUT_PLAN = 'pro'
+
 const FEATURES = [
   'Priority open-seat alerts with email/SMS support',
   'Section watchlists by semester with open/closed history',
@@ -20,7 +22,6 @@ function ProPageContent() {
   const searchParams = useSearchParams()
   const paymentSuccess = searchParams.get('success') === '1'
 
-  const [plan, setPlan] = useState<'pro' | 'club'>('pro')
   const [subscribed, setSubscribed] = useState(false)
   const [subLoading, setSubLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
@@ -54,7 +55,7 @@ function ProPageContent() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan: CHECKOUT_PLAN }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Could not start checkout')
@@ -142,33 +143,12 @@ function ProPageContent() {
             {user && !subscribed && !subLoading && (
               <>
                 <div className="mb-5">
-                  <h2 className="text-xl font-black text-white">Choose a plan</h2>
+                  <h2 className="text-xl font-black text-white">Student Pro</h2>
                   <p className="mt-1 text-sm text-zinc-500">Billed monthly. Cancel any time.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 rounded-xl bg-[var(--card)] p-1">
-                  <button
-                    type="button"
-                    onClick={() => setPlan('pro')}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                      plan === 'pro' ? 'bg-[#CC0033] text-white' : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    Student Pro
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlan('club')}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                      plan === 'club' ? 'bg-[#CC0033] text-white' : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    Club / Group
-                  </button>
-                </div>
-
                 <p className="mt-3 text-center text-sm text-zinc-400">
-                  {plan === 'pro' ? '$4.99 / month' : '$9.99 / month'}
+                  $4.99 / month
                 </p>
 
                 {checkoutError && <p className="mt-3 text-sm text-red-400">{checkoutError}</p>}
