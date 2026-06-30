@@ -450,6 +450,12 @@ function CourseContent({ slug }: { slug: string }) {
   const visibleOpen = visibleSections.filter(section => section.open_status === true).length
   const visibleBuildings = Array.from(new Set(visibleSections.map(section => section.location || section.campus).filter(Boolean))).slice(0, 5)
   const topProfessor = ratedProfessors[0]
+  const comparableProfessors = professors
+    .filter(p => p.rmp_id != null && p.avg_rating != null)
+    .slice(0, 4)
+  const compareUrl = comparableProfessors.length >= 2
+    ? `/compare?ids=${encodeURIComponent(comparableProfessors.map(p => p.rmp_id!).join(','))}`
+    : null
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -633,10 +639,17 @@ function CourseContent({ slug }: { slug: string }) {
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
               {ratedProfessors.length > 0 ? 'Best Professor Options' : 'Professors Who Teach This Course'}
             </h2>
-            {ratedProfessors.length >= 2 && (
-              <span className="text-xs text-zinc-600">
-                Tip: add 2+ to the compare tray, then hit Compare
-              </span>
+            {compareUrl && (
+              <Link
+                href={compareUrl}
+                className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:border-[#CC0033]/60 hover:text-white"
+                style={{ borderColor: 'var(--border)', color: '#71717a' }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Compare all ({comparableProfessors.length})
+              </Link>
             )}
           </div>
 
