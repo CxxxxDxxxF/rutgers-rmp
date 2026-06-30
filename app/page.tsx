@@ -1,8 +1,10 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AppHeader from '@/components/AppHeader'
 import SearchBar from '@/components/SearchBar'
 import ProfessorCard from '@/components/ProfessorCard'
+import DeletedBanner from '@/components/DeletedBanner'
 import type { ProfessorCache } from '@/lib/supabase'
 
 export const revalidate = 120
@@ -141,6 +143,9 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
       <AppHeader />
+      <Suspense>
+        <DeletedBanner />
+      </Suspense>
 
       {/* Hero */}
       <section className="relative flex flex-col items-center px-4 sm:px-6 pt-16 sm:pt-24 pb-12 text-center overflow-hidden">
@@ -352,12 +357,13 @@ export default async function HomePage() {
 
       {/* Footer */}
       <footer className="mt-auto border-t border-zinc-900 px-6 py-6">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-zinc-700">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-zinc-700">
           <span>RU Rate — Rutgers Registration Command Center</span>
           <div className="flex flex-wrap items-center gap-3">
             <span>Reviews from RateMyProfessors · Courses from Rutgers SOC · Not affiliated with Rutgers</span>
             <Link href="/privacy" className="hover:text-zinc-400 transition-colors underline underline-offset-2">Privacy</Link>
             <Link href="/terms" className="hover:text-zinc-400 transition-colors underline underline-offset-2">Terms</Link>
+            <a href="mailto:obvcjgaming@gmail.com" className="hover:text-zinc-400 transition-colors underline underline-offset-2">Contact</a>
           </div>
         </div>
       </footer>

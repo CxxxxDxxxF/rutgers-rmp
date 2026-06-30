@@ -155,6 +155,32 @@ export default function AppHeader() {
               </Link>
             )
           })}
+          {!loading && (
+            user ? (
+              <Link
+                href="/account"
+                className={`relative flex-1 min-w-fit px-3 py-1.5 rounded-lg text-center text-xs font-semibold whitespace-nowrap transition-colors ${
+                  pathname === '/account' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                style={pathname === '/account' ? { background: 'rgba(255,255,255,0.05)' } : {}}
+              >
+                Account
+                {pathname === '/account' && (
+                  <span
+                    className="absolute left-2 right-2 bottom-0 h-[2px] rounded-t"
+                    style={{ background: '#CC0033' }}
+                  />
+                )}
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="flex-1 min-w-fit px-3 py-1.5 rounded-lg text-center text-xs font-semibold whitespace-nowrap text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Sign in
+              </Link>
+            )
+          )}
         </nav>
       </div>
     </header>
