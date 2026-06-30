@@ -25,6 +25,7 @@ export interface SectionRow {
     first_name: string
     last_name: string
     avg_rating: number | null
+    verdict: string | null
   } | null
 }
 
@@ -38,6 +39,22 @@ function ratingColor(r: number): string {
   if (r >= 4) return '#22c55e'
   if (r >= 3) return '#f59e0b'
   return '#ef4444'
+}
+
+const VERDICT_STYLES: Record<string, { label: string; className: string }> = {
+  take: { label: 'TAKE', className: 'bg-green-950 border-green-800 text-green-400' },
+  depends: { label: 'DEP', className: 'bg-amber-950 border-amber-800 text-amber-400' },
+  avoid: { label: 'AVOID', className: 'bg-red-950 border-red-900 text-red-400' },
+}
+
+function VerdictBadge({ verdict }: { verdict: string | null }) {
+  if (!verdict || !VERDICT_STYLES[verdict]) return null
+  const { label, className } = VERDICT_STYLES[verdict]
+  return (
+    <span className={`shrink-0 text-[9px] font-black px-1 py-0.5 rounded border leading-none ${className}`}>
+      {label}
+    </span>
+  )
 }
 
 function StatusBadge({ section }: { section: SectionRow }) {
@@ -202,17 +219,20 @@ export default function SectionTable({
                 <td className="px-3 py-2.5 text-zinc-300">{s.section_number ?? '—'}</td>
                 <td className="px-3 py-2.5">
                   {s.professor ? (
-                    <Link
-                      href={professorHref(s.professor)}
-                      className="text-zinc-200 hover:text-[#ff4d6d] transition-colors font-medium"
-                    >
-                      {s.professor.first_name} {s.professor.last_name}
-                      {s.professor.avg_rating != null && (
-                        <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
-                          {Number(s.professor.avg_rating).toFixed(1)}★
-                        </span>
-                      )}
-                    </Link>
+                    <span className="flex items-center gap-1.5 flex-wrap">
+                      <Link
+                        href={professorHref(s.professor)}
+                        className="text-zinc-200 hover:text-[#ff4d6d] transition-colors font-medium"
+                      >
+                        {s.professor.first_name} {s.professor.last_name}
+                        {s.professor.avg_rating != null && (
+                          <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
+                            {Number(s.professor.avg_rating).toFixed(1)}★
+                          </span>
+                        )}
+                      </Link>
+                      <VerdictBadge verdict={s.professor.verdict} />
+                    </span>
                   ) : (
                     <span className="text-zinc-500">{s.instructor_name_raw || 'TBA'}</span>
                   )}
@@ -270,16 +290,19 @@ export default function SectionTable({
               {s.index_number && <CopyButton value={s.index_number} label="index number" />}
             </div>
 
-            <div className="text-sm">
+            <div className="text-sm flex items-center gap-1.5 flex-wrap">
               {s.professor ? (
-                <Link href={professorHref(s.professor)} className="text-zinc-200 font-medium hover:text-[#ff4d6d]">
-                  {s.professor.first_name} {s.professor.last_name}
-                  {s.professor.avg_rating != null && (
-                    <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
-                      {Number(s.professor.avg_rating).toFixed(1)}★
-                    </span>
-                  )}
-                </Link>
+<>
+                  <Link href={professorHref(s.professor)} className="text-zinc-200 font-medium hover:text-[#ff4d6d]">
+                    {s.professor.first_name} {s.professor.last_name}
+                    {s.professor.avg_rating != null && (
+                      <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
+                        {Number(s.professor.avg_rating).toFixed(1)}★
+                      </span>
+                    )}
+                  </Link>
+                  <VerdictBadge verdict={s.professor.verdict} />
+                </>
               ) : (
                 <span className="text-zinc-500">{s.instructor_name_raw || 'Instructor TBA'}</span>
               )}
