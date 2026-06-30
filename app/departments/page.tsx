@@ -235,6 +235,7 @@ export default function DepartmentsPage() {
   const [search, setSearch] = useState('')
   const [activeSchool, setActiveSchool] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('name')
+  const [ratedOnly, setRatedOnly] = useState(false)
 
   useEffect(() => {
     fetch('/api/departments')
@@ -258,6 +259,7 @@ export default function DepartmentsPage() {
   const filtered = useMemo(() => {
     let list = departments.filter(d => abbrevSchool(d.school) !== null)
     if (activeSchool) list = list.filter(d => abbrevSchool(d.school) === activeSchool)
+    if (ratedOnly) list = list.filter(d => d.avg_rating != null)
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter(d =>
@@ -272,10 +274,10 @@ export default function DepartmentsPage() {
       if (sort === 'courses') return b.course_count - a.course_count
       return a.name.localeCompare(b.name)
     })
-  }, [departments, activeSchool, search, sort])
+  }, [departments, activeSchool, search, sort, ratedOnly])
 
   const grouped = useMemo(() => {
-    if (activeSchool || search.trim()) return null
+    if (activeSchool || search.trim() || ratedOnly) return null
     const groups: Record<string, DepartmentRow[]> = {}
     for (const d of filtered) {
       const s = abbrevSchool(d.school) ?? 'Other'
@@ -379,6 +381,16 @@ export default function DepartmentsPage() {
               />
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => setRatedOnly(v => !v)}
+                className={`text-xs px-3 py-2 rounded-lg border transition-all mr-1 ${
+                  ratedOnly
+                    ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d] font-semibold'
+                    : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                Rated
+              </button>
               {SORT_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
@@ -419,7 +431,7 @@ export default function DepartmentsPage() {
             <div className="text-3xl mb-3">🔍</div>
             <p className="text-zinc-400 text-sm">No departments match your filter.</p>
             <button
-              onClick={() => { setSearch(''); setActiveSchool(null) }}
+              onClick={() => { setSearch(''); setActiveSchool(null); setRatedOnly(false) }}
               className="mt-3 text-xs text-[#CC0033] hover:underline"
             >
               Clear filters
