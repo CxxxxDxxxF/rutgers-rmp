@@ -6,6 +6,7 @@ import AppHeader from '@/components/AppHeader'
 import CourseCard, { type CourseCardData } from '@/components/CourseCard'
 import EmptyState from '@/components/EmptyState'
 import { CourseGridSkeleton } from '@/components/LoadingSkeleton'
+import { resolveSemesterParam } from '@/lib/semester'
 
 interface Department {
   code: string
@@ -105,9 +106,17 @@ function CoursesContent() {
           const data = await semRes.json()
           const list = Array.isArray(data) ? data : []
           setSemesters(list)
-          if (!searchParams.get('semester')) {
-            const current = list.find((s: Semester) => s.is_current && s.slug)
-            if (current?.slug) setSelectedSemester(current.slug)
+          const current = list.find((s: Semester) => s.is_current && s.slug)
+          const requestedSemester = searchParams.get('semester')
+          if (requestedSemester) {
+            const resolved = resolveSemesterParam(requestedSemester, list)
+            if (resolved?.slug && resolved.slug !== requestedSemester) {
+              setSelectedSemester(resolved.slug)
+            } else if (!resolved && current?.slug) {
+              setSelectedSemester(current.slug)
+            }
+          } else if (current?.slug) {
+            setSelectedSemester(current.slug)
           }
         }
       } catch {
