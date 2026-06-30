@@ -2,106 +2,168 @@ import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
 
 export const metadata = {
-  title: 'Terms of Service | RU Rate',
-  description: 'Terms and conditions for using RU Rate.',
+  title: 'Terms of Service — RU Rate',
 }
 
 export default function TermsPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12 pb-24">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 pb-24">
         <h1 className="text-3xl font-black text-white mb-2">Terms of Service</h1>
-        <p className="text-sm text-zinc-500 mb-10">Last updated: June 23, 2026</p>
+        <p className="text-xs text-zinc-500 mb-8">Last updated: June 23, 2026</p>
 
-        <div className="space-y-8 text-sm text-zinc-300 leading-relaxed">
+        <div className="space-y-8 text-sm leading-relaxed text-zinc-300">
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">1. About RU Rate</h2>
-            <p className="text-zinc-400">RU Rate is an independent student tool for searching Rutgers University courses, reading professor reviews, and tracking course section availability. <span className="text-white font-medium">RU Rate is not affiliated with, endorsed by, or connected to Rutgers University in any way.</span> &quot;Rutgers&quot; is a registered trademark of Rutgers University; use of the name is purely descriptive of the courses and professors this tool helps students research.</p>
-            <p className="mt-2 text-zinc-400">RU Rate does not auto-register for classes, does not interact with WebReg, and never requests your Rutgers NetID or password.</p>
+            <h2 className="text-base font-bold text-white mb-3">1. Agreement</h2>
+            <p>
+              By accessing or using RU Rate (&ldquo;the service&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;) you agree to these
+              Terms of Service. If you do not agree, do not use the service.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">2. User-generated reviews</h2>
-            <p className="text-zinc-400 mb-2">By submitting a review you agree that:</p>
-            <ul className="space-y-2 list-disc list-inside text-zinc-400">
-              <li>Your review reflects your <span className="text-white font-medium">honest, personal experience</span> with the professor.</li>
-              <li>You will not submit false, misleading, defamatory, harassing, or discriminatory statements.</li>
-              <li>You will not post private personal information about any individual.</li>
-              <li>You grant RU Rate a non-exclusive, royalty-free license to display your review on the platform.</li>
-              <li>You are solely responsible for the content of your review. RU Rate is not liable for user-submitted content.</li>
+            <h2 className="text-base font-bold text-white mb-3">2. Not Affiliated with Rutgers</h2>
+            <p>
+              RU Rate is an independent student tool. It is not affiliated with, endorsed by, or
+              operated by Rutgers, The State University of New Jersey. &ldquo;Rutgers&rdquo; and related
+              names are trademarks of Rutgers University. Course and section data is sourced from
+              the publicly available Rutgers Schedule of Classes API.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-bold text-white mb-3">3. Permitted Use</h2>
+            <p>You may use RU Rate to:</p>
+            <ul className="list-disc list-inside space-y-1 mt-2 text-zinc-300">
+              <li>Search and filter course offerings</li>
+              <li>View professor ratings and reviews sourced from RateMyProfessors</li>
+              <li>Monitor sections for seat availability</li>
+              <li>Compare and rank schedules</li>
             </ul>
-            <p className="mt-3 text-zinc-400">We reserve the right to remove reviews that violate these terms or applicable law without notice. To report a review, email <a href="mailto:obvcjgaming@gmail.com" className="underline hover:text-white">obvcjgaming@gmail.com</a>.</p>
-          </section>
-
-          <section>
-            <h2 className="text-base font-bold text-white mb-3">3. RateMyProfessors data</h2>
-            <p className="text-zinc-400">Professor quality ratings displayed on professor profile pages are sourced from <a href="https://www.ratemyprofessors.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">RateMyProfessors</a>, a third-party service. This data is provided for informational purposes only. RU Rate does not guarantee its accuracy, completeness, or timeliness. RateMyProfessors data is subject to <a href="https://www.ratemyprofessors.com/legal/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">their terms of service</a>.</p>
-          </section>
-
-          <section>
-            <h2 className="text-base font-bold text-white mb-3">4. Course section sniper</h2>
-            <p className="text-zinc-400">The sniper monitors publicly available Rutgers Schedule of Classes data. Seat availability shown in RU Rate may lag behind WebReg. <span className="text-white font-medium">Always verify in WebReg before acting on any seat-open notification.</span> RU Rate is not responsible for missed enrollment opportunities due to notification delays, worker downtime, or inaccurate data.</p>
-            <p className="mt-2 text-zinc-400">By providing a phone number or email for sniper alerts you consent to receive transactional notifications about courses you have explicitly chosen to watch. You may stop alerts at any time by removing the section from your watchlist.</p>
-          </section>
-
-          <section>
-            <h2 className="text-base font-bold text-white mb-3">5. Pro subscription</h2>
-            <ul className="space-y-2 list-disc list-inside text-zinc-400">
-              <li>Pro subscriptions are billed monthly via Stripe.</li>
-              <li>You may cancel at any time; your Pro access continues until the end of the current billing period.</li>
-              <li>We do not offer refunds for partial billing periods unless required by applicable law.</li>
-              <li>We reserve the right to change pricing with 30 days&apos; notice to subscribers.</li>
+            <p className="mt-3">You may not:</p>
+            <ul className="list-disc list-inside space-y-1 mt-2 text-zinc-300">
+              <li>Scrape, crawl, or bulk-download data from this service</li>
+              <li>Use the service for any automated registration or WebReg interaction</li>
+              <li>Attempt to circumvent rate limits, access controls, or authentication</li>
+              <li>Redistribute professor rating data sourced from RateMyProfessors</li>
+              <li>Use the service in any way that violates applicable law</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">6. Acceptable use</h2>
-            <p className="text-zinc-400 mb-2">You agree not to:</p>
-            <ul className="space-y-2 list-disc list-inside text-zinc-400">
-              <li>Scrape, crawl, or systematically extract data from RU Rate.</li>
-              <li>Attempt to circumvent rate limits, authentication, or security measures.</li>
-              <li>Use RU Rate for any unlawful purpose.</li>
-              <li>Interfere with or disrupt the service or its infrastructure.</li>
+            <h2 className="text-base font-bold text-white mb-3">4. What This Service Does Not Do</h2>
+            <p>
+              RU Rate is a decision-support tool only. It does <strong className="text-zinc-200">not</strong>:
+            </p>
+            <ul className="list-disc list-inside space-y-1 mt-2 text-zinc-300">
+              <li>Register you for any course or section</li>
+              <li>Access or interact with Rutgers WebReg on your behalf</li>
+              <li>Store or request your NetID or Rutgers password</li>
+              <li>Guarantee seat availability or successful registration</li>
             </ul>
+            <p className="mt-3">
+              Seat-open alerts are delivered on a best-effort basis. Alert delivery depends on
+              polling frequency, third-party infrastructure (Resend, Twilio), and network
+              conditions. We do not guarantee that an alert will reach you before a seat is
+              taken.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">7. Disclaimer of warranties</h2>
-            <p className="text-zinc-400">RU Rate is provided &quot;as is&quot; without warranties of any kind, express or implied. We do not warrant that the service will be uninterrupted, error-free, or that course and professor data will be accurate or current.</p>
+            <h2 className="text-base font-bold text-white mb-3">5. Professor Reviews and Ratings</h2>
+            <p>
+              Professor ratings and reviews displayed on RU Rate are sourced from
+              RateMyProfessors, operated by Chegg, Inc. We cache this data to improve
+              performance. We do not independently verify the accuracy of reviews and make no
+              warranties about their correctness.
+            </p>
+            <p className="mt-3">
+              If you submit a vote or review through this service, you represent that it is your
+              honest, first-hand opinion. Do not submit false, misleading, or defamatory content.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">8. Limitation of liability</h2>
-            <p className="text-zinc-400">To the maximum extent permitted by law, RU Rate and its operators shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the service, including but not limited to missed course registration, reliance on inaccurate data, or any content posted by other users.</p>
+            <h2 className="text-base font-bold text-white mb-3">6. Pro Subscriptions</h2>
+            <p>
+              Pro is a paid subscription billed monthly through Stripe. By subscribing you authorise
+              recurring charges at the rate displayed at checkout. You may cancel at any time via
+              the billing portal; access continues until the end of the current billing period.
+              We do not offer refunds for partial billing periods unless required by applicable law.
+            </p>
+            <p className="mt-3">
+              We reserve the right to change Pro pricing or features with reasonable notice.
+              Material changes will be communicated by email to active subscribers.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">9. DMCA / intellectual property</h2>
-            <p className="text-zinc-400">If you believe content on RU Rate infringes your copyright, send a notice to <a href="mailto:obvcjgaming@gmail.com" className="underline hover:text-white">obvcjgaming@gmail.com</a> including: identification of the work, location of the infringing content, your contact information, and a statement of good-faith belief. We will respond promptly.</p>
+            <h2 className="text-base font-bold text-white mb-3">7. Account Termination</h2>
+            <p>
+              You may delete your account at any time from{' '}
+              <Link href="/account" className="text-zinc-200 underline underline-offset-2 hover:text-white">
+                Settings
+              </Link>
+              . We may suspend or terminate accounts that violate these terms, engage in abuse, or
+              as required by law. Active Pro subscriptions will be cancelled upon account deletion.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">10. Governing law</h2>
-            <p className="text-zinc-400">These terms are governed by the laws of the State of New Jersey, without regard to conflict of law principles. Any disputes shall be resolved in the courts of New Jersey.</p>
+            <h2 className="text-base font-bold text-white mb-3">8. Intellectual Property</h2>
+            <p>
+              The RU Rate name, logo, and original code are owned by the service operator.
+              Professor data sourced from RateMyProfessors remains the property of Chegg, Inc.
+              Course data is sourced from the public Rutgers SOC API.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-white mb-3">11. Changes</h2>
-            <p className="text-zinc-400">We may update these terms. Material changes will be posted here with an updated date. Continued use after 30 days constitutes acceptance of the new terms.</p>
+            <h2 className="text-base font-bold text-white mb-3">9. Disclaimers and Limitation of Liability</h2>
+            <p>
+              The service is provided &ldquo;as is&rdquo; without warranty of any kind. We are not liable
+              for missed registration deadlines, missed seats, or any academic or financial
+              consequences arising from use of or reliance on this service. Our total liability
+              for any claim arising from use of the service is limited to the amount you paid us
+              in the three months preceding the claim.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-bold text-white mb-3">10. Governing Law</h2>
+            <p>
+              These terms are governed by the laws of the State of New Jersey, without regard to
+              its conflict-of-law provisions. Any disputes shall be resolved in the courts of
+              Middlesex County, New Jersey.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-bold text-white mb-3">11. Changes to These Terms</h2>
+            <p>
+              We may update these terms from time to time. Material changes will be noted with a
+              revised date at the top of this page. Continued use of the service after changes
+              constitutes acceptance of the updated terms.
+            </p>
           </section>
 
           <section>
             <h2 className="text-base font-bold text-white mb-3">12. Contact</h2>
-            <p className="text-zinc-400">Questions: <a href="mailto:obvcjgaming@gmail.com" className="underline hover:text-white">obvcjgaming@gmail.com</a></p>
+            <p>
+              Questions:{' '}
+              <a href="mailto:obvcjgaming@gmail.com" className="text-zinc-200 underline underline-offset-2 hover:text-white">
+                obvcjgaming@gmail.com
+              </a>
+            </p>
           </section>
 
         </div>
 
-        <div className="mt-12 pt-6 border-t border-zinc-800 flex gap-4 text-xs text-zinc-600">
+        <div className="mt-10 pt-6 border-t border-zinc-800 flex gap-4 text-xs text-zinc-600">
           <Link href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy Policy</Link>
-          <Link href="/" className="hover:text-zinc-400 transition-colors">← Back to RU Rate</Link>
+          <Link href="/" className="hover:text-zinc-400 transition-colors">Home</Link>
         </div>
       </main>
     </div>

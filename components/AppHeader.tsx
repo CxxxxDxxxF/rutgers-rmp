@@ -4,10 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { useWatchlistSync } from '@/lib/watchlist-client'
 
 const NAV = [
   { href: '/courses', label: 'Courses' },
   { href: '/departments', label: 'Departments' },
+  { href: '/professors', label: 'Professors' },
   { href: '/watchlist', label: 'Sniper' },
   { href: '/compare', label: 'Compare' },
   { href: '/schedule', label: 'Ranker' },
@@ -16,6 +18,7 @@ const NAV = [
 export default function AppHeader() {
   const pathname = usePathname()
   const { user, loading } = useAuth()
+  useWatchlistSync()
 
   async function handleSignOut() {
     if (!supabase) return
@@ -105,7 +108,13 @@ export default function AppHeader() {
             {!loading && (
               user ? (
                 <div className="hidden md:flex items-center gap-2 pl-2 border-l border-white/[0.07]">
-                  <span className="text-[11px] text-zinc-600 max-w-[100px] truncate">{user.email}</span>
+                  <Link
+                    href="/account"
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors max-w-[100px] truncate"
+                    title={user.email}
+                  >
+                    {user.email}
+                  </Link>
                   <button
                     onClick={handleSignOut}
                     className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
@@ -129,7 +138,7 @@ export default function AppHeader() {
         <nav className="md:hidden flex gap-0.5 pb-2.5 -mx-1 px-1 overflow-x-auto">
           {NAV.map(({ href, label }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`)
-            const short = label === 'Departments' ? 'Depts' : label
+            const short = label === 'Departments' ? 'Depts' : label === 'Professors' ? 'Profs' : label
             return (
               <Link
                 key={href}
@@ -149,6 +158,32 @@ export default function AppHeader() {
               </Link>
             )
           })}
+          {!loading && (
+            user ? (
+              <Link
+                href="/account"
+                className={`relative flex-1 min-w-fit px-3 py-1.5 rounded-lg text-center text-xs font-semibold whitespace-nowrap transition-colors ${
+                  pathname === '/account' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                style={pathname === '/account' ? { background: 'rgba(255,255,255,0.05)' } : {}}
+              >
+                Account
+                {pathname === '/account' && (
+                  <span
+                    className="absolute left-2 right-2 bottom-0 h-[2px] rounded-t"
+                    style={{ background: '#CC0033' }}
+                  />
+                )}
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="flex-1 min-w-fit px-3 py-1.5 rounded-lg text-center text-xs font-semibold whitespace-nowrap text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Sign in
+              </Link>
+            )
+          )}
         </nav>
       </div>
     </header>

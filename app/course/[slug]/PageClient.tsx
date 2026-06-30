@@ -11,6 +11,7 @@ import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import SectionTable, { CopyButton, type SectionRow } from '@/components/SectionTable'
 import { SkeletonBlock, RowListSkeleton } from '@/components/LoadingSkeleton'
 import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
+import { trackView } from '@/lib/recently-viewed'
 import type { ProfessorGrade } from '@/lib/professor-grade'
 
 interface Department {
@@ -80,7 +81,84 @@ function professorHref(prof: Professor) {
     : `/professor/${prof.slug}?socId=${prof.id}`
 }
 
-function ProfessorOptionCard({ prof }: { prof: Professor }) {
+function TopPickBanner({
+  professors,
+  visibleSections,
+}: {
+  professors: Professor[]
+  visibleSections: SectionRow[]
+}) {
+  const ratedProfs = professors.filter(p => p.avg_rating != null)
+  if (ratedProfs.length < 2) return null
+
+  const top = ratedProfs[0]
+  const second = ratedProfs[1]
+
+  const ratingGap = top.avg_rating! - (second.avg_rating ?? top.avg_rating!)
+  const hasVerdict = !!top.verdict
+
+  // Only surface the banner when the choice is clear-cut
+  if (!hasVerdict && ratingGap < 0.4) return null
+
+  const vc = top.verdict ? VERDICT_CONFIG[top.verdict] : null
+  const qColor = ratingColor(top.avg_rating!)
+
+  const profSections = visibleSections.filter(s => s.professor?.id === top.id)
+  const openCount = profSections.filter(s => s.open_status === true).length
+
+  const borderColor = vc?.tone === 'green' ? 'rgba(34,197,94,0.35)' : vc?.tone === 'red' ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)'
+  const bgColor = vc?.tone === 'green' ? 'rgba(34,197,94,0.06)' : vc?.tone === 'red' ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)'
+
+  return (
+    <div
+      className="rounded-xl border p-4 flex flex-wrap items-center gap-3 justify-between"
+      style={{ borderColor, background: bgColor }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="shrink-0 text-center">
+          <div className="text-xl font-black leading-none" style={{ color: qColor }}>
+            {top.avg_rating!.toFixed(1)}
+          </div>
+          <div className="text-[10px] text-zinc-600 mt-0.5">Quality</div>
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Best Choice</span>
+            {vc && <Badge tone={vc.tone}>{vc.label}</Badge>}
+          </div>
+          <div className="font-semibold text-white leading-tight truncate">
+            {top.first_name} {top.last_name}
+          </div>
+          <div className="text-xs text-zinc-500 mt-0.5">
+            {profSections.length > 0
+              ? openCount > 0
+                ? `${openCount} open section${openCount !== 1 ? 's' : ''} this semester`
+                : `${profSections.length} section${profSections.length !== 1 ? 's' : ''} listed — all currently closed`
+              : ratingGap >= 0.4
+                ? `${ratingGap.toFixed(1)} pts ahead of next-highest rated`
+                : 'Top rated for this course'}
+          </div>
+        </div>
+      </div>
+      <Link
+        href={professorHref(top)}
+        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+      >
+        Full analysis →
+      </Link>
+    </div>
+  )
+}
+
+function ProfessorOptionCard({
+  prof,
+  isSelected,
+  onSelect,
+}: {
+  prof: Professor
+  isSelected: boolean
+  onSelect: (id: string) => void
+}) {
   const vc = prof.verdict ? VERDICT_CONFIG[prof.verdict] : null
   const qColor = prof.avg_rating != null ? ratingColor(prof.avg_rating) : '#52525b'
   const dColor = prof.avg_difficulty != null
@@ -88,7 +166,13 @@ function ProfessorOptionCard({ prof }: { prof: Professor }) {
     : '#52525b'
 
   return (
-    <div className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden hover:border-[#CC0033]/40 transition-all group/card">
+    <div
+      className={`relative bg-[var(--card)] border rounded-xl overflow-hidden transition-all group/card ${
+        isSelected
+          ? 'border-[#CC0033]/70 shadow-[0_0_0_1px_rgba(204,0,51,0.25)]'
+          : 'border-[var(--border)] hover:border-[#CC0033]/40'
+      }`}
+    >
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
       <div className="pl-4 pr-5 pt-4 pb-3 space-y-3">
@@ -137,15 +221,27 @@ function ProfessorOptionCard({ prof }: { prof: Professor }) {
               <span>{Math.round(prof.would_take_again)}% again</span>
             )}
           </div>
-          {prof.rmp_id && (
-            <CompareButton
-              rmpId={prof.rmp_id}
-              slug={prof.slug}
-              name={`${prof.first_name} ${prof.last_name}`}
-              department={null}
-              compact
-            />
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onSelect(prof.id)}
+              className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all ${
+                isSelected
+                  ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
+                  : 'bg-[var(--card-2)] border-[var(--border)] text-zinc-500 hover:text-zinc-200 hover:border-zinc-500'
+              }`}
+            >
+              {isSelected ? '✕ clear filter' : '⊟ filter sections'}
+            </button>
+            {prof.rmp_id && (
+              <CompareButton
+                rmpId={prof.rmp_id}
+                slug={prof.slug}
+                name={`${prof.first_name} ${prof.last_name}`}
+                department={null}
+                compact
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -334,6 +430,11 @@ function CourseContent({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedSemesterId, setSelectedSemesterId] = useState<string>('')
+  const [selectedProfId, setSelectedProfId] = useState<string | null>(null)
+
+  function toggleProfFilter(id: string) {
+    setSelectedProfId(prev => (prev === id ? null : id))
+  }
 
   useEffect(() => {
     async function load() {
@@ -344,6 +445,13 @@ function CourseContent({ slug }: { slug: string }) {
         const json = await res.json()
         setData(json)
         document.title = `${json.course.course_number} ${json.course.name} | RU Rate`
+        trackView({
+          type: 'course',
+          slug: json.course.slug,
+          name: json.course.name,
+          subtitle: json.course.course_number,
+          href: `/course/${json.course.slug}`,
+        })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -403,10 +511,20 @@ function CourseContent({ slug }: { slug: string }) {
   const totalSections = semesters.reduce((n, s) => n + s.sections.length, 0)
   const selectedSemester = semesters.find(sem => sem.id === selectedSemesterId) ?? semesters.find(sem => sem.is_current) ?? semesters[0]
   const visibleSemesters = selectedSemester ? [selectedSemester] : semesters
-  const visibleSections = visibleSemesters.flatMap(sem => sem.sections)
+  const allVisibleSections = visibleSemesters.flatMap(sem => sem.sections)
+  const filteredProfessor = selectedProfId ? professors.find(p => p.id === selectedProfId) ?? null : null
+  const visibleSections = selectedProfId
+    ? allVisibleSections.filter(s => s.professor?.id === selectedProfId)
+    : allVisibleSections
   const visibleOpen = visibleSections.filter(section => section.open_status === true).length
   const visibleBuildings = Array.from(new Set(visibleSections.map(section => section.location || section.campus).filter(Boolean))).slice(0, 5)
   const topProfessor = ratedProfessors[0]
+  const comparableProfessors = professors
+    .filter(p => p.rmp_id != null && p.avg_rating != null)
+    .slice(0, 4)
+  const compareUrl = comparableProfessors.length >= 2
+    ? `/compare?ids=${encodeURIComponent(comparableProfessors.map(p => p.rmp_id!).join(','))}`
+    : null
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -543,18 +661,44 @@ function CourseContent({ slug }: { slug: string }) {
                 ))}
               </div>
             </div>
-            {visibleSemesters.map(sem => (
-              <div key={sem.id} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-white text-sm">{sem.name}</h3>
-                  {sem.is_current && <Badge tone="green">CURRENT</Badge>}
-                  <span className="text-xs text-zinc-600">
-                    {sem.sections.length} section{sem.sections.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <SectionTable sections={sem.sections} courseId={course.id} />
+
+            {filteredProfessor && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#CC0033]/10 border border-[#CC0033]/30 text-sm">
+                <span className="text-zinc-400">Filtered by</span>
+                <span className="font-semibold text-white">
+                  {filteredProfessor.first_name} {filteredProfessor.last_name}
+                </span>
+                <span className="text-zinc-500">·</span>
+                <span className="text-zinc-400">{visibleSections.length} section{visibleSections.length !== 1 ? 's' : ''}</span>
+                <button
+                  onClick={() => setSelectedProfId(null)}
+                  className="ml-auto text-xs text-zinc-400 hover:text-white transition-colors"
+                >
+                  ✕ clear
+                </button>
               </div>
-            ))}
+            )}
+
+            {visibleSemesters.map(sem => {
+              const semSections = selectedProfId
+                ? sem.sections.filter(s => s.professor?.id === selectedProfId)
+                : sem.sections
+              return (
+                <div key={sem.id} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-white text-sm">{sem.name}</h3>
+                    {sem.is_current && <Badge tone="green">CURRENT</Badge>}
+                    <span className="text-xs text-zinc-600">
+                      {semSections.length} section{semSections.length !== 1 ? 's' : ''}
+                      {selectedProfId && semSections.length !== sem.sections.length && (
+                        <span className="text-zinc-700"> of {sem.sections.length}</span>
+                      )}
+                    </span>
+                  </div>
+                  <SectionTable sections={semSections} courseId={course.id} />
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -564,18 +708,33 @@ function CourseContent({ slug }: { slug: string }) {
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
               {ratedProfessors.length > 0 ? 'Best Professor Options' : 'Professors Who Teach This Course'}
             </h2>
-            {ratedProfessors.length >= 2 && (
-              <span className="text-xs text-zinc-600">
-                Tip: add 2+ to the compare tray, then hit Compare
-              </span>
+            {compareUrl && (
+              <Link
+                href={compareUrl}
+                className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:border-[#CC0033]/60 hover:text-white"
+                style={{ borderColor: 'var(--border)', color: '#71717a' }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Compare all ({comparableProfessors.length})
+              </Link>
             )}
           </div>
 
           {professors.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {professors.map(prof => (
-                <ProfessorOptionCard key={prof.slug} prof={prof} />
-              ))}
+            <div className="space-y-3">
+              <TopPickBanner professors={professors} visibleSections={visibleSections} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {professors.map(prof => (
+                  <ProfessorOptionCard
+                    key={prof.slug}
+                    prof={prof}
+                    isSelected={selectedProfId === prof.id}
+                    onSelect={toggleProfFilter}
+                  />
+                ))}
+              </div>
             </div>
           ) : (
             <EmptyState

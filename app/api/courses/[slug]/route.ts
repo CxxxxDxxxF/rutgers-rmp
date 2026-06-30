@@ -219,6 +219,7 @@ export async function GET(
               first_name: r.professor.first_name,
               last_name: r.professor.last_name,
               avg_rating: cache?.avg_rating ?? null,
+              verdict: (cache?.ai_analysis as { verdict?: string } | null)?.verdict ?? null,
             }
           : null,
       })
@@ -293,6 +294,7 @@ interface SectionPayload {
     first_name: string
     last_name: string
     avg_rating: number | null
+    verdict: string | null
   } | null
 }
 

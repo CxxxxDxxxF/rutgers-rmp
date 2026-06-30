@@ -261,6 +261,11 @@ async function pollOnce(activeWatches) {
     await updateAssignmentStatus(watch.assignmentId, nextOpenStatus, nextOpenStatusText, detectedAt)
     statusChanges++
 
+    // Update in-memory state before notifying so a notification failure
+    // doesn't cause the same change to be re-detected on the next poll.
+    watch.previousOpenStatus = nextOpenStatus
+    watch.previousOpenStatusText = nextOpenStatusText
+
     const notificationResult = await sendStatusNotifications(
       watch,
       nextOpenStatus,
@@ -274,9 +279,6 @@ async function pollOnce(activeWatches) {
       watch.lastNotifiedStatus = notificationResult.notifiedStatus
       watch.lastNotifiedAssignmentStatusAt = detectedAt.toISOString()
     }
-
-    watch.previousOpenStatus = nextOpenStatus
-    watch.previousOpenStatusText = nextOpenStatusText
   }
 
   return {

@@ -15,6 +15,9 @@ interface DepartmentRow {
   professor_count: number
   course_count: number
   avg_rating: number | null
+  take_count: number
+  depends_count: number
+  avoid_count: number
 }
 
 function ratingColor(r: number | null) {
@@ -70,6 +73,25 @@ function DeptCard({ dept }: { dept: DepartmentRow }) {
           </>
         )}
       </div>
+      {(() => {
+        const analyzed = dept.take_count + dept.depends_count + dept.avoid_count
+        if (analyzed === 0) return null
+        return (
+          <div className="mt-3">
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-900 gap-px">
+              {dept.take_count > 0 && (
+                <div style={{ flex: dept.take_count, backgroundColor: '#22c55e' }} title={`${dept.take_count} TAKE`} />
+              )}
+              {dept.depends_count > 0 && (
+                <div style={{ flex: dept.depends_count, backgroundColor: '#f59e0b' }} title={`${dept.depends_count} DEPENDS`} />
+              )}
+              {dept.avoid_count > 0 && (
+                <div style={{ flex: dept.avoid_count, backgroundColor: '#ef4444' }} title={`${dept.avoid_count} AVOID`} />
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </Link>
   )
 }
@@ -235,6 +257,7 @@ export default function DepartmentsPage() {
   const [search, setSearch] = useState('')
   const [activeSchool, setActiveSchool] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('name')
+  const [ratedOnly, setRatedOnly] = useState(false)
 
   useEffect(() => {
     fetch('/api/departments')
@@ -258,6 +281,7 @@ export default function DepartmentsPage() {
   const filtered = useMemo(() => {
     let list = departments.filter(d => abbrevSchool(d.school) !== null)
     if (activeSchool) list = list.filter(d => abbrevSchool(d.school) === activeSchool)
+    if (ratedOnly) list = list.filter(d => d.avg_rating != null)
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter(d =>
@@ -272,10 +296,10 @@ export default function DepartmentsPage() {
       if (sort === 'courses') return b.course_count - a.course_count
       return a.name.localeCompare(b.name)
     })
-  }, [departments, activeSchool, search, sort])
+  }, [departments, activeSchool, search, sort, ratedOnly])
 
   const grouped = useMemo(() => {
-    if (activeSchool || search.trim()) return null
+    if (activeSchool || search.trim() || ratedOnly) return null
     const groups: Record<string, DepartmentRow[]> = {}
     for (const d of filtered) {
       const s = abbrevSchool(d.school) ?? 'Other'
@@ -283,7 +307,7 @@ export default function DepartmentsPage() {
       groups[s].push(d)
     }
     return groups
-  }, [filtered, activeSchool, search])
+  }, [filtered, activeSchool, search, ratedOnly])
 
   const statsProfs = departments.reduce((s, d) => s + d.professor_count, 0)
   const statsCourses = departments.reduce((s, d) => s + d.course_count, 0)
@@ -379,6 +403,16 @@ export default function DepartmentsPage() {
               />
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => setRatedOnly(v => !v)}
+                className={`text-xs px-3 py-2 rounded-lg border transition-all mr-1 ${
+                  ratedOnly
+                    ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d] font-semibold'
+                    : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                Rated
+              </button>
               {SORT_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
@@ -419,7 +453,7 @@ export default function DepartmentsPage() {
             <div className="text-3xl mb-3">🔍</div>
             <p className="text-zinc-400 text-sm">No departments match your filter.</p>
             <button
-              onClick={() => { setSearch(''); setActiveSchool(null) }}
+              onClick={() => { setSearch(''); setActiveSchool(null); setRatedOnly(false) }}
               className="mt-3 text-xs text-[#CC0033] hover:underline"
             >
               Clear filters

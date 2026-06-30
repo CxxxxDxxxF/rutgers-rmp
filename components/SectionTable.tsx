@@ -25,6 +25,7 @@ export interface SectionRow {
     first_name: string
     last_name: string
     avg_rating: number | null
+    verdict: string | null
   } | null
 }
 
@@ -32,6 +33,28 @@ function professorHref(p: NonNullable<SectionRow['professor']>) {
   return p.rmp_id
     ? `/professor/${p.slug}?rmpId=${p.rmp_id}`
     : `/professor/${p.slug}?socId=${p.id}`
+}
+
+function ratingColor(r: number): string {
+  if (r >= 4) return '#22c55e'
+  if (r >= 3) return '#f59e0b'
+  return '#ef4444'
+}
+
+const VERDICT_STYLES: Record<string, { label: string; className: string }> = {
+  take: { label: 'TAKE', className: 'bg-green-950 border-green-800 text-green-400' },
+  depends: { label: 'DEP', className: 'bg-amber-950 border-amber-800 text-amber-400' },
+  avoid: { label: 'AVOID', className: 'bg-red-950 border-red-900 text-red-400' },
+}
+
+function VerdictBadge({ verdict }: { verdict: string | null }) {
+  if (!verdict || !VERDICT_STYLES[verdict]) return null
+  const { label, className } = VERDICT_STYLES[verdict]
+  return (
+    <span className={`shrink-0 text-[9px] font-black px-1 py-0.5 rounded border leading-none ${className}`}>
+      {label}
+    </span>
+  )
 }
 
 function StatusBadge({ section }: { section: SectionRow }) {
@@ -123,6 +146,8 @@ export default function SectionTable({
   courseId?: string
 }) {
   const { items: watchItems } = useWatchlist()
+  const [openFirst, setOpenFirst] = useState(false)
+
   const watchedByAssignment = new Map(
     watchItems
       .filter(w => w.teaching_assignment_id)
@@ -130,6 +155,18 @@ export default function SectionTable({
   )
 
   if (sections.length === 0) return null
+
+  const hasOpen = sections.some(s => s.open_status === true)
+  const hasClosed = sections.some(s => s.open_status === false)
+  const canSort = hasOpen && hasClosed
+
+  const displayed = openFirst
+    ? [...sections].sort((a, b) => {
+        const scoreA = a.open_status === true ? 0 : a.open_status === false ? 2 : 1
+        const scoreB = b.open_status === true ? 0 : b.open_status === false ? 2 : 1
+        return scoreA - scoreB
+      })
+    : sections
 
   const lastSync = sections
     .map(s => s.status_updated_at)
@@ -139,6 +176,20 @@ export default function SectionTable({
 
   return (
     <div className="space-y-2">
+      {canSort && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setOpenFirst(v => !v)}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+              openFirst
+                ? 'bg-green-950 border-green-800 text-green-400'
+                : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+            }`}
+          >
+            {openFirst ? '↑ Open first' : 'Sort: Open first'}
+          </button>
+        </div>
+      )}
       {/* Desktop table */}
       <div className="hidden md:block overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full text-sm">
@@ -154,7 +205,7 @@ export default function SectionTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/70">
-            {sections.map(s => (
+            {displayed.map(s => (
               <tr key={s.id} className="bg-zinc-900/40 hover:bg-zinc-800/40 transition-colors">
                 <td className="px-3 py-2.5">
                   <StatusBadge section={s} />
@@ -168,17 +219,20 @@ export default function SectionTable({
                 <td className="px-3 py-2.5 text-zinc-300">{s.section_number ?? '—'}</td>
                 <td className="px-3 py-2.5">
                   {s.professor ? (
-                    <Link
-                      href={professorHref(s.professor)}
-                      className="text-zinc-200 hover:text-[#ff4d6d] transition-colors font-medium"
-                    >
-                      {s.professor.first_name} {s.professor.last_name}
-                      {s.professor.avg_rating != null && (
-                        <span className="ml-1.5 text-xs text-zinc-500">
-                          {Number(s.professor.avg_rating).toFixed(1)}★
-                        </span>
-                      )}
-                    </Link>
+                    <span className="flex items-center gap-1.5 flex-wrap">
+                      <Link
+                        href={professorHref(s.professor)}
+                        className="text-zinc-200 hover:text-[#ff4d6d] transition-colors font-medium"
+                      >
+                        {s.professor.first_name} {s.professor.last_name}
+                        {s.professor.avg_rating != null && (
+                          <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
+                            {Number(s.professor.avg_rating).toFixed(1)}★
+                          </span>
+                        )}
+                      </Link>
+                      <VerdictBadge verdict={s.professor.verdict} />
+                    </span>
                   ) : (
                     <span className="text-zinc-500">{s.instructor_name_raw || 'TBA'}</span>
                   )}
@@ -214,7 +268,7 @@ export default function SectionTable({
 
       {/* Mobile cards */}
       <div className="md:hidden space-y-2">
-        {sections.map(s => (
+        {displayed.map(s => (
           <div key={s.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -236,16 +290,19 @@ export default function SectionTable({
               {s.index_number && <CopyButton value={s.index_number} label="index number" />}
             </div>
 
-            <div className="text-sm">
+            <div className="text-sm flex items-center gap-1.5 flex-wrap">
               {s.professor ? (
-                <Link href={professorHref(s.professor)} className="text-zinc-200 font-medium hover:text-[#ff4d6d]">
-                  {s.professor.first_name} {s.professor.last_name}
-                  {s.professor.avg_rating != null && (
-                    <span className="ml-1.5 text-xs text-zinc-500">
-                      {Number(s.professor.avg_rating).toFixed(1)}★
-                    </span>
-                  )}
-                </Link>
+<>
+                  <Link href={professorHref(s.professor)} className="text-zinc-200 font-medium hover:text-[#ff4d6d]">
+                    {s.professor.first_name} {s.professor.last_name}
+                    {s.professor.avg_rating != null && (
+                      <span className="ml-1.5 text-xs font-semibold" style={{ color: ratingColor(Number(s.professor.avg_rating)) }}>
+                        {Number(s.professor.avg_rating).toFixed(1)}★
+                      </span>
+                    )}
+                  </Link>
+                  <VerdictBadge verdict={s.professor.verdict} />
+                </>
               ) : (
                 <span className="text-zinc-500">{s.instructor_name_raw || 'Instructor TBA'}</span>
               )}

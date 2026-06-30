@@ -60,7 +60,7 @@ export async function searchProfessors(name: string, schoolId = RUTGERS_SCHOOL_I
     }
   `
   const data = await rmpFetch(query, { text: name, schoolID: schoolId })
-  return data?.data?.newSearch?.teachers?.edges?.map((e: { node: unknown }) => e.node) ?? []
+  return (data?.data?.newSearch?.teachers?.edges?.map((e: { node: unknown }) => e.node) ?? []).filter(Boolean)
 }
 
 export async function getProfessorById(id: string) {

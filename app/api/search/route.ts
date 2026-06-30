@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
         lastName: c.last_name,
         department: c.department,
         schoolName: c.school_name,
-        avgRating: Number(c.avg_rating),
+        avgRating: c.avg_rating != null ? Number(c.avg_rating) : null,
         numRatings: c.num_ratings,
         slug: c.slug,
         verdict: c.ai_analysis?.verdict ?? null,

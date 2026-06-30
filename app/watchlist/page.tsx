@@ -19,6 +19,7 @@ import {
   useWatchlist,
   type WatchedSection,
 } from '@/lib/watchlist-client'
+import { useAuth } from '@/hooks/useAuth'
 
 const ALERT_NOTIFIED_KEY = 'ru-rate-open-alert-notified'
 const QUICK_ALERT_PREFS_KEY = 'ru-rate-sniper-alert-prefs'
@@ -1287,6 +1288,7 @@ function FilterBar({
 
 export default function WatchlistPage() {
   const { items, loading, error, reload } = useWatchlist()
+  const { user, loading: authLoading } = useAuth()
   const [tab, setTab] = useState<FilterTab>('all')
   const [sort, setSort] = useState<SortMode>('status')
   const prevItemIds = useRef(new Set<string>())
@@ -1484,6 +1486,23 @@ export default function WatchlistPage() {
               </div>
             }
           />
+        )}
+
+        {/* sign-in nudge — shown to anonymous users who have snipes */}
+        {!loading && !authLoading && !user && items.length > 0 && (
+          <div className="mt-6 rounded-xl border border-zinc-700/50 bg-zinc-900/60 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-zinc-200">Sign in to keep your snipes</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Without an account your watchlist is tied to this browser. Sign in to sync across devices and browser clears.</p>
+            </div>
+            <Link
+              href="/login"
+              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-colors hover:brightness-110 whitespace-nowrap"
+              style={{ backgroundColor: '#CC0033' }}
+            >
+              Sign in
+            </Link>
+          </div>
         )}
 
         {/* review nudge — shown when the user has snipes and is waiting */}

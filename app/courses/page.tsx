@@ -33,6 +33,14 @@ interface CourseSuggestion {
 
 const CREDIT_OPTIONS = ['', '1', '2', '3', '4', '5', '6']
 
+const CAMPUS_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All campuses' },
+  { value: 'COLLEGE AVENUE', label: 'College Ave' },
+  { value: 'BUSCH', label: 'Busch' },
+  { value: 'LIVINGSTON', label: 'Livingston' },
+  { value: 'COOK/DOUGLASS', label: 'Cook/Doug' },
+]
+
 function CoursesContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -48,10 +56,16 @@ function CoursesContent() {
   const [selectedDept, setSelectedDept] = useState<string>(searchParams.get('dept') ?? '')
   const [selectedSemester, setSelectedSemester] = useState<string>(searchParams.get('semester') ?? '')
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  const [instructor, setInstructor] = useState(searchParams.get('instructor') ?? '')
   const [credits, setCredits] = useState<string>(searchParams.get('credits') ?? '')
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
   const [onlyWithSections, setOnlyWithSections] = useState(searchParams.get('open') === '1')
   const [onlyWithOpen, setOnlyWithOpen] = useState(searchParams.get('openonly') === '1')
+  const [minRating, setMinRating] = useState<string>(searchParams.get('minrating') ?? '')
+  const [campus, setCampus] = useState<string>(searchParams.get('campus') ?? '')
+  const [verdictFilter, setVerdictFilter] = useState<'' | 'take' | 'depends' | 'avoid'>(
+    (searchParams.get('verdict') as '' | 'take' | 'depends' | 'avoid') ?? ''
+  )
   const [sortBy, setSortBy] = useState<'number' | 'open' | 'rating'>(
     (searchParams.get('sort') as 'number' | 'open' | 'rating') ?? 'number'
   )
@@ -60,6 +74,13 @@ function CoursesContent() {
   const [loadKey, setLoadKey] = useState(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [serverQuery, setServerQuery] = useState(searchParams.get('q') ?? '')
+  const [serverInstructor, setServerInstructor] = useState(searchParams.get('instructor') ?? '')
+  const instructorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Searchable department combobox
+  const [deptInputValue, setDeptInputValue] = useState('')
+  const [deptOpen, setDeptOpen] = useState(false)
+  const deptComboRef = useRef<HTMLDivElement>(null)
 
   // Autocomplete dropdown
   const [suggestions, setSuggestions] = useState<CourseSuggestion[]>([])
@@ -103,20 +124,31 @@ function CoursesContent() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search])
 
+  // Debounce the instructor filter before hitting the server
+  useEffect(() => {
+    if (instructorDebounceRef.current) clearTimeout(instructorDebounceRef.current)
+    instructorDebounceRef.current = setTimeout(() => setServerInstructor(instructor.trim()), 350)
+    return () => { if (instructorDebounceRef.current) clearTimeout(instructorDebounceRef.current) }
+  }, [instructor])
+
   // Keep the URL in sync so course pages and shares can deep-link filters
   useEffect(() => {
     const params = new URLSearchParams()
     if (selectedDept) params.set('dept', selectedDept)
     if (selectedSemester) params.set('semester', selectedSemester)
     if (serverQuery) params.set('q', serverQuery)
+    if (serverInstructor) params.set('instructor', serverInstructor)
     if (credits) params.set('credits', credits)
     if (level) params.set('level', level)
+    if (campus) params.set('campus', campus)
     if (onlyWithSections) params.set('open', '1')
     if (onlyWithOpen) params.set('openonly', '1')
+    if (minRating) params.set('minrating', minRating)
+    if (verdictFilter) params.set('verdict', verdictFilter)
     if (sortBy !== 'number') params.set('sort', sortBy)
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
+  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus, onlyWithSections, onlyWithOpen, minRating, verdictFilter, sortBy, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -127,6 +159,17 @@ function CoursesContent() {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Close department combobox on click outside
+  useEffect(() => {
+    function handleDeptClickOutside(e: MouseEvent) {
+      if (deptComboRef.current && !deptComboRef.current.contains(e.target as Node)) {
+        setDeptOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleDeptClickOutside)
+    return () => document.removeEventListener('mousedown', handleDeptClickOutside)
   }, [])
 
   // Fetch course suggestions as user types
@@ -187,8 +230,10 @@ function CoursesContent() {
         if (selectedDept) params.set('dept', selectedDept)
         if (selectedSemester) params.set('semester', selectedSemester)
         if (serverQuery.length >= 2) params.set('q', serverQuery)
+        if (serverInstructor.length >= 2) params.set('instructor', serverInstructor)
         if (credits) params.set('credits', credits)
         if (level) params.set('level', level)
+        if (campus) params.set('campus', campus)
         const qs = params.toString()
         const res = await fetch(qs ? `/api/courses?${qs}` : '/api/courses')
         if (!res.ok) throw new Error('Failed to load courses')
@@ -201,7 +246,7 @@ function CoursesContent() {
       }
     }
     loadCourses()
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, loadKey])
+  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus, loadKey])
 
   // Instant client-side narrowing while typing + section filter + sort
   const filtered = useMemo(() => {
@@ -211,6 +256,13 @@ function CoursesContent() {
     }
     if (onlyWithOpen) {
       list = list.filter(c => (c.open_section_count ?? 0) > 0)
+    }
+    if (minRating) {
+      const threshold = parseFloat(minRating)
+      list = list.filter(c => c.best_rating != null && c.best_rating >= threshold)
+    }
+    if (verdictFilter) {
+      list = list.filter(c => c.professors?.some(p => p.verdict === verdictFilter))
     }
     if (search.trim() && search.trim() !== serverQuery) {
       const q = search.toLowerCase()
@@ -227,7 +279,7 @@ function CoursesContent() {
     }
     // 'number' is the default from the API (already sorted by course_number)
     return list
-  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, sortBy])
+  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, minRating, verdictFilter, sortBy])
 
   const levels = useMemo(() => {
     const set = new Set<string>()
@@ -236,7 +288,20 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
+  const selectedDeptLabel = useMemo(() => {
+    const d = departments.find(dep => dep.slug === selectedDept)
+    return d ? `${d.code} — ${d.name}` : ''
+  }, [departments, selectedDept])
+
+  const filteredDepts = useMemo(() => {
+    const q = deptInputValue.trim().toLowerCase()
+    if (!q || selectedDept) return departments
+    return departments.filter(d =>
+      d.name.toLowerCase().includes(q) || (d.code ?? '').toLowerCase().includes(q)
+    )
+  }, [departments, deptInputValue, selectedDept])
+
+  const hasActiveFilters = !!(search || instructor || selectedDept || selectedSemester || credits || level || campus || onlyWithSections || onlyWithOpen || minRating || verdictFilter || sortBy !== 'number')
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -339,22 +404,82 @@ function CoursesContent() {
               ))}
             </select>
 
-            <select
-              value={selectedDept}
-              onChange={e => setSelectedDept(e.target.value)}
-              className="px-4 py-2.5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#CC0033] sm:min-w-[200px] transition-colors"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-            >
-              <option value="">All Departments</option>
-              {departments.map(d => (
-                <option key={d.slug} value={d.slug}>
-                  {d.code} — {d.name}
-                </option>
-              ))}
-            </select>
+            <div ref={deptComboRef} className="relative sm:min-w-[200px]">
+              <input
+                type="text"
+                value={selectedDept ? selectedDeptLabel : deptInputValue}
+                placeholder="All Departments"
+                onChange={e => {
+                  if (selectedDept) setSelectedDept('')
+                  setDeptInputValue(e.target.value)
+                  setDeptOpen(true)
+                }}
+                onFocus={() => setDeptOpen(true)}
+                className="w-full px-4 py-2.5 pr-8 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+              />
+              {selectedDept && (
+                <button
+                  type="button"
+                  onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  aria-label="Clear department"
+                >
+                  ✕
+                </button>
+              )}
+              {deptOpen && (
+                <div
+                  className="absolute top-full mt-1 left-0 right-0 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto"
+                  style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 italic"
+                  >
+                    All Departments
+                  </button>
+                  {filteredDepts.map(d => (
+                    <button
+                      key={d.slug}
+                      type="button"
+                      onClick={() => { setSelectedDept(d.slug); setDeptInputValue(''); setDeptOpen(false) }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                    >
+                      <span className="text-zinc-500">{d.code}</span> — {d.name}
+                    </button>
+                  ))}
+                  {filteredDepts.length === 0 && (
+                    <div className="px-4 py-2.5 text-sm text-zinc-600">No departments match</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Instructor filter */}
+            <div className="relative">
+              <svg
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <input
+                type="text"
+                value={instructor}
+                onChange={e => setInstructor(e.target.value)}
+                placeholder="Instructor name..."
+                className={`pl-7 pr-3 py-2 rounded-lg text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors w-40 ${
+                  instructor ? 'ring-1 ring-[#CC0033]/50' : ''
+                }`}
+                style={{ background: 'var(--card)', border: `1px solid ${instructor ? 'rgba(204,0,51,0.5)' : 'var(--border)'}` }}
+              />
+            </div>
+
             <select
               value={credits}
               onChange={e => setCredits(e.target.value)}
@@ -402,6 +527,65 @@ function CoursesContent() {
               Has sections
             </button>
 
+            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
+
+            {CAMPUS_OPTIONS.map(opt => (
+              <button
+                key={opt.value || 'all'}
+                onClick={() => setCampus(opt.value)}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                  campus === opt.value
+                    ? 'bg-blue-950 border-blue-800 text-blue-300'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                style={campus !== opt.value ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
+              >
+                {opt.label}
+              </button>
+            ))}
+
+            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
+
+            <select
+              value={minRating}
+              onChange={e => setMinRating(e.target.value)}
+              className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
+              style={{
+                background: minRating ? 'rgba(34,197,94,0.12)' : 'var(--card)',
+                border: `1px solid ${minRating ? 'rgba(34,197,94,0.45)' : 'var(--border)'}`,
+                color: minRating ? '#4ade80' : '#a1a1aa',
+              }}
+            >
+              <option value="">Any prof rating</option>
+              <option value="3.0">Prof ≥ 3.0</option>
+              <option value="3.5">Prof ≥ 3.5</option>
+              <option value="4.0">Prof ≥ 4.0</option>
+            </select>
+
+            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
+
+            {/* Verdict filter chips */}
+            {(['take', 'depends', 'avoid'] as const).map(v => {
+              const active = verdictFilter === v
+              const styles: Record<string, { active: string; label: string }> = {
+                take:    { active: 'bg-green-950 border-green-700 text-green-400',  label: 'TAKE' },
+                depends: { active: 'bg-amber-950 border-amber-700 text-amber-400',  label: 'DEPENDS' },
+                avoid:   { active: 'bg-red-950 border-red-800 text-red-400',        label: 'AVOID' },
+              }
+              return (
+                <button
+                  key={v}
+                  onClick={() => setVerdictFilter(active ? '' : v)}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                    active ? styles[v].active : 'text-zinc-500 hover:text-white'
+                  }`}
+                  style={!active ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
+                >
+                  {styles[v].label}
+                </button>
+              )
+            })}
+
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
@@ -420,7 +604,7 @@ function CoursesContent() {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setVerdictFilter(''); setSortBy('number')
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -434,6 +618,9 @@ function CoursesContent() {
         {!loading && !error && (
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
             <span>{filtered.length} course{filtered.length !== 1 ? 's' : ''} found</span>
+            {serverInstructor && (
+              <span>· taught by &quot;{serverInstructor}&quot;</span>
+            )}
             {selectedSemester && (
               <span>
                 · scoped to {semesters.find(s => s.slug === selectedSemester)?.name ?? selectedSemester}
@@ -469,12 +656,12 @@ function CoursesContent() {
           <EmptyState
             icon="📚"
             title="No courses found"
-            subtitle={search ? `No results for "${search}"` : 'No courses match these filters'}
+            subtitle={search ? `No results for "${search}"` : instructor ? `No courses found for instructor "${instructor}"` : 'No courses match these filters'}
             action={
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setVerdictFilter(''); setSortBy('number')
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
