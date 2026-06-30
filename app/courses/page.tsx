@@ -63,6 +63,9 @@ function CoursesContent() {
   const [onlyWithOpen, setOnlyWithOpen] = useState(searchParams.get('openonly') === '1')
   const [minRating, setMinRating] = useState<string>(searchParams.get('minrating') ?? '')
   const [campus, setCampus] = useState<string>(searchParams.get('campus') ?? '')
+  const [verdictFilter, setVerdictFilter] = useState<'' | 'take' | 'depends' | 'avoid'>(
+    (searchParams.get('verdict') as '' | 'take' | 'depends' | 'avoid') ?? ''
+  )
   const [sortBy, setSortBy] = useState<'number' | 'open' | 'rating'>(
     (searchParams.get('sort') as 'number' | 'open' | 'rating') ?? 'number'
   )
@@ -136,10 +139,11 @@ function CoursesContent() {
     if (onlyWithSections) params.set('open', '1')
     if (onlyWithOpen) params.set('openonly', '1')
     if (minRating) params.set('minrating', minRating)
+    if (verdictFilter) params.set('verdict', verdictFilter)
     if (sortBy !== 'number') params.set('sort', sortBy)
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus, onlyWithSections, onlyWithOpen, minRating, sortBy, router])
+  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus, onlyWithSections, onlyWithOpen, minRating, verdictFilter, sortBy, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -241,6 +245,9 @@ function CoursesContent() {
       const threshold = parseFloat(minRating)
       list = list.filter(c => c.best_rating != null && c.best_rating >= threshold)
     }
+    if (verdictFilter) {
+      list = list.filter(c => c.professors?.some(p => p.verdict === verdictFilter))
+    }
     if (search.trim() && search.trim() !== serverQuery) {
       const q = search.toLowerCase()
       list = list.filter(
@@ -256,7 +263,7 @@ function CoursesContent() {
     }
     // 'number' is the default from the API (already sorted by course_number)
     return list
-  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, minRating, sortBy])
+  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, minRating, verdictFilter, sortBy])
 
   const levels = useMemo(() => {
     const set = new Set<string>()
@@ -265,7 +272,7 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || instructor || selectedDept || selectedSemester || credits || level || campus || onlyWithSections || onlyWithOpen || minRating || sortBy !== 'number')
+  const hasActiveFilters = !!(search || instructor || selectedDept || selectedSemester || credits || level || campus || onlyWithSections || onlyWithOpen || minRating || verdictFilter || sortBy !== 'number')
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -487,6 +494,30 @@ function CoursesContent() {
               <option value="4.0">Prof ≥ 4.0</option>
             </select>
 
+            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
+
+            {/* Verdict filter chips */}
+            {(['take', 'depends', 'avoid'] as const).map(v => {
+              const active = verdictFilter === v
+              const styles: Record<string, { active: string; label: string }> = {
+                take:    { active: 'bg-green-950 border-green-700 text-green-400',  label: 'TAKE' },
+                depends: { active: 'bg-amber-950 border-amber-700 text-amber-400',  label: 'DEPENDS' },
+                avoid:   { active: 'bg-red-950 border-red-800 text-red-400',        label: 'AVOID' },
+              }
+              return (
+                <button
+                  key={v}
+                  onClick={() => setVerdictFilter(active ? '' : v)}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                    active ? styles[v].active : 'text-zinc-500 hover:text-white'
+                  }`}
+                  style={!active ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
+                >
+                  {styles[v].label}
+                </button>
+              )
+            })}
+
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
@@ -505,7 +536,7 @@ function CoursesContent() {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setSortBy('number')
+                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setVerdictFilter(''); setSortBy('number')
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -562,7 +593,7 @@ function CoursesContent() {
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setSortBy('number')
+                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setVerdictFilter(''); setSortBy('number')
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >

@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
     ? campusParam.toUpperCase()
     : null
   const instructor = req.nextUrl.searchParams.get('instructor')?.trim()
+  const verdictParam = req.nextUrl.searchParams.get('verdict')?.trim().toLowerCase()
+  const verdict = verdictParam === 'take' || verdictParam === 'depends' || verdictParam === 'avoid'
+    ? verdictParam : null
   const PAGE_SIZE = 160
   const offset = Math.max(0, parseInt(offsetParam ?? '0', 10) || 0)
 
@@ -106,10 +109,51 @@ export async function GET(req: NextRequest) {
         : []
     }
 
+    // When verdict filter is active, pre-fetch course IDs that have at least
+    // one professor (current semester) matching that AI verdict.
+    let verdictCourseIds: string[] | null = null
+    if (verdict) {
+      // Step 1: professor_cache rmp_ids matching the verdict
+      const { data: cacheData } = await supabase
+        .from('professor_cache')
+        .select('rmp_id')
+        .contains('ai_analysis', { verdict })
+      const rmpIds = (cacheData ?? []).map((r: { rmp_id: string }) => r.rmp_id)
+
+      if (rmpIds.length === 0) {
+        return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+      }
+
+      // Step 2: local professor IDs for those rmp_ids
+      const { data: profData } = await supabase
+        .from('professors')
+        .select('id')
+        .in('rmp_id', rmpIds)
+      const profIds = (profData ?? []).map((p: { id: string }) => p.id)
+
+      if (profIds.length === 0) {
+        return NextResponse.json({ courses: [], hasMore: false, offset, pageSize: PAGE_SIZE })
+      }
+
+      // Step 3: course IDs from teaching_assignments (current semester)
+      let taQuery = supabase
+        .from('teaching_assignments')
+        .select('course_id, semesters!inner ( slug, is_current )')
+        .in('professor_id', profIds)
+        .eq('status', 'active')
+      if (semester) {
+        taQuery = taQuery.eq('semesters.slug', semester)
+      } else {
+        taQuery = taQuery.eq('semesters.is_current', true)
+      }
+      const { data: taData } = await taQuery
+      verdictCourseIds = taData ? [...new Set(taData.map((r: { course_id: string }) => r.course_id))] : []
+    }
+
     // Compute effective ID filter — intersection of every active id-based
-    // pre-filter (open sections, campus, instructor). A course must satisfy
-    // all of them, so we intersect the non-null lists.
-    const idFilterSources = [openCourseIds, campusCourseIds, instructorCourseIds]
+    // pre-filter (open sections, campus, instructor, verdict). A course must
+    // satisfy all of them, so we intersect the non-null lists.
+    const idFilterSources = [openCourseIds, campusCourseIds, instructorCourseIds, verdictCourseIds]
       .filter((ids): ids is string[] => ids !== null)
     let idFilter: string[] | null = null
     if (idFilterSources.length > 0) {
