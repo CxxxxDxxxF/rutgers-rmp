@@ -52,6 +52,7 @@ function CoursesContent() {
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
   const [onlyWithSections, setOnlyWithSections] = useState(searchParams.get('open') === '1')
   const [onlyWithOpen, setOnlyWithOpen] = useState(searchParams.get('openonly') === '1')
+  const [minRating, setMinRating] = useState<string>(searchParams.get('minrating') ?? '')
   const [sortBy, setSortBy] = useState<'number' | 'open' | 'rating'>(
     (searchParams.get('sort') as 'number' | 'open' | 'rating') ?? 'number'
   )
@@ -113,10 +114,11 @@ function CoursesContent() {
     if (level) params.set('level', level)
     if (onlyWithSections) params.set('open', '1')
     if (onlyWithOpen) params.set('openonly', '1')
+    if (minRating) params.set('minrating', minRating)
     if (sortBy !== 'number') params.set('sort', sortBy)
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, sortBy, router])
+  }, [selectedDept, selectedSemester, serverQuery, credits, level, onlyWithSections, onlyWithOpen, minRating, sortBy, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -212,6 +214,10 @@ function CoursesContent() {
     if (onlyWithOpen) {
       list = list.filter(c => (c.open_section_count ?? 0) > 0)
     }
+    if (minRating) {
+      const threshold = parseFloat(minRating)
+      list = list.filter(c => c.best_rating != null && c.best_rating >= threshold)
+    }
     if (search.trim() && search.trim() !== serverQuery) {
       const q = search.toLowerCase()
       list = list.filter(
@@ -227,7 +233,7 @@ function CoursesContent() {
     }
     // 'number' is the default from the API (already sorted by course_number)
     return list
-  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, sortBy])
+  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, minRating, sortBy])
 
   const levels = useMemo(() => {
     const set = new Set<string>()
@@ -236,7 +242,7 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
-  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || sortBy !== 'number')
+  const hasActiveFilters = !!(search || selectedDept || selectedSemester || credits || level || onlyWithSections || onlyWithOpen || minRating || sortBy !== 'number')
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -403,6 +409,22 @@ function CoursesContent() {
             </button>
 
             <select
+              value={minRating}
+              onChange={e => setMinRating(e.target.value)}
+              className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
+              style={{
+                background: minRating ? 'rgba(34,197,94,0.12)' : 'var(--card)',
+                border: `1px solid ${minRating ? 'rgba(34,197,94,0.45)' : 'var(--border)'}`,
+                color: minRating ? '#4ade80' : '#a1a1aa',
+              }}
+            >
+              <option value="">Any prof rating</option>
+              <option value="3.0">Prof ≥ 3.0</option>
+              <option value="3.5">Prof ≥ 3.5</option>
+              <option value="4.0">Prof ≥ 4.0</option>
+            </select>
+
+            <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
               className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
@@ -420,7 +442,7 @@ function CoursesContent() {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setSortBy('number')
                 }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
@@ -474,7 +496,7 @@ function CoursesContent() {
               hasActiveFilters ? (
                 <button
                   onClick={() => {
-                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setSortBy('number')
+                  setSearch(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setSortBy('number')
                 }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
