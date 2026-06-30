@@ -1,15 +1,56 @@
 import type { MetadataRoute } from 'next'
+import { supabase } from '@/lib/supabase'
 
 const BASE_URL = 'https://rurate-web-production.up.railway.app'
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    { url: BASE_URL, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
-    { url: `${BASE_URL}/courses`, lastModified: new Date(), changeFrequency: 'hourly', priority: 0.9 },
-    { url: `${BASE_URL}/departments`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
-    { url: `${BASE_URL}/compare`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE_URL}/schedule`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE_URL}/watchlist`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE_URL}/pro`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
-  ]
+const STATIC_ROUTES: MetadataRoute.Sitemap = [
+  { url: BASE_URL,                       lastModified: new Date(), changeFrequency: 'daily',   priority: 1 },
+  { url: `${BASE_URL}/courses`,          lastModified: new Date(), changeFrequency: 'hourly',  priority: 0.9 },
+  { url: `${BASE_URL}/departments`,      lastModified: new Date(), changeFrequency: 'weekly',  priority: 0.8 },
+  { url: `${BASE_URL}/professors`,       lastModified: new Date(), changeFrequency: 'daily',   priority: 0.85 },
+  { url: `${BASE_URL}/reviews`,          lastModified: new Date(), changeFrequency: 'hourly',  priority: 0.75 },
+  { url: `${BASE_URL}/compare`,          lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
+  { url: `${BASE_URL}/schedule`,         lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
+  { url: `${BASE_URL}/watchlist`,        lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
+  { url: `${BASE_URL}/pro`,              lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
+]
+
+export const revalidate = 86400 // regenerate daily
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  if (!supabase) return STATIC_ROUTES
+
+  const [deptResult, profResult] = await Promise.all([
+    supabase
+      .from('departments')
+      .select('slug')
+      .order('name'),
+
+    supabase
+      .from('professor_cache')
+      .select('slug, cached_at')
+      .not('ai_analysis', 'is', null)
+      .order('num_ratings', { ascending: false })
+      .limit(500),
+  ])
+
+  const departmentUrls: MetadataRoute.Sitemap = (deptResult.data ?? [])
+    .filter(d => d.slug)
+    .map(d => ({
+      url: `${BASE_URL}/department/${d.slug}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.65,
+    }))
+
+  const professorUrls: MetadataRoute.Sitemap = (profResult.data ?? [])
+    .filter(p => p.slug)
+    .map(p => ({
+      url: `${BASE_URL}/professor/${p.slug}`,
+      lastModified: p.cached_at ? new Date(p.cached_at) : new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    }))
+
+  return [...STATIC_ROUTES, ...departmentUrls, ...professorUrls]
 }
