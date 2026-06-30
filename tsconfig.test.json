@@ -9,6 +9,8 @@
     "skipLibCheck": true,
     "rootDir": ".",
     "outDir": ".tmp-test-build",
+    "baseUrl": ".",
+    "paths": { "@/*": ["./*"] },
     "types": ["node"]
   },
   "include": ["lib/**/*.ts"],
