@@ -77,6 +77,11 @@ function CoursesContent() {
   const [serverInstructor, setServerInstructor] = useState(searchParams.get('instructor') ?? '')
   const instructorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Searchable department combobox
+  const [deptInputValue, setDeptInputValue] = useState('')
+  const [deptOpen, setDeptOpen] = useState(false)
+  const deptComboRef = useRef<HTMLDivElement>(null)
+
   // Autocomplete dropdown
   const [suggestions, setSuggestions] = useState<CourseSuggestion[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -154,6 +159,17 @@ function CoursesContent() {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Close department combobox on click outside
+  useEffect(() => {
+    function handleDeptClickOutside(e: MouseEvent) {
+      if (deptComboRef.current && !deptComboRef.current.contains(e.target as Node)) {
+        setDeptOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleDeptClickOutside)
+    return () => document.removeEventListener('mousedown', handleDeptClickOutside)
   }, [])
 
   // Fetch course suggestions as user types
@@ -272,6 +288,19 @@ function CoursesContent() {
     return Array.from(set).sort()
   }, [courses, level])
 
+  const selectedDeptLabel = useMemo(() => {
+    const d = departments.find(dep => dep.slug === selectedDept)
+    return d ? `${d.code} — ${d.name}` : ''
+  }, [departments, selectedDept])
+
+  const filteredDepts = useMemo(() => {
+    const q = deptInputValue.trim().toLowerCase()
+    if (!q || selectedDept) return departments
+    return departments.filter(d =>
+      d.name.toLowerCase().includes(q) || (d.code ?? '').toLowerCase().includes(q)
+    )
+  }, [departments, deptInputValue, selectedDept])
+
   const hasActiveFilters = !!(search || instructor || selectedDept || selectedSemester || credits || level || campus || onlyWithSections || onlyWithOpen || minRating || verdictFilter || sortBy !== 'number')
 
   return (
@@ -375,19 +404,58 @@ function CoursesContent() {
               ))}
             </select>
 
-            <select
-              value={selectedDept}
-              onChange={e => setSelectedDept(e.target.value)}
-              className="px-4 py-2.5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#CC0033] sm:min-w-[200px] transition-colors"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-            >
-              <option value="">All Departments</option>
-              {departments.map(d => (
-                <option key={d.slug} value={d.slug}>
-                  {d.code} — {d.name}
-                </option>
-              ))}
-            </select>
+            <div ref={deptComboRef} className="relative sm:min-w-[200px]">
+              <input
+                type="text"
+                value={selectedDept ? selectedDeptLabel : deptInputValue}
+                placeholder="All Departments"
+                onChange={e => {
+                  if (selectedDept) setSelectedDept('')
+                  setDeptInputValue(e.target.value)
+                  setDeptOpen(true)
+                }}
+                onFocus={() => setDeptOpen(true)}
+                className="w-full px-4 py-2.5 pr-8 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+              />
+              {selectedDept && (
+                <button
+                  type="button"
+                  onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  aria-label="Clear department"
+                >
+                  ✕
+                </button>
+              )}
+              {deptOpen && (
+                <div
+                  className="absolute top-full mt-1 left-0 right-0 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto"
+                  style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedDept(''); setDeptInputValue(''); setDeptOpen(false) }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 italic"
+                  >
+                    All Departments
+                  </button>
+                  {filteredDepts.map(d => (
+                    <button
+                      key={d.slug}
+                      type="button"
+                      onClick={() => { setSelectedDept(d.slug); setDeptInputValue(''); setDeptOpen(false) }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                    >
+                      <span className="text-zinc-500">{d.code}</span> — {d.name}
+                    </button>
+                  ))}
+                  {filteredDepts.length === 0 && (
+                    <div className="px-4 py-2.5 text-sm text-zinc-600">No departments match</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
