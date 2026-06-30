@@ -16,6 +16,7 @@ interface Professor {
   avg_difficulty: number | null
   would_take_again: number | null
   num_ratings: number
+  has_ai?: boolean
   verdict: string | null
   verdict_reason: string | null
 }
@@ -58,11 +59,15 @@ function ProfessorCard({ prof }: { prof: Professor }) {
             <p className="text-xs text-zinc-500 truncate mt-0.5">{prof.department}</p>
           )}
         </div>
-        {prof.verdict && style && (
+        {prof.verdict && style ? (
           <span className={`shrink-0 text-[10px] font-black tracking-widest px-2 py-1 rounded-md ${style.badge}`}>
             {prof.verdict.toUpperCase()}
           </span>
-        )}
+        ) : prof.has_ai ? (
+          <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-md bg-zinc-800 text-zinc-300" title="Has AI analysis">
+            ✦ AI
+          </span>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-4 text-xs">
@@ -141,6 +146,8 @@ function ProfessorsContent() {
   const [sort, setSort] = useState(searchParams.get('sort') ?? 'rating')
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [serverQuery, setServerQuery] = useState(searchParams.get('q') ?? '')
+  const [ratedOnly, setRatedOnly] = useState(searchParams.get('rated') === '1')
+  const [analyzedOnly, setAnalyzedOnly] = useState(searchParams.get('analyzed') === '1')
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -156,19 +163,23 @@ function ProfessorsContent() {
     if (verdict) params.set('verdict', verdict)
     if (sort !== 'rating') params.set('sort', sort)
     if (serverQuery) params.set('q', serverQuery)
+    if (ratedOnly) params.set('rated', '1')
+    if (analyzedOnly) params.set('analyzed', '1')
     const qs = params.toString()
     router.replace(qs ? `/professors?${qs}` : '/professors', { scroll: false })
-  }, [verdict, sort, serverQuery, router])
+  }, [verdict, sort, serverQuery, ratedOnly, analyzedOnly, router])
 
   const buildUrl = useCallback((off: number) => {
     const params = new URLSearchParams()
     if (verdict) params.set('verdict', verdict)
     if (sort !== 'rating') params.set('sort', sort)
     if (serverQuery.length >= 2) params.set('q', serverQuery)
+    if (ratedOnly) params.set('rated', '1')
+    if (analyzedOnly) params.set('analyzed', '1')
     if (off) params.set('offset', String(off))
     const qs = params.toString()
     return qs ? `/api/professors?${qs}` : '/api/professors'
-  }, [verdict, sort, serverQuery])
+  }, [verdict, sort, serverQuery, ratedOnly, analyzedOnly])
 
   // Initial load (filters changed)
   useEffect(() => {
@@ -222,7 +233,7 @@ function ProfessorsContent() {
   }, [loadMore])
 
   const activeVerdict = VERDICT_OPTIONS.find(o => o.value === verdict)
-  const hasActiveFilters = !!(verdict || search || sort !== 'rating')
+  const hasActiveFilters = !!(verdict || search || sort !== 'rating' || ratedOnly || analyzedOnly)
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -235,7 +246,7 @@ function ProfessorsContent() {
             Browse Professors
           </h1>
           <p className="text-zinc-400 text-sm mt-1">
-            AI-analyzed Rutgers professors — filter by verdict, sort by rating, search by name.
+            Every rated Rutgers professor — filter by verdict, sort by rating, search by name.
           </p>
         </div>
 
@@ -309,6 +320,28 @@ function ProfessorsContent() {
 
             <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
 
+            <button
+              onClick={() => setRatedOnly(v => !v)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                ratedOnly ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]' : 'text-zinc-400 hover:text-white'
+              }`}
+              style={!ratedOnly ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
+              title="Only professors with a RateMyProfessors rating"
+            >
+              ★ Rated
+            </button>
+
+            <button
+              onClick={() => setAnalyzedOnly(v => !v)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                analyzedOnly ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]' : 'text-zinc-400 hover:text-white'
+              }`}
+              style={!analyzedOnly ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
+              title="Only professors with an AI write-up"
+            >
+              ✦ AI insights
+            </button>
+
             <select
               value={sort}
               onChange={e => setSort(e.target.value)}
@@ -327,7 +360,7 @@ function ProfessorsContent() {
 
             {hasActiveFilters && (
               <button
-                onClick={() => { setVerdict(''); setSort('rating'); setSearch('') }}
+                onClick={() => { setVerdict(''); setSort('rating'); setSearch(''); setRatedOnly(false); setAnalyzedOnly(false) }}
                 className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
                 Clear all
@@ -346,7 +379,7 @@ function ProfessorsContent() {
             {serverQuery && (
               <span>· matching &quot;{serverQuery}&quot;</span>
             )}
-            <span>· AI-analyzed professors only</span>
+            <span>· {analyzedOnly ? 'AI-analyzed only' : ratedOnly ? 'rated only' : 'all teaching professors'}</span>
           </div>
         )}
 
@@ -373,15 +406,15 @@ function ProfessorsContent() {
             title="No professors found"
             subtitle={
               serverQuery
-                ? `No AI-analyzed professors matching "${serverQuery}"`
+                ? `No professors matching "${serverQuery}"`
                 : verdict
                   ? `No ${verdict.toUpperCase()} professors found`
-                  : 'No AI-analyzed professors available yet'
+                  : 'No rated professors available yet'
             }
             action={
               hasActiveFilters ? (
                 <button
-                  onClick={() => { setVerdict(''); setSort('rating'); setSearch('') }}
+                  onClick={() => { setVerdict(''); setSort('rating'); setSearch(''); setRatedOnly(false); setAnalyzedOnly(false) }}
                   className="text-sm text-[#CC0033] hover:underline"
                 >
                   Clear filters

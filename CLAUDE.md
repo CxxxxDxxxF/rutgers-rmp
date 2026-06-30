@@ -60,6 +60,7 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 | `app/` | Next.js App Router pages and API routes |
 | `app/api/analyze/route.ts` | Professor cache read/write + AI summary trigger |
 | `app/api/courses/route.ts` | Course search with dept/query/credits/level/semester filters |
+| `app/api/professors/route.ts` | Professor browse — reads the `professor_directory` view (every teaching professor, ratings/AI joined when present); filters: `rated`, `analyzed`, `verdict`, `min_ratings` |
 | `app/api/watchlist/` | Watchlist CRUD |
 | `lib/rmp.ts` | RMP GraphQL fetch helpers (school ID `U2Nob29sLTgyNQ==`) |
 | `lib/rmp/` | Typed RMP client, fuzzy name matching, unit tests |
@@ -69,8 +70,20 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 | `lib/watchlist-client.ts` | Browser-safe watchlist helpers |
 | `lib/professor-grade.ts` | Grade signal aggregation from native reviews |
 | `worker/sniper-worker.mjs` | Always-on Railway worker (plain ESM, no bundler) |
-| `scripts/ingest-soc.ts` | Rutgers SOC → Supabase bulk ingest |
-| `supabase/migrations/` | Numbered SQL migrations (`001`–`020`) |
+| `scripts/ingest-soc.ts` | Rutgers SOC → Supabase bulk ingest (creates `professors` + `teaching_assignments`) |
+| `scripts/enrich-rmp.ts` | Conservative SOC professor → RateMyProfessors matcher (writes RMP signal to `professor_cache`) |
+| `supabase/migrations/` | Numbered SQL migrations (`001`–`023`) |
+
+### Professor coverage funnel
+
+The SOC ingest writes every instructor into `professors` (~4.6k). `enrich-rmp.ts`
+matches a subset to RateMyProfessors → `professor_cache` (rating/difficulty/etc.);
+the worker then adds AI write-ups to cache rows. The `professor_directory` view
+(migration `023`) joins all three so the browse page can surface **every teaching
+professor**, with RMP rating and AI verdict shown only when available — instead of
+the old cache-and-AI-only slice. Sections with no listed instructor are stored as
+`teaching_assignments` rows with `professor_id = NULL` (legitimately TBA/Staff, not
+a matching failure).
 
 ### Supabase client split
 
@@ -88,12 +101,14 @@ SNIPER_MAX_BACKOFF_MS=15000
 SNIPER_DEFAULT_YEAR=2025
 SNIPER_DEFAULT_TERM=9
 SNIPER_DEFAULT_CAMPUS=NB
-AI_ANALYSIS_INTERVAL_MS=1800000  # 30 min; min 60000
+AI_ANALYSIS_INTERVAL_MS=600000   # 10 min; min 60000
+AI_ANALYSIS_BATCH_SIZE=15        # professors per batch; 1–50
+AI_ANALYSIS_ITEM_DELAY_MS=800    # pause between professors in a batch
 ```
 
 Email/SMS alerts are real only when `RESEND_API_KEY`, `NOTIFY_EMAIL_FROM`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are all set. Without them, the worker logs a sanitized provider-missing event and keeps polling.
 
-The worker also runs a background AI analysis batch every `AI_ANALYSIS_INTERVAL_MS` (default 30 min): fetches 5 professors without `ai_analysis` from `professor_cache` (highest `num_ratings` first), calls RMP GraphQL + OpenRouter Haiku, and upserts the result. Requires `OPENROUTER_API_KEY` in Railway. With 935 pending professors and 5 per batch, the backlog clears within ~94 hours of deploy.
+The worker also runs a background AI analysis batch every `AI_ANALYSIS_INTERVAL_MS` (default 10 min): fetches `AI_ANALYSIS_BATCH_SIZE` professors (default 15) without `ai_analysis` and with a non-null `rmp_id` from `professor_cache` (highest `num_ratings` first), calls RMP GraphQL + OpenRouter Haiku, and upserts the result. Requires `OPENROUTER_API_KEY` in Railway. At 15/10 min the ~935-professor backlog clears in roughly a day; raise `AI_ANALYSIS_BATCH_SIZE` to drain faster (watch OpenRouter/RMP rate limits).
 
 ## Environment variables
 
