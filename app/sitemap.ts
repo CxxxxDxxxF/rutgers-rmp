@@ -17,6 +17,7 @@ const STATIC_ROUTES: MetadataRoute.Sitemap = [
   { url: `${BASE_URL}/pro`,              lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
 ]
 
+export const dynamic = 'force-dynamic'
 export const revalidate = 86400 // regenerate daily
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
