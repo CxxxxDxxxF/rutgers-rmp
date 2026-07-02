@@ -22,6 +22,9 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const AI_ANALYSIS_INTERVAL_MS = parseInterval(process.env.AI_ANALYSIS_INTERVAL_MS, 10 * 60 * 1000, 60 * 1000)
 const AI_ANALYSIS_BATCH_SIZE = Math.min(50, Math.max(1, parseInt(process.env.AI_ANALYSIS_BATCH_SIZE ?? '15', 10) || 15))
 const AI_ANALYSIS_ITEM_DELAY_MS = Math.max(0, parseInt(process.env.AI_ANALYSIS_ITEM_DELAY_MS ?? '800', 10) || 800)
+// Site-wide open/closed refresh via the lightweight SOC openSections endpoint.
+// One request per cycle keeps every section's status fresh even with no watches.
+const SNIPER_BULK_REFRESH_MS = parseInterval(process.env.SNIPER_BULK_REFRESH_MS, 10 * 60 * 1000, 60 * 1000)
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error(JSON.stringify({
@@ -56,6 +59,8 @@ let loopCount = 0
 let backoffMs = 0
 let lastAnalysisRun = 0
 let analysisRunning = false
+let lastBulkRefresh = 0
+let bulkRefreshRunning = false
 
 main().catch(error => {
   console.error(JSON.stringify({
@@ -88,6 +93,15 @@ async function main() {
       runAnalysisBatch().catch(err => {
         console.error(JSON.stringify({ event: 'analysis_batch_error', message: errorMessage(err) }))
       }).finally(() => { analysisRunning = false })
+    }
+
+    // Runs before the idle check so section statuses stay fresh with zero watches.
+    if (!bulkRefreshRunning && Date.now() - lastBulkRefresh >= SNIPER_BULK_REFRESH_MS) {
+      lastBulkRefresh = Date.now()
+      bulkRefreshRunning = true
+      runBulkStatusRefresh().catch(err => {
+        console.error(JSON.stringify({ event: 'bulk_refresh_error', message: errorMessage(err) }))
+      }).finally(() => { bulkRefreshRunning = false })
     }
 
     try {
@@ -358,6 +372,91 @@ async function updateAssignmentStatus(assignmentId, openStatus, openStatusText, 
     .eq('id', assignmentId)
 
   if (error) throw new Error(`Failed to update assignment ${assignmentId}: ${error.message}`)
+}
+
+// ── Site-wide open/closed refresh ──────────────────────────────────────────
+// openSections.json returns every open index number for a year/term/campus in
+// a single small payload, so one request per cycle keeps the whole catalog's
+// open_status current — the browse pages stop depending on stale ingest data.
+
+async function runBulkStatusRefresh() {
+  const startedAt = Date.now()
+
+  const { data: sem, error: semError } = await supabase
+    .from('semesters')
+    .select('id, year, term, code')
+    .eq('is_current', true)
+    .maybeSingle()
+  if (semError) throw new Error(`Bulk refresh semester lookup: ${semError.message}`)
+  if (!sem) {
+    console.log(JSON.stringify({ event: 'bulk_refresh_skip', reason: 'no_current_semester' }))
+    return
+  }
+
+  const year = sem.year ?? parseInt(String(sem.code ?? '').replace(/\D/g, ''), 10)
+  const term = termToSocCode(sem.term ?? sem.code) ?? DEFAULT_TERM
+  if (!Number.isFinite(year)) {
+    console.log(JSON.stringify({ event: 'bulk_refresh_skip', reason: 'unresolvable_year', code: sem.code }))
+    return
+  }
+
+  const url = new URL('https://classes.rutgers.edu/soc/api/openSections.json')
+  url.searchParams.set('year', String(year))
+  url.searchParams.set('term', term)
+  url.searchParams.set('campus', DEFAULT_CAMPUS)
+  const response = await fetchWithTimeout(url, {
+    headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'RU-Rate-sniper-worker/1.0' },
+  }, SOC_FETCH_TIMEOUT_MS)
+  if (!response.ok) throw new Error(`openSections HTTP ${response.status}`)
+  const openIndexes = await response.json()
+  if (!Array.isArray(openIndexes) || openIndexes.length === 0) {
+    // An empty list mid-semester is far more likely an upstream glitch than
+    // every section in the university closing at once — don't mass-close.
+    console.log(JSON.stringify({ event: 'bulk_refresh_skip', reason: 'empty_open_list' }))
+    return
+  }
+  const openSet = new Set(openIndexes.map(String))
+
+  // Page through the semester's assignments and diff against the open set.
+  const toOpen = []
+  const toClose = []
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data: rows, error } = await supabase
+      .from('teaching_assignments')
+      .select('id, index_number, open_status')
+      .eq('semester_id', sem.id)
+      .not('index_number', 'is', null)
+      .range(from, from + PAGE - 1)
+    if (error) throw new Error(`Bulk refresh page fetch: ${error.message}`)
+    for (const row of rows ?? []) {
+      const isOpen = openSet.has(String(row.index_number))
+      if (isOpen && row.open_status !== true) toOpen.push(row.id)
+      else if (!isOpen && row.open_status !== false) toClose.push(row.id)
+    }
+    if (!rows || rows.length < PAGE) break
+  }
+
+  const detectedAt = new Date().toISOString()
+  const CHUNK = 400
+  for (const [ids, openStatus, text] of [[toOpen, true, 'OPEN'], [toClose, false, 'CLOSED']]) {
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const { error } = await supabase
+        .from('teaching_assignments')
+        .update({ open_status: openStatus, open_status_text: text, status_updated_at: detectedAt })
+        .in('id', ids.slice(i, i + CHUNK))
+      if (error) throw new Error(`Bulk refresh update: ${error.message}`)
+    }
+  }
+
+  console.log(JSON.stringify({
+    event: 'bulk_refresh_complete',
+    semester: sem.code ?? sem.id,
+    soc_open_indexes: openSet.size,
+    opened: toOpen.length,
+    closed: toClose.length,
+    ms: Date.now() - startedAt,
+  }))
 }
 
 async function sendStatusNotifications(watch, openStatus, openStatusText, detectedAt) {

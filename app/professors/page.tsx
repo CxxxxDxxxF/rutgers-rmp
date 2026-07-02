@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
 import EmptyState from '@/components/EmptyState'
+import FilterMenu from '@/components/FilterMenu'
 import { SkeletonBlock } from '@/components/LoadingSkeleton'
 
 interface Professor {
@@ -47,7 +48,7 @@ function ProfessorCard({ prof }: { prof: Professor }) {
   return (
     <Link
       href={`/professor/${prof.slug}`}
-      className={`block rounded-xl border p-4 transition-all hover:scale-[1.01] hover:shadow-lg space-y-3 ${cardBg}`}
+      className={`block rounded-xl border p-4 hover-lift space-y-3 ${cardBg}`}
       style={!style ? { background: 'var(--card)', borderColor: 'var(--border)' } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
@@ -283,89 +284,74 @@ function ProfessorsContent() {
             )}
           </div>
 
-          {/* Verdict chips + sort */}
+          {/* Verdict select + filters + sort */}
           <div className="flex flex-wrap items-center gap-2">
-            {VERDICT_OPTIONS.map(opt => {
-              const isActive = verdict === opt.value
-              if (!opt.value) {
-                return (
-                  <button
-                    key="all"
-                    onClick={() => setVerdict('')}
-                    className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                      isActive ? 'text-white' : 'text-zinc-400 hover:text-white'
-                    }`}
-                    style={isActive
-                      ? { background: 'var(--card-2)', border: '1px solid rgba(255,255,255,0.15)' }
-                      : { background: 'var(--card)', border: '1px solid var(--border)' }
-                    }
-                  >
-                    All verdicts
-                  </button>
-                )
-              }
-              return (
-                <button
-                  key={opt.value}
-                  onClick={() => setVerdict(isActive ? '' : opt.value)}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
-                    isActive ? `${opt.bg} ${opt.border} ${opt.text}` : 'text-zinc-400 hover:text-white'
-                  }`}
-                  style={!isActive ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
-                >
-                  {opt.label}
-                </button>
-              )
-            })}
-
-            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
-
-            <button
-              onClick={() => setRatedOnly(v => !v)}
-              className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
-                ratedOnly ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]' : 'text-zinc-400 hover:text-white'
-              }`}
-              style={!ratedOnly ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
-              title="Only professors with a RateMyProfessors rating"
-            >
-              ★ Rated
-            </button>
-
-            <button
-              onClick={() => setAnalyzedOnly(v => !v)}
-              className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
-                analyzedOnly ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]' : 'text-zinc-400 hover:text-white'
-              }`}
-              style={!analyzedOnly ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
-              title="Only professors with an AI write-up"
-            >
-              ✦ AI insights
-            </button>
-
             <select
-              value={sort}
-              onChange={e => setSort(e.target.value)}
-              className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
+              value={verdict}
+              onChange={e => setVerdict(e.target.value)}
+              className="px-3 py-2 rounded-lg text-xs font-bold focus:outline-none transition-colors"
               style={{
-                background: sort !== 'rating' ? 'var(--card-2)' : 'var(--card)',
-                border: `1px solid ${sort !== 'rating' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
-                color: sort !== 'rating' ? 'white' : '#a1a1aa',
+                background: verdict ? 'rgba(204,0,51,0.12)' : 'var(--card)',
+                border: `1px solid ${verdict ? 'rgba(204,0,51,0.5)' : 'var(--border)'}`,
+                color: verdict ? '#ff4d6d' : '#a1a1aa',
               }}
             >
-              <option value="rating">Sort: Best Rating</option>
-              <option value="difficulty">Sort: Easiest</option>
-              <option value="again">Sort: % Again</option>
-              <option value="name">Sort: Name</option>
+              <option value="">All verdicts</option>
+              <option value="take">TAKE — recommended</option>
+              <option value="depends">DEPENDS — mixed</option>
+              <option value="avoid">AVOID — flagged</option>
             </select>
 
-            {hasActiveFilters && (
-              <button
-                onClick={() => { setVerdict(''); setSort('rating'); setSearch(''); setRatedOnly(false); setAnalyzedOnly(false) }}
-                className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
+            <FilterMenu activeCount={(ratedOnly ? 1 : 0) + (analyzedOnly ? 1 : 0)}>
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ratedOnly}
+                  onChange={e => setRatedOnly(e.target.checked)}
+                  className="accent-[#CC0033] w-3.5 h-3.5"
+                />
+                <span><span className="text-amber-400">★</span> Rated on RateMyProfessors</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={analyzedOnly}
+                  onChange={e => setAnalyzedOnly(e.target.checked)}
+                  className="accent-[#CC0033] w-3.5 h-3.5"
+                />
+                <span><span className="text-[#ff4d6d]">✦</span> Has AI insights</span>
+              </label>
+              <p className="text-[10px] text-zinc-600 leading-relaxed pt-1">
+                Unfiltered, every professor teaching this semester is listed — ratings and AI verdicts appear as they become available.
+              </p>
+            </FilterMenu>
+
+            <div className="ml-auto flex items-center gap-2">
+              <select
+                value={sort}
+                onChange={e => setSort(e.target.value)}
+                className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
+                style={{
+                  background: sort !== 'rating' ? 'var(--card-2)' : 'var(--card)',
+                  border: `1px solid ${sort !== 'rating' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
+                  color: sort !== 'rating' ? 'white' : '#a1a1aa',
+                }}
               >
-                Clear all
-              </button>
-            )}
+                <option value="rating">Sort: Best Rating</option>
+                <option value="difficulty">Sort: Easiest</option>
+                <option value="again">Sort: % Again</option>
+                <option value="name">Sort: Name</option>
+              </select>
+
+              {hasActiveFilters && (
+                <button
+                  onClick={() => { setVerdict(''); setSort('rating'); setSearch(''); setRatedOnly(false); setAnalyzedOnly(false) }}
+                  className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -426,7 +412,7 @@ function ProfessorsContent() {
 
         {/* Grid */}
         {!loading && !error && professors.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-grid">
             {professors.map(prof => (
               <ProfessorCard key={prof.slug} prof={prof} />
             ))}

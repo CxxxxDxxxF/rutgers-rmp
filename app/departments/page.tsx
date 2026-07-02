@@ -31,7 +31,7 @@ function DeptCard({ dept }: { dept: DepartmentRow }) {
   return (
     <Link
       href={`/department/${dept.slug}`}
-      className="block rounded-xl p-5 hover:border-[#CC0033]/50 transition-all group" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+      className="block rounded-xl p-5 hover-lift group" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
@@ -402,30 +402,28 @@ export default function DepartmentsPage() {
                 autoComplete="off"
               />
             </div>
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setRatedOnly(v => !v)}
-                className={`text-xs px-3 py-2 rounded-lg border transition-all mr-1 ${
-                  ratedOnly
-                    ? 'border-[#CC0033]/60 bg-[#CC0033]/10 text-[#ff4d6d] font-semibold'
-                    : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
-                }`}
+                data-active={ratedOnly}
+                className="btn-ghost text-xs px-3 py-2 rounded-lg"
               >
-                Rated
+                ★ Rated
               </button>
-              {SORT_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setSort(opt.value)}
-                  className={`text-xs px-3 py-2 rounded-lg border transition-all ${
-                    sort === opt.value
-                      ? 'border-[var(--border)] bg-[var(--card-2)] text-white font-semibold'
-                      : 'border-[var(--border)] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              <select
+                value={sort}
+                onChange={e => setSort(e.target.value as SortKey)}
+                className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
+                style={{
+                  background: sort !== 'name' ? 'var(--card-2)' : 'var(--card)',
+                  border: `1px solid ${sort !== 'name' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
+                  color: sort !== 'name' ? 'white' : '#a1a1aa',
+                }}
+              >
+                {SORT_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>Sort: {opt.label}</option>
+                ))}
+              </select>
             </div>
           </div>
         )}
@@ -473,7 +471,7 @@ export default function DepartmentsPage() {
                     {grouped[school].length} dept{grouped[school].length !== 1 ? 's' : ''}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-grid">
                   {grouped[school].map(dept => (
                     <DeptCard key={dept.id} dept={dept} />
                   ))}
@@ -491,7 +489,7 @@ export default function DepartmentsPage() {
                 {search.trim() && <> matching <span className="text-zinc-300">&ldquo;{search}&rdquo;</span></>}
               </div>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-grid">
               {filtered.map(dept => (
                 <DeptCard key={dept.id} dept={dept} />
               ))}

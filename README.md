@@ -1,206 +1,114 @@
-# RU Rate
+# RU Rate — The Rutgers Registration Command Center
 
-RU Rate is a Rutgers New Brunswick course search, professor review, schedule
-ranking, and course-sniper app. It helps students find classes, compare
-professors, track open seats, and jump to WebReg with the right index number.
+**RU Rate turns Rutgers registration from a guessing game into a decision you make with data.**
+One site to find the right course, pick the right professor, watch the seat, and register the
+moment it opens — built specifically for Rutgers–New Brunswick.
 
-RU Rate is registration prep only. It never stores NetID credentials, never
-calls WebReg on a student's behalf, and never auto-registers.
+🌐 **Live**: https://rurate-web-production.up.railway.app
 
-## Current Production
+---
 
-Production runs on Railway under project `rurate-production`.
+## Why students use it
 
-| Service | Purpose | Status |
-| --- | --- | --- |
-| `rurate-web` | Next.js web app | Public site |
-| `rurate-sniper-worker` | Always-on course sniper | Background worker |
+Registration at Rutgers is three separate problems: *what to take*, *who to take it with*, and
+*actually getting the seat*. Rutgers gives you a course catalog. RateMyProfessors gives you
+scattered reviews. Neither tells you a section just opened at 2 a.m. RU Rate does all three in
+one place.
 
-Public URL:
+## What's inside
 
-```text
-https://rurate-web-production.up.railway.app
-```
+### 🔍 Course Search that actually filters
+Search every Rutgers–New Brunswick course by name or number with instant autocomplete.
+Narrow by semester, department, campus, credits, level, instructor — and see **live
+open / full status** on every card, with one-tap switching between all courses, open-seats-only,
+and full sections you might want to snipe.
 
-Deployment details and runbooks live in
-[`docs/deployment.md`](docs/deployment.md).
+### 🎓 Every professor, one directory
+Every professor teaching at Rutgers–New Brunswick is browsable — about 4,500 of them — not
+just the famous ones. RateMyProfessors quality and difficulty scores are matched in
+automatically where they exist, and students can rate and review any professor directly
+on RU Rate.
 
-## Features
+### 🤖 AI verdicts: TAKE / DEPENDS / AVOID
+An AI engine reads through professors' review history — teaching style, grading, workload,
+red flags — and distills it into a one-word verdict with receipts. Filter any course or
+department by verdict to instantly find (or dodge) the professors that matter.
 
-- Course search by title, course number, department, credits, and level.
-- Semester-aware course pages with sections, buildings, meeting times, credits,
-  instructors, index numbers, and open/closed status.
-- Rutgers New Brunswick professor search with RateMyProfessors data, cached AI
-  summaries, and native RU Rate reviews.
-- Professor comparison for ratings, difficulty, would-take-again, workload,
-  grading, courses taught, and student review signals.
-- Schedule ranking from pasted instructor names.
-- Course sniper watchlist with email/SMS-ready alert preferences and WebReg
-  index numbers.
-- Pro interest capture for future paid alert and schedule-planning features.
+### ⭐ Native student reviews
+Quality ratings, difficulty, grade received, tags, and written reviews — submitted by students,
+voted on by students, moderated automatically. Recent reviews surface on the home page and a
+global feed.
 
-## Stack
+### 🎯 Course Sniper
+Watch any section by index number. A dedicated always-on worker checks Rutgers seat data
+around the clock, flips section status the moment it changes, and fires **email and SMS
+alerts** the second your seat opens — with the WebReg index number ready to paste. The site
+never auto-registers; you always click submit yourself.
 
-- Next.js 16 App Router
-- React 19
-- TypeScript
-- Tailwind CSS
-- Supabase for cached professor data, Rutgers course data, watchlists, native
-  reviews, submissions, and Pro interest
-- RateMyProfessors GraphQL for professor search/review source data
-- OpenRouter for Claude Haiku review summaries
-- Rutgers Schedule of Classes API for courses and section status
-- Railway for the web service and always-on sniper worker
+### 📊 Compare & Rank
+Put professors side-by-side — rating, difficulty, would-take-again, workload, grading style.
+Paste your draft schedule and RU Rate ranks it by professor quality before you commit.
 
-## Local Setup
+### 🏛️ Department intelligence
+Every department has a hub: professor leaderboards, AI verdict breakdowns, course lists with
+live seat counts, and school-by-school browsing across SAS, SOE, RBS, SEBS, and more.
 
-Install dependencies:
+---
 
-```bash
-npm install
-```
+## How it works
 
-Copy `.env.local.example` to `.env.local` and fill in the values you need.
-
-Minimum useful local read setup:
-
-```text
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-```
-
-Server-side features also need:
-
-```text
-SUPABASE_SERVICE_ROLE_KEY
-OPENROUTER_API_KEY
-ADMIN_SECRET
-VOTE_FINGERPRINT_SALT
-```
-
-Run the app:
-
-```bash
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:3000
-```
-
-## Database
-
-Apply migrations in `supabase/migrations/` in numeric order. Current important
-groups:
-
-| Migration | Purpose |
+| Layer | What it does |
 | --- | --- |
-| `001`-`008` | Core schema, professor cache, reviews, teaching assignments, RLS, review votes |
-| `009` | Section open-status tracking and anonymous watchlist |
-| `010` | Course browser stats RPC |
-| `011` | RLS hardening |
-| `012` | Email/SMS watchlist notification fields and constraints |
-| `013` | Watchlist course index |
-| `014` | Pro interest capture |
-| `015` | Submissions fingerprint |
-| `016` | Review vote-count trigger |
-| `017` | Reviews hardening |
-| `018` | Professor cache tags |
-| `019` | Expand subject-map coverage |
-| `020` | Summer 2026 semester |
-| `021` | User subscriptions (Stripe Pro) |
-| `022` | Normalize department school labels to canonical NB names |
-| `20260618223316` | Backfill Rutgers SOC subject-code → department links |
+| **Web app** | Next.js 16 / React 19 site with animated, filterable browse pages for courses, professors, departments, and reviews |
+| **Data engine** | Continuously ingests the Rutgers Schedule of Classes (courses, sections, instructors) into Supabase/Postgres |
+| **Professor matcher** | Conservatively links Rutgers instructors to their RateMyProfessors profiles — no false merges |
+| **AI analyst** | Background worker generates professor write-ups and TAKE/DEPENDS/AVOID verdicts via Claude |
+| **Sniper worker** | Always-on Railway service: refreshes open/closed status site-wide every few minutes and polls watched sections in near-real-time for alerts |
 
-Migration numbers `004`-`005` are intentionally unused (no gap in applied
-schema); ordering follows filename sort.
+## Trust & safety by design
 
-Typical Supabase CLI flow:
+- **Never auto-registers** and never submits WebReg actions — RU Rate is registration *prep*.
+- **Never asks for a NetID or password.** There is nothing to leak.
+- Contact info for alerts is stored for delivery only and never appears in logs.
+- Rutgers endpoints are polled respectfully (single lightweight status feed, adaptive backoff).
 
-```bash
-supabase db push
-```
+## Business model
 
-Project script fallback:
+- Free: search, professor directory, reviews, AI verdicts, watchlist.
+- **RU Rate Pro** (Stripe-powered): premium alerting and schedule-planning features, managed
+  through an in-app billing portal.
+
+---
+
+## Operations (maintainers)
+
+<details>
+<summary>Run, deploy, and data commands</summary>
 
 ```bash
-npm run migrate -- --file supabase/migrations/014_pro_interest.sql
+npm install          # dependencies
+npm run dev          # local dev at http://localhost:3000
+npm run lint         # ESLint
+npm test             # unit tests
+npm run build        # production build
+node --check worker/sniper-worker.mjs   # worker syntax check
 ```
 
-The fallback script needs either `SUPABASE_DB_PASSWORD` or `DATABASE_URL`.
+Environment: copy `.env.local.example` → `.env.local`. Read-only mode needs
+`NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`; full features add
+`SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, `ADMIN_SECRET`,
+`VOTE_FINGERPRINT_SALT`, and (for alerts) Resend/Twilio keys.
 
-## Data Ingest
+- **Hosting**: Railway project `rurate-production` — `rurate-web` (site) and
+  `rurate-sniper-worker` (worker). Runbooks: [`docs/deployment.md`](docs/deployment.md).
+- **Database**: Supabase; migrations in `supabase/migrations/` (`supabase db push`).
+- **Data ingest**: `npm run ingest -- --year 2026 --term 9 --campus all`
+  (always `--dry-run` first). Details: [`docs/rutgers-class-data.md`](docs/rutgers-class-data.md).
+- **Sniper worker docs**: [`docs/sniper-worker.md`](docs/sniper-worker.md).
+- Developer/AI-agent conventions live in [`CLAUDE.md`](CLAUDE.md).
 
-Run a no-write coverage check before writing:
+</details>
 
-```bash
-npm run ingest -- --dry-run --campus all --limit 3
-```
+---
 
-Run a focused Rutgers CS dry-run:
-
-```bash
-npm run ingest -- --dry-run --year 2025 --term 9 --campus NB --subjects 198 --limit 25
-```
-
-Run a full write only after reviewing the dry-run and confirming Supabase
-server credentials are present:
-
-```bash
-npm run ingest -- --year 2025 --term 9 --campus all
-```
-
-More detail is in [`docs/rutgers-class-data.md`](docs/rutgers-class-data.md).
-
-## Course Sniper
-
-The sniper is an always-on Railway worker that reads Rutgers SOC data, compares
-watched section status by index number, updates Supabase, and sends configured
-alerts when provider credentials are available.
-
-Default active polling is `500ms`, with adaptive backoff up to `15000ms` when
-Rutgers fetches fail.
-
-Full worker docs are in [`docs/sniper-worker.md`](docs/sniper-worker.md), and
-the research notes are in
-[`docs/course-sniper-research.md`](docs/course-sniper-research.md).
-
-## Verification
-
-Useful checks:
-
-```bash
-npm run lint
-npm test
-npm run build
-node --check worker/sniper-worker.mjs
-```
-
-Data audit:
-
-```bash
-npm run audit:data
-```
-
-`npm run audit:data` needs local Supabase service credentials. If they are not
-present, it should fail before touching data.
-
-## Safety Boundaries
-
-- RU Rate does not auto-register.
-- RU Rate does not submit WebReg actions.
-- RU Rate does not store NetID credentials.
-- User-facing pages do not aggressively poll Rutgers.
-- Service-role Supabase keys stay server-side only.
-- Logs must not include secrets, auth headers, raw provider payloads, email
-  addresses, or phone numbers.
-
-## Notes
-
-- Rutgers New Brunswick RateMyProfessors school ID:
-  `U2Nob29sLTgyNQ==` (`School-825`).
-- RMP cache TTL is 30 days in `app/api/analyze/route.ts`.
-- The package name remains `rmp-web` for local development history, but the
-  Railway project and services use RU Rate names to avoid dashboard confusion.
+© RU Rate. Not affiliated with Rutgers University or RateMyProfessors.
