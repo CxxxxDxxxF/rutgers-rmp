@@ -18,7 +18,10 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
-const AI_ANALYSIS_INTERVAL_MS = parseInterval(process.env.AI_ANALYSIS_INTERVAL_MS, 30 * 60 * 1000, 60 * 1000)
+// Default to a 10-minute cadence so the analysis backlog drains in hours.
+const AI_ANALYSIS_INTERVAL_MS = parseInterval(process.env.AI_ANALYSIS_INTERVAL_MS, 10 * 60 * 1000, 60 * 1000)
+const AI_ANALYSIS_BATCH_SIZE = Math.min(50, Math.max(1, parseInt(process.env.AI_ANALYSIS_BATCH_SIZE ?? '15', 10) || 15))
+const AI_ANALYSIS_ITEM_DELAY_MS = Math.max(0, parseInt(process.env.AI_ANALYSIS_ITEM_DELAY_MS ?? '800', 10) || 800)
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error(JSON.stringify({
@@ -606,13 +609,14 @@ function groupBy(items, keyFn) {
 }
 
 async function runAnalysisBatch() {
-  const BATCH_SIZE = 5
-  const ITEM_DELAY_MS = 800
+  const BATCH_SIZE = AI_ANALYSIS_BATCH_SIZE
+  const ITEM_DELAY_MS = AI_ANALYSIS_ITEM_DELAY_MS
 
   const { data: batch, error } = await supabase
     .from('professor_cache')
     .select('rmp_id, first_name, last_name, department, avg_rating, avg_difficulty, would_take_again, num_ratings')
     .is('ai_analysis', null)
+    .not('rmp_id', 'is', null)
     .order('num_ratings', { ascending: false, nullsFirst: false })
     .limit(BATCH_SIZE)
 

@@ -59,6 +59,24 @@ test('candidate lookup treats duplicate exact names as manual review', async () 
   assert.equal(candidates[1].recommendedAction, 'manual_review')
 })
 
+test('candidate lookup ignores generational suffixes when matching names', async () => {
+  const search = async () => [
+    professor({ id: 'rmp-1', firstName: 'John', lastName: 'Smith Jr', department: 'Economics', numRatings: 30 }),
+    professor({ id: 'rmp-2', firstName: 'Different', lastName: 'Person', department: 'Art', numRatings: 5 }),
+  ]
+
+  // Local record has no suffix; RMP record carries "Jr". They should still
+  // resolve to a unique exact-name match.
+  const candidates = await lookupProfessorCandidates(
+    { id: 'local-1', firstName: 'John', lastName: 'Smith', department: 'Economics' },
+    { search }
+  )
+
+  assert.equal(candidates[0].professor.id, 'rmp-1')
+  assert.equal(candidates[0].matchLevel, 'exact_name')
+  assert.ok(candidates[0].reasons.includes('exact normalized full-name match'))
+})
+
 function professor(overrides: {
   id: string
   firstName: string

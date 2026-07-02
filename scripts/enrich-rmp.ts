@@ -717,16 +717,21 @@ function formatSchool(school: RMPSchool | null) {
   return [school.name, school.city, school.state].filter(Boolean).join(', ')
 }
 
+// Generational suffixes ("Jr", "III") appear inconsistently between RMP and the
+// Schedule of Classes; strip them so they don't block an otherwise exact match.
+const NAME_SUFFIXES = /\b(jr|sr|ii|iii|iv|v)\b/g
+
 function normalizeFullName(value: string) {
   return normalizeLoose(value)
     .replace(/\b(dr|prof|professor|mr|mrs|ms)\b/g, '')
+    .replace(NAME_SUFFIXES, '')
     .replace(/\b[a-z]\b/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
 function normalizeNamePart(value: string) {
-  return normalizeLoose(value).replace(/\s+/g, ' ').trim()
+  return normalizeLoose(value).replace(NAME_SUFFIXES, '').replace(/\s+/g, ' ').trim()
 }
 
 function normalizeLoose(value: string) {

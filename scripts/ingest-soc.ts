@@ -145,8 +145,11 @@ function normalizeName(raw: string): NormalizedName {
     const last = cap(trimmed)
     return { first: '', last, full: last }
   }
-  const last = parts[0].trim()
+  let last = parts[0].trim()
   let first = parts.slice(1).join(' ').trim()
+  // Strip generational suffixes ("SMITH JR" / "SMITH III") so the same person
+  // isn't split into separate professor rows across semesters.
+  last = last.replace(/\s+(JR|SR|II|III|IV|V)\.?$/i, '').trim() || last
   // Strip middle initial: "JOHN A." => "John"
   first = first.replace(/\s+\w\.?\s*$/, '').trim()
   return {
