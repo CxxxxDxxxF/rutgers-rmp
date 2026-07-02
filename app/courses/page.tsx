@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
 import CourseCard, { type CourseCardData } from '@/components/CourseCard'
 import EmptyState from '@/components/EmptyState'
+import FilterMenu, { FilterRow, filterControlClass } from '@/components/FilterMenu'
 import { CourseGridSkeleton } from '@/components/LoadingSkeleton'
 import { resolveSemesterParam } from '@/lib/semester'
 
@@ -61,7 +62,9 @@ function CoursesContent() {
   const [credits, setCredits] = useState<string>(searchParams.get('credits') ?? '')
   const [level, setLevel] = useState<string>(searchParams.get('level') ?? '')
   const [onlyWithSections, setOnlyWithSections] = useState(searchParams.get('open') === '1')
-  const [onlyWithOpen, setOnlyWithOpen] = useState(searchParams.get('openonly') === '1')
+  const [availability, setAvailability] = useState<'' | 'open' | 'full'>(
+    (searchParams.get('avail') as '' | 'open' | 'full') || (searchParams.get('openonly') === '1' ? 'open' : '')
+  )
   const [minRating, setMinRating] = useState<string>(searchParams.get('minrating') ?? '')
   const [campus, setCampus] = useState<string>(searchParams.get('campus') ?? '')
   const [verdictFilter, setVerdictFilter] = useState<'' | 'take' | 'depends' | 'avoid'>(
@@ -151,13 +154,13 @@ function CoursesContent() {
     if (level) params.set('level', level)
     if (campus) params.set('campus', campus)
     if (onlyWithSections) params.set('open', '1')
-    if (onlyWithOpen) params.set('openonly', '1')
+    if (availability) params.set('avail', availability)
     if (minRating) params.set('minrating', minRating)
     if (verdictFilter) params.set('verdict', verdictFilter)
     if (sortBy !== 'number') params.set('sort', sortBy)
     const qs = params.toString()
     router.replace(qs ? `/courses?${qs}` : '/courses', { scroll: false })
-  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus, onlyWithSections, onlyWithOpen, minRating, verdictFilter, sortBy, router])
+  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus, onlyWithSections, availability, minRating, verdictFilter, sortBy, router])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -263,8 +266,10 @@ function CoursesContent() {
     if (onlyWithSections) {
       list = list.filter(c => (c.section_count ?? 0) > 0)
     }
-    if (onlyWithOpen) {
+    if (availability === 'open') {
       list = list.filter(c => (c.open_section_count ?? 0) > 0)
+    } else if (availability === 'full') {
+      list = list.filter(c => (c.section_count ?? 0) > 0 && (c.open_section_count ?? 0) === 0)
     }
     if (minRating) {
       const threshold = parseFloat(minRating)
@@ -288,7 +293,7 @@ function CoursesContent() {
     }
     // 'number' is the default from the API (already sorted by course_number)
     return list
-  }, [courses, search, serverQuery, onlyWithSections, onlyWithOpen, minRating, verdictFilter, sortBy])
+  }, [courses, search, serverQuery, onlyWithSections, availability, minRating, verdictFilter, sortBy])
 
   const levels = useMemo(() => {
     const set = new Set<string>()
@@ -310,7 +315,12 @@ function CoursesContent() {
     )
   }, [departments, deptInputValue, selectedDept])
 
-  const hasActiveFilters = !!(search || instructor || selectedDept || selectedSemester || credits || level || campus || onlyWithSections || onlyWithOpen || minRating || verdictFilter || sortBy !== 'number')
+  const hasActiveFilters = !!(search || instructor || selectedDept || selectedSemester || credits || level || campus || onlyWithSections || availability || minRating || verdictFilter || sortBy !== 'number')
+  // Filters tucked inside the popover — drives its count badge.
+  const advancedCount = [instructor, campus, credits, level, minRating, verdictFilter].filter(Boolean).length + (onlyWithSections ? 1 : 0)
+  const clearAll = () => {
+    setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setAvailability(''); setMinRating(''); setVerdictFilter(''); setSortBy('number')
+  }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -468,174 +478,139 @@ function CoursesContent() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Instructor filter */}
-            <div className="relative">
-              <svg
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none"
-                fill="none" stroke="currentColor" viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <input
-                type="text"
-                value={instructor}
-                onChange={e => setInstructor(e.target.value)}
-                placeholder="Instructor name..."
-                className={`pl-7 pr-3 py-2 rounded-lg text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors w-40 ${
-                  instructor ? 'ring-1 ring-[#CC0033]/50' : ''
-                }`}
-                style={{ background: 'var(--card)', border: `1px solid ${instructor ? 'rgba(204,0,51,0.5)' : 'var(--border)'}` }}
-              />
+            {/* Availability segmented control */}
+            <div className="segmented" role="group" aria-label="Section availability">
+              <button data-active={availability === ''} onClick={() => setAvailability('')}>
+                All
+              </button>
+              <button data-active={availability === 'open'} className="seg-open flex items-center gap-1.5" onClick={() => setAvailability(availability === 'open' ? '' : 'open')}>
+                <span className={availability === 'open' ? 'dot-open' : 'w-2 h-2 rounded-full bg-green-800'} />
+                Open
+              </button>
+              <button data-active={availability === 'full'} className="seg-full flex items-center gap-1.5" onClick={() => setAvailability(availability === 'full' ? '' : 'full')}>
+                <span className={`w-2 h-2 rounded-full ${availability === 'full' ? 'bg-red-400' : 'bg-red-900'}`} />
+                Full
+              </button>
             </div>
 
-            <select
-              value={credits}
-              onChange={e => setCredits(e.target.value)}
-              className="px-3 py-2 rounded-lg text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-            >
-              {CREDIT_OPTIONS.map(c => (
-                <option key={c} value={c}>{c === '' ? 'Any credits' : `${c} credits`}</option>
-              ))}
-            </select>
-
-            <select
-              value={level}
-              onChange={e => setLevel(e.target.value)}
-              className="px-3 py-2 rounded-lg text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-[#CC0033] transition-colors"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-            >
-              <option value="">Any level</option>
-              {levels.map(l => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
-
-            <button
-              onClick={() => setOnlyWithOpen(v => !v)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                onlyWithOpen
-                  ? 'bg-green-950 border-green-800 text-green-400'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              style={!onlyWithOpen ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
-            >
-              Open seats only
-            </button>
-
-            <button
-              onClick={() => setOnlyWithSections(v => !v)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                onlyWithSections
-                  ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              style={!onlyWithSections ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
-            >
-              Has sections
-            </button>
-
-            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
-
-            {CAMPUS_OPTIONS.map(opt => (
-              <button
-                key={opt.value || 'all'}
-                onClick={() => setCampus(opt.value)}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                  campus === opt.value
-                    ? 'bg-blue-950 border-blue-800 text-blue-300'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-                style={campus !== opt.value ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
-              >
-                {opt.label}
-              </button>
-            ))}
-
-            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
-
-            <select
-              value={minRating}
-              onChange={e => setMinRating(e.target.value)}
-              className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
-              style={{
-                background: minRating ? 'rgba(34,197,94,0.12)' : 'var(--card)',
-                border: `1px solid ${minRating ? 'rgba(34,197,94,0.45)' : 'var(--border)'}`,
-                color: minRating ? '#4ade80' : '#a1a1aa',
-              }}
-            >
-              <option value="">Any prof rating</option>
-              <option value="3.0">Prof ≥ 3.0</option>
-              <option value="3.5">Prof ≥ 3.5</option>
-              <option value="4.0">Prof ≥ 4.0</option>
-            </select>
-
-            <div className="w-px h-4 bg-zinc-800 self-center mx-1" />
-
-            {/* Verdict filter chips */}
-            {(['take', 'depends', 'avoid'] as const).map(v => {
-              const active = verdictFilter === v
-              const styles: Record<string, { active: string; label: string }> = {
-                take:    { active: 'bg-green-950 border-green-700 text-green-400',  label: 'TAKE' },
-                depends: { active: 'bg-amber-950 border-amber-700 text-amber-400',  label: 'DEPENDS' },
-                avoid:   { active: 'bg-red-950 border-red-800 text-red-400',        label: 'AVOID' },
-              }
-              return (
-                <button
-                  key={v}
-                  onClick={() => setVerdictFilter(active ? '' : v)}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
-                    active ? styles[v].active : 'text-zinc-500 hover:text-white'
-                  }`}
-                  style={!active ? { background: 'var(--card)', border: '1px solid var(--border)' } : undefined}
+            {/* Advanced filters live in a tidy popover */}
+            <FilterMenu activeCount={advancedCount}>
+              <FilterRow label="Instructor">
+                <input
+                  type="text"
+                  value={instructor}
+                  onChange={e => setInstructor(e.target.value)}
+                  placeholder="e.g. Centeno"
+                  className={filterControlClass}
+                />
+              </FilterRow>
+              <FilterRow label="Campus">
+                <select value={campus} onChange={e => setCampus(e.target.value)} className={filterControlClass}>
+                  {CAMPUS_OPTIONS.map(opt => (
+                    <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </FilterRow>
+              <div className="grid grid-cols-2 gap-2">
+                <FilterRow label="Credits">
+                  <select value={credits} onChange={e => setCredits(e.target.value)} className={filterControlClass}>
+                    {CREDIT_OPTIONS.map(c => (
+                      <option key={c} value={c}>{c === '' ? 'Any' : `${c} cr`}</option>
+                    ))}
+                  </select>
+                </FilterRow>
+                <FilterRow label="Level">
+                  <select value={level} onChange={e => setLevel(e.target.value)} className={filterControlClass}>
+                    <option value="">Any</option>
+                    {levels.map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </FilterRow>
+              </div>
+              <FilterRow label="Professor rating">
+                <select value={minRating} onChange={e => setMinRating(e.target.value)} className={filterControlClass}>
+                  <option value="">Any rating</option>
+                  <option value="3.0">3.0★ and up</option>
+                  <option value="3.5">3.5★ and up</option>
+                  <option value="4.0">4.0★ and up</option>
+                </select>
+              </FilterRow>
+              <FilterRow label="AI verdict">
+                <select
+                  value={verdictFilter}
+                  onChange={e => setVerdictFilter(e.target.value as '' | 'take' | 'depends' | 'avoid')}
+                  className={filterControlClass}
                 >
-                  {styles[v].label}
-                </button>
-              )
-            })}
+                  <option value="">Any verdict</option>
+                  <option value="take">TAKE — recommended</option>
+                  <option value="depends">DEPENDS — mixed</option>
+                  <option value="avoid">AVOID — flagged</option>
+                </select>
+              </FilterRow>
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={onlyWithSections}
+                  onChange={e => setOnlyWithSections(e.target.checked)}
+                  className="accent-[#CC0033] w-3.5 h-3.5"
+                />
+                Only courses with sections this semester
+              </label>
+            </FilterMenu>
 
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
-              className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
-              style={{
-                background: sortBy !== 'number' ? 'var(--card-2)' : 'var(--card)',
-                border: `1px solid ${sortBy !== 'number' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
-                color: sortBy !== 'number' ? 'white' : '#a1a1aa',
-              }}
-            >
-              <option value="number">Sort: Course #</option>
-              <option value="open">Sort: Most Open</option>
-              <option value="rating">Sort: Best Prof</option>
-            </select>
-
-            {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setVerdictFilter(''); setSortBy('number')
+            <div className="ml-auto flex items-center gap-2">
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
+                className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
+                style={{
+                  background: sortBy !== 'number' ? 'var(--card-2)' : 'var(--card)',
+                  border: `1px solid ${sortBy !== 'number' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
+                  color: sortBy !== 'number' ? 'white' : '#a1a1aa',
                 }}
-                className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
               >
-                Clear all
-              </button>
-            )}
+                <option value="number">Sort: Course #</option>
+                <option value="open">Sort: Most Open</option>
+                <option value="rating">Sort: Best Prof</option>
+              </select>
+
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAll}
+                  className="px-3 py-2 text-xs text-zinc-500 hover:text-white transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Result count */}
         {!loading && !error && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
-            <span>{filtered.length} course{filtered.length !== 1 ? 's' : ''} found</span>
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-600 motion-fade">
+            <span className="text-zinc-400 font-semibold">{filtered.length} course{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="dot-open" style={{ width: 6, height: 6 }} />
+              <span className="text-green-500 font-semibold">
+                {filtered.filter(c => (c.open_section_count ?? 0) > 0).length} with open seats
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="dot-closed" style={{ width: 6, height: 6 }} />
+              <span className="text-red-400/80">
+                {filtered.filter(c => (c.section_count ?? 0) > 0 && (c.open_section_count ?? 0) === 0).length} full
+              </span>
+            </span>
             {serverInstructor && (
               <span>· taught by &quot;{serverInstructor}&quot;</span>
             )}
             {selectedSemester && (
               <span>
-                · scoped to {semesters.find(s => s.slug === selectedSemester)?.name ?? selectedSemester}
+                · {semesters.find(s => s.slug === selectedSemester)?.name ?? selectedSemester}
               </span>
             )}
-            <span>· cards show buildings and top rated teachers when available</span>
           </div>
         )}
 
@@ -668,12 +643,7 @@ function CoursesContent() {
             subtitle={search ? `No results for "${search}"` : instructor ? `No courses found for instructor "${instructor}"` : 'No courses match these filters'}
             action={
               hasActiveFilters ? (
-                <button
-                  onClick={() => {
-                  setSearch(''); setInstructor(''); setSelectedDept(''); setSelectedSemester(''); setCredits(''); setLevel(''); setCampus(''); setOnlyWithSections(false); setOnlyWithOpen(false); setMinRating(''); setVerdictFilter(''); setSortBy('number')
-                }}
-                  className="text-sm text-[#CC0033] hover:underline"
-                >
+                <button onClick={clearAll} className="text-sm text-[#CC0033] hover:underline">
                   Clear filters
                 </button>
               ) : undefined
@@ -683,7 +653,7 @@ function CoursesContent() {
 
         {/* Course grid */}
         {!loading && !error && filtered.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 stagger-grid">
             {filtered.map(course => (
               <CourseCard key={course.id} course={course} />
             ))}
@@ -702,11 +672,7 @@ function CoursesContent() {
               <p className="text-sm font-semibold text-white">Taken one of these courses?</p>
               <p className="text-xs text-zinc-500 mt-0.5">Rate your professor and help the next student make a better choice.</p>
             </div>
-            <a
-              href="/departments"
-              className="shrink-0 text-xs font-bold px-4 py-2 rounded-xl text-white transition-opacity hover:opacity-80"
-              style={{ backgroundColor: '#CC0033' }}
-            >
+            <a href="/departments" className="btn-primary shrink-0 text-xs px-4 py-2 rounded-xl">
               Rate a Professor →
             </a>
           </div>

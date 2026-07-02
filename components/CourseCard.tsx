@@ -54,7 +54,7 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
   return (
     <Link
       href={href}
-      className="group relative block card-warm rounded-xl overflow-hidden"
+      className="group relative block card-warm hover-lift rounded-xl overflow-hidden"
     >
       {/* Status accent bar */}
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: accentColor }} />
@@ -72,12 +72,13 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
 
             {hasSections && (
               hasOpen ? (
-                <span className="shrink-0 inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-green-950 border border-green-800 text-green-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  {openCount} open
+                <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full bg-green-950 border border-green-800 text-green-400">
+                  <span className="dot-open" style={{ width: 6, height: 6 }} />
+                  {openCount} of {totalSections} open
                 </span>
               ) : (
-                <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full bg-red-950 border border-red-900 text-red-400">
+                <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full bg-red-950 border border-red-900 text-red-400">
+                  <span className="dot-closed" style={{ width: 6, height: 6 }} />
                   FULL
                 </span>
               )

@@ -101,6 +101,7 @@ SNIPER_MAX_BACKOFF_MS=15000
 SNIPER_DEFAULT_YEAR=2025
 SNIPER_DEFAULT_TERM=9
 SNIPER_DEFAULT_CAMPUS=NB
+SNIPER_BULK_REFRESH_MS=600000    # site-wide open/closed sweep via openSections.json; 10 min default
 AI_ANALYSIS_INTERVAL_MS=600000   # 10 min; min 60000
 AI_ANALYSIS_BATCH_SIZE=15        # professors per batch; 1–50
 AI_ANALYSIS_ITEM_DELAY_MS=800    # pause between professors in a batch
