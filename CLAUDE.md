@@ -72,7 +72,7 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 | `worker/sniper-worker.mjs` | Always-on Railway worker (plain ESM, no bundler) |
 | `scripts/ingest-soc.ts` | Rutgers SOC → Supabase bulk ingest (creates `professors` + `teaching_assignments`) |
 | `scripts/enrich-rmp.ts` | Conservative SOC professor → RateMyProfessors matcher (writes RMP signal to `professor_cache`) |
-| `supabase/migrations/` | Numbered SQL migrations (`001`–`023`) |
+| `supabase/migrations/` | Numbered SQL migrations (`001`–`024`) |
 
 ### Professor coverage funnel
 

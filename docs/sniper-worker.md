@@ -117,6 +117,28 @@ Logs should contain counts, timings, statuses, and sanitized errors only. Do not
 log secrets, auth headers, raw provider payloads, email addresses, or phone
 numbers.
 
+## Section status history
+
+Every real change to `teaching_assignments.open_status` is recorded in the
+append-only `section_status_events` table (migration `024`). Capture happens in
+a Postgres trigger on the column, not in worker code, so it is source-agnostic:
+it covers all three writers of `open_status` — the SOC ingest
+(`scripts/ingest-soc.ts`), the per-watch poll, and the bulk refresh — with no
+worker changes. The trigger only fires on an actual value change and Postgres
+row locks serialize concurrent writers, so each real flip yields exactly one
+event (idempotent by construction).
+
+This history cannot be reconstructed after the fact — a `teaching_assignments`
+row stores only the current status and its last update time, so prior
+transitions are overwritten. The event log is what makes future
+open-probability and "sections usually release seats N days before classes"
+analytics possible, so the value comes from letting it accumulate over time.
+
+Note: the log only fills while a writer is actually running. If every row in
+`teaching_assignments` shares an identical `status_updated_at`, the status
+refresh is not running and no events are being recorded — start/verify the
+worker first.
+
 ## Latency Expectations
 
 Railway Pro gives the project an always-on worker, which is necessary for
