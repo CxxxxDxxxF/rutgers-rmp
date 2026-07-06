@@ -18,6 +18,7 @@ export interface SectionRow {
   open_status_text: string | null
   status_updated_at: string | null
   source_url: string | null
+  watch_count?: number | null
   professor: {
     id: string
     slug: string
@@ -61,6 +62,21 @@ function StatusBadge({ section }: { section: SectionRow }) {
   if (section.open_status === true) return <Badge tone="green">OPEN</Badge>
   if (section.open_status === false) return <Badge tone="red">CLOSED</Badge>
   return <Badge tone="neutral">UNKNOWN</Badge>
+}
+
+// Demand signal: how many students have this section on their watchlist.
+// Only rendered when at least one person is watching — zero is noise.
+function WatchCountBadge({ count }: { count?: number | null }) {
+  if (!count || count < 1) return null
+  return (
+    <span
+      title={`${count} ${count === 1 ? 'student is' : 'students are'} watching this section`}
+      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-zinc-800/80 border-zinc-700 text-zinc-300 leading-none"
+    >
+      <span aria-hidden>👀</span>
+      {count} watching
+    </span>
+  )
 }
 
 export function CopyButton({ value, label }: { value: string; label?: string }) {
@@ -208,7 +224,10 @@ export default function SectionTable({
             {displayed.map(s => (
               <tr key={s.id} className="bg-zinc-900/40 hover:bg-zinc-800/40 transition-colors">
                 <td className="px-3 py-2.5">
-                  <StatusBadge section={s} />
+                  <span className="inline-flex items-center gap-1.5 flex-wrap">
+                    <StatusBadge section={s} />
+                    <WatchCountBadge count={s.watch_count} />
+                  </span>
                 </td>
                 <td className="px-3 py-2.5">
                   <span className="inline-flex items-center gap-1.5">
@@ -271,8 +290,9 @@ export default function SectionTable({
         {displayed.map(s => (
           <div key={s.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge section={s} />
+                <WatchCountBadge count={s.watch_count} />
                 <span className="text-xs text-zinc-500">Sec {s.section_number ?? '—'}</span>
               </div>
               {courseId && (
