@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { createServiceClient } from '@/lib/supabase-server'
 import AppHeader from '@/components/AppHeader'
 import SearchBar from '@/components/SearchBar'
 import ProfessorCard from '@/components/ProfessorCard'
@@ -108,6 +109,85 @@ async function getRecentReviews(): Promise<RecentReview[]> {
       }
     })
   } catch {
+    return []
+  }
+}
+
+interface JustOpenedSection {
+  event_id: number
+  observed_at: string
+  time_label: string
+  index_number: string | null
+  section_number: string | null
+  campus: string | null
+  course: { course_number: string; name: string; slug: string }
+  instructor: string | null
+}
+
+// Sections that flipped CLOSED -> OPEN recently and are still open.
+// section_status_events is RLS-locked (no anon access), so this reads via the
+// service client — server-side only, and only public section facts are
+// returned: course, section, index, campus, and when it opened.
+async function getJustOpened(): Promise<JustOpenedSection[]> {
+  try {
+    const db = createServiceClient()
+    const { data } = await db
+      .from('section_status_events')
+      .select(`
+        id,
+        observed_at,
+        index_number,
+        teaching_assignments (
+          section_number,
+          campus,
+          open_status,
+          instructor_name_raw,
+          courses ( course_number, name, slug ),
+          professors ( first_name, last_name )
+        )
+      `)
+      .eq('prev_status', false)
+      .eq('new_status', true)
+      .gte('observed_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+      .order('observed_at', { ascending: false })
+      .limit(40)
+
+    const now = Date.now()
+    const seen = new Set<string>()
+    const items: JustOpenedSection[] = []
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      const ta = (Array.isArray(row.teaching_assignments) ? row.teaching_assignments[0] : row.teaching_assignments) as {
+        section_number: string | null
+        campus: string | null
+        open_status: boolean | null
+        instructor_name_raw: string | null
+        courses: { course_number: string; name: string; slug: string } | { course_number: string; name: string; slug: string }[] | null
+        professors: { first_name: string; last_name: string } | { first_name: string; last_name: string }[] | null
+      } | null
+      if (!ta || ta.open_status !== true) continue // re-closed since — don't advertise it
+      const course = Array.isArray(ta.courses) ? ta.courses[0] : ta.courses
+      if (!course?.slug) continue
+      const prof = Array.isArray(ta.professors) ? ta.professors[0] : ta.professors
+      const key = `${course.slug}:${ta.section_number ?? ''}`
+      if (seen.has(key)) continue
+      seen.add(key)
+
+      const mins = Math.max(1, Math.floor((now - new Date(row.observed_at as string).getTime()) / 60000))
+      items.push({
+        event_id: row.id as number,
+        observed_at: row.observed_at as string,
+        time_label: mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`,
+        index_number: (row.index_number as string | null) ?? null,
+        section_number: ta.section_number ?? null,
+        campus: ta.campus ?? null,
+        course: { course_number: course.course_number, name: course.name, slug: course.slug },
+        instructor: prof ? `${prof.first_name} ${prof.last_name}`.trim() : (ta.instructor_name_raw || null),
+      })
+      if (items.length >= 6) break
+    }
+    return items
+  } catch {
+    // Service credentials absent (local read-only setup) — hide the section.
     return []
   }
 }
@@ -347,12 +427,13 @@ const TOOLS: {
 ]
 
 export default async function HomePage() {
-  const [popular, hotCourses, topRated, takeProfessors, recentReviews] = await Promise.all([
+  const [popular, hotCourses, topRated, takeProfessors, recentReviews, justOpened] = await Promise.all([
     getPopular(),
     getHotCourses(),
     getTopRatedThisSemester(),
     getTopTakeProfessors(),
     getRecentReviews(),
+    getJustOpened(),
   ])
 
   return (
@@ -451,6 +532,54 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Just opened — sections that flipped open recently and are still open */}
+      {justOpened.length > 0 && (
+        <section className="px-4 sm:px-6 pb-16 max-w-5xl mx-auto w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2 align-middle animate-pulse" aria-hidden />
+              Just Opened
+              <span className="ml-2 font-normal text-zinc-700 normal-case tracking-normal">
+                · seats that freed up recently
+              </span>
+            </h2>
+            <Link href="/watchlist" className="text-xs font-semibold text-zinc-500 hover:text-[#ff4d6d] transition-colors">
+              Track a section →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {justOpened.map(s => (
+              <Link
+                key={s.event_id}
+                href={`/course/${s.course.slug}`}
+                className="group card-warm rounded-2xl p-4"
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded border bg-green-950 border-green-800 text-green-400 leading-none">
+                    OPEN
+                  </span>
+                  <span className="text-[11px] text-zinc-600">{s.time_label}</span>
+                </div>
+                <div className="font-bold text-white group-hover:text-[#ff4d6d] transition-colors text-sm leading-snug">
+                  {s.course.course_number} · {s.course.name}
+                </div>
+                <div className="text-xs text-zinc-500 mt-1.5 space-x-2">
+                  {s.section_number && <span>Sec {s.section_number}</span>}
+                  {s.index_number && <span className="font-mono text-zinc-400">#{s.index_number}</span>}
+                  {s.campus && <span>{s.campus}</span>}
+                </div>
+                {s.instructor && (
+                  <div className="text-xs text-zinc-600 mt-1 truncate">{s.instructor}</div>
+                )}
+              </Link>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-zinc-600">
+            Detected by RU Rate&apos;s live section monitor. Seats can refill fast — confirm in WebReg.
+          </p>
+        </section>
+      )}
 
       {/* Hot courses — open seats right now */}
       {hotCourses.length > 0 && (
