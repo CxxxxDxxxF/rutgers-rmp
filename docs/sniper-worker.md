@@ -156,7 +156,7 @@ stays their sole writer whenever it is running.
 
 | File | Purpose |
 | --- | --- |
-| `railway.collector.json` | Cron service config: `Dockerfile.worker`, `npm run worker:collect`, `cronSchedule: */15 * * * *`, `restartPolicyType: NEVER` |
+| `railway.collector.json` | Cron service config: `Dockerfile.worker`, `npm run worker:collect`, `cronSchedule: */5 * * * *`, `restartPolicyType: NEVER` |
 | `worker/status-collector.mjs` | One-shot sweep |
 | `package.json` | `npm run worker:collect` start script |
 

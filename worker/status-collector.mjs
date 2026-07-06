@@ -2,7 +2,7 @@
 // Section status collector — one-shot, keys-free history feeder.
 //
 // Runs the site-wide open/closed refresh ONCE and exits, so it can run as a
-// Railway cron service (schedule it every ~15 min) instead of an always-on
+// Railway cron service (schedule it every ~5 min) instead of an always-on
 // worker. One lightweight openSections.json request per campus, a diff against
 // the stored status, and a batched update — which fires the migration 024
 // trigger and fills section_status_events. No paid API keys, no Resend/Twilio/
