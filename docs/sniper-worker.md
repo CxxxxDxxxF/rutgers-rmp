@@ -165,6 +165,40 @@ Deploy as its own Railway service pointed at `railway.collector.json`; because
 container on the schedule and it exits after each sweep, so you pay only for
 the few seconds of compute per run.
 
+### Deploy the collector
+
+One-time: create the service and set its two required variables.
+
+```bash
+railway service create rurate-status-collector --environment production
+railway variables set NEXT_PUBLIC_SUPABASE_URL="…" SUPABASE_SERVICE_ROLE_KEY="…" \
+  --service rurate-status-collector --environment production
+```
+
+Deploy (ships `railway.collector.json` as the service's `railway.json`, so its
+`cronSchedule` and `startCommand` take effect):
+
+```bash
+tmp_dir="$(mktemp -d)"
+cp package.json package-lock.json Dockerfile.worker "$tmp_dir/"
+cp railway.collector.json "$tmp_dir/railway.json"
+cp -R worker "$tmp_dir/worker"
+railway up "$tmp_dir" --path-as-root --service rurate-status-collector --environment production --detach -m "Deploy status collector"
+rm -rf "$tmp_dir"
+```
+
+Verify: after the next scheduled run, the logs show a `collector_complete` event
+with `opened`/`closed` counts, and `teaching_assignments.status_updated_at`
+values are no longer all identical.
+
+```bash
+railway logs --service rurate-status-collector --environment production --lines 40 --json
+```
+
+Only run the collector OR the always-on `rurate-sniper-worker` bulk refresh —
+not both. Prerequisite: apply migration `024` first, or the sweep will keep
+`open_status` fresh but record no history.
+
 ## Latency Expectations
 
 Railway Pro gives the project an always-on worker, which is necessary for
