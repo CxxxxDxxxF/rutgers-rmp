@@ -25,6 +25,11 @@ const AI_ANALYSIS_ITEM_DELAY_MS = Math.max(0, parseInt(process.env.AI_ANALYSIS_I
 // Site-wide open/closed refresh via the lightweight SOC openSections endpoint.
 // One request per cycle keeps every section's status fresh even with no watches.
 const SNIPER_BULK_REFRESH_MS = parseInterval(process.env.SNIPER_BULK_REFRESH_MS, 10 * 60 * 1000, 60 * 1000)
+// The catalog is ingested across every Rutgers campus, so the bulk sweep unions
+// the open lists from each — an NB-only list would wrongly mark NK/CM sections
+// CLOSED.
+const SNIPER_BULK_CAMPUSES = (process.env.SNIPER_BULK_CAMPUSES ?? 'NB,NK,CM')
+  .split(',').map(c => c.trim().toUpperCase()).filter(Boolean)
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error(JSON.stringify({
@@ -400,22 +405,28 @@ async function runBulkStatusRefresh() {
     return
   }
 
-  const url = new URL('https://classes.rutgers.edu/soc/api/openSections.json')
-  url.searchParams.set('year', String(year))
-  url.searchParams.set('term', term)
-  url.searchParams.set('campus', DEFAULT_CAMPUS)
-  const response = await fetchWithTimeout(url, {
-    headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'RU-Rate-sniper-worker/1.0' },
-  }, SOC_FETCH_TIMEOUT_MS)
-  if (!response.ok) throw new Error(`openSections HTTP ${response.status}`)
-  const openIndexes = await response.json()
-  if (!Array.isArray(openIndexes) || openIndexes.length === 0) {
-    // An empty list mid-semester is far more likely an upstream glitch than
+  // Union the open index numbers across every ingested campus.
+  const openSet = new Set()
+  for (const campus of SNIPER_BULK_CAMPUSES) {
+    const url = new URL('https://classes.rutgers.edu/soc/api/openSections.json')
+    url.searchParams.set('year', String(year))
+    url.searchParams.set('term', term)
+    url.searchParams.set('campus', campus)
+    const response = await fetchWithTimeout(url, {
+      headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'RU-Rate-sniper-worker/1.0' },
+    }, SOC_FETCH_TIMEOUT_MS)
+    if (!response.ok) throw new Error(`openSections ${campus} HTTP ${response.status}`)
+    const openIndexes = await response.json()
+    if (Array.isArray(openIndexes)) {
+      for (const idx of openIndexes) openSet.add(String(idx))
+    }
+  }
+  if (openSet.size === 0) {
+    // An empty union mid-semester is far more likely an upstream glitch than
     // every section in the university closing at once — don't mass-close.
     console.log(JSON.stringify({ event: 'bulk_refresh_skip', reason: 'empty_open_list' }))
     return
   }
-  const openSet = new Set(openIndexes.map(String))
 
   // Page through the semester's assignments and diff against the open set.
   // Watched sections are intentionally left to the per-watch poller, which is
