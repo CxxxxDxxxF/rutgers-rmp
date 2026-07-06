@@ -32,7 +32,13 @@ export async function POST(req: NextRequest) {
       .eq('user_id', userId)
       .maybeSingle()
 
-    if (sub?.stripe_subscription_id && sub.status === 'active') {
+    // Cancel for any status that can still bill. Only 'active' was handled
+    // before, which orphaned live subscriptions in other billable states
+    // (trialing, past_due, unpaid, paused, incomplete) — the local row and auth
+    // user would be deleted while Stripe kept charging with no owner to
+    // reconcile against. Terminal states are already not billable.
+    const TERMINAL_STATUSES = ['canceled', 'incomplete_expired']
+    if (sub?.stripe_subscription_id && !TERMINAL_STATUSES.includes(sub.status ?? '')) {
       try {
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
           apiVersion: '2026-05-27.dahlia',

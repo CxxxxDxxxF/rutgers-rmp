@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 import {
   buildProfessorGrade,
@@ -145,6 +146,7 @@ export async function GET(
       }
     }
     const nativeStats = await loadNativeReviewStats(profList.map(p => p.id))
+    const watchCounts = await loadWatchCounts(rows.map(r => r.id))
 
     const professors = profList
       .map(prof => {
@@ -211,6 +213,7 @@ export async function GET(
         open_status_text: r.open_status_text ?? null,
         status_updated_at: r.status_updated_at ?? null,
         source_url: r.source_url ?? null,
+        watch_count: watchCounts.get(r.id) ?? 0,
         professor: r.professor
           ? {
               id: r.professor.id,
@@ -243,6 +246,39 @@ export async function GET(
     log.error('Course detail error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+// Demand signal: how many watchlist entries point at each section.
+// watched_sections is RLS-locked with no anon policies (migration 009), so the
+// count must come from the service client — server-side only. We return bare
+// counts keyed by assignment id and nothing else: no watcher ids, emails, or
+// phone numbers ever leave this function.
+async function loadWatchCounts(assignmentIds: string[]) {
+  const counts = new Map<string, number>()
+  if (assignmentIds.length === 0) return counts
+
+  try {
+    const db = createServiceClient()
+    const { data, error } = await db
+      .from('watched_sections')
+      .select('teaching_assignment_id')
+      .in('teaching_assignment_id', assignmentIds)
+
+    if (error) {
+      log.error('Course detail watch counts error:', error)
+      return counts
+    }
+
+    for (const row of data ?? []) {
+      const id = row.teaching_assignment_id as string | null
+      if (!id) continue
+      counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+  } catch (err) {
+    // Service credentials absent (e.g. local read-only setup) — degrade to no counts.
+    log.error('Course detail watch counts unavailable:', err)
+  }
+  return counts
 }
 
 async function loadNativeReviewStats(professorIds: string[]) {
@@ -287,6 +323,7 @@ interface SectionPayload {
   open_status_text: string | null
   status_updated_at: string | null
   source_url: string | null
+  watch_count: number
   professor: {
     id: string
     slug: string

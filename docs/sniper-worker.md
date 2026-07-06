@@ -117,6 +117,88 @@ Logs should contain counts, timings, statuses, and sanitized errors only. Do not
 log secrets, auth headers, raw provider payloads, email addresses, or phone
 numbers.
 
+## Section status history
+
+Every real change to `teaching_assignments.open_status` is recorded in the
+append-only `section_status_events` table (migration `024`). Capture happens in
+a Postgres trigger on the column, not in worker code, so it is source-agnostic:
+it covers all three writers of `open_status` — the SOC ingest
+(`scripts/ingest-soc.ts`), the per-watch poll, and the bulk refresh — with no
+worker changes. The trigger only fires on an actual value change and Postgres
+row locks serialize concurrent writers, so each real flip yields exactly one
+event (idempotent by construction).
+
+This history cannot be reconstructed after the fact — a `teaching_assignments`
+row stores only the current status and its last update time, so prior
+transitions are overwritten. The event log is what makes future
+open-probability and "sections usually release seats N days before classes"
+analytics possible, so the value comes from letting it accumulate over time.
+
+Note: the log only fills while a writer is actually running. If every row in
+`teaching_assignments` shares an identical `status_updated_at`, the status
+refresh is not running and no events are being recorded — start/verify the
+worker first.
+
+## Budget mode: cron status collector
+
+`worker/status-collector.mjs` is a one-shot version of the bulk refresh: it
+runs a single site-wide open/closed sweep and exits. Deploy it as a **Railway
+cron service** (not an always-on worker) to keep the catalog's `open_status`
+fresh — and fill `section_status_events` — without paying for a 24/7 process
+or any provider API keys. It only needs `NEXT_PUBLIC_SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY`.
+
+It is an alternative to the always-on worker's bulk refresh, not a companion:
+run one or the other. It unions the `openSections.json` open lists across every
+ingested campus (`COLLECTOR_CAMPUSES`, default `NB,NK,CM`) so non-NB sections
+are not wrongly closed, and it skips watched sections so the always-on poller
+stays their sole writer whenever it is running.
+
+| File | Purpose |
+| --- | --- |
+| `railway.collector.json` | Cron service config: `Dockerfile.worker`, `npm run worker:collect`, `cronSchedule: */5 * * * *`, `restartPolicyType: NEVER` |
+| `worker/status-collector.mjs` | One-shot sweep |
+| `package.json` | `npm run worker:collect` start script |
+
+Deploy as its own Railway service pointed at `railway.collector.json`; because
+`restartPolicyType` is `NEVER` and `cronSchedule` is set, Railway runs the
+container on the schedule and it exits after each sweep, so you pay only for
+the few seconds of compute per run.
+
+### Deploy the collector
+
+One-time: create the service and set its two required variables.
+
+```bash
+railway service create rurate-status-collector --environment production
+railway variables set NEXT_PUBLIC_SUPABASE_URL="…" SUPABASE_SERVICE_ROLE_KEY="…" \
+  --service rurate-status-collector --environment production
+```
+
+Deploy (ships `railway.collector.json` as the service's `railway.json`, so its
+`cronSchedule` and `startCommand` take effect):
+
+```bash
+tmp_dir="$(mktemp -d)"
+cp package.json package-lock.json Dockerfile.worker "$tmp_dir/"
+cp railway.collector.json "$tmp_dir/railway.json"
+cp -R worker "$tmp_dir/worker"
+railway up "$tmp_dir" --path-as-root --service rurate-status-collector --environment production --detach -m "Deploy status collector"
+rm -rf "$tmp_dir"
+```
+
+Verify: after the next scheduled run, the logs show a `collector_complete` event
+with `opened`/`closed` counts, and `teaching_assignments.status_updated_at`
+values are no longer all identical.
+
+```bash
+railway logs --service rurate-status-collector --environment production --lines 40 --json
+```
+
+Only run the collector OR the always-on `rurate-sniper-worker` bulk refresh —
+not both. Prerequisite: apply migration `024` first, or the sweep will keep
+`open_status` fresh but record no history.
+
 ## Latency Expectations
 
 Railway Pro gives the project an always-on worker, which is necessary for

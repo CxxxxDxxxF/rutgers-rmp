@@ -35,7 +35,9 @@ export async function POST(req: NextRequest) {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
       const userId = session.metadata?.user_id
-      const email = session.customer_email ?? undefined
+      // customer_email is usually null for subscription Checkout sessions —
+      // the collected address lives in customer_details.email.
+      const email = session.customer_email ?? session.customer_details?.email ?? undefined
       const subscriptionId = typeof session.subscription === 'string'
         ? session.subscription
         : session.subscription?.id
