@@ -418,6 +418,12 @@ async function runBulkStatusRefresh() {
   const openSet = new Set(openIndexes.map(String))
 
   // Page through the semester's assignments and diff against the open set.
+  // Watched sections are intentionally left to the per-watch poller, which is
+  // their only status writer that also sends alerts. If the bulk pass flipped a
+  // watched row's open_status first, the poller's next reload would read the
+  // already-updated status, compute "no change", and never notify — a silently
+  // dropped alert, which is the one failure the sniper must not have.
+  const watchedAssignmentIds = new Set((watches ?? []).map(w => w.assignmentId).filter(Boolean))
   const toOpen = []
   const toClose = []
   const PAGE = 1000
@@ -430,6 +436,7 @@ async function runBulkStatusRefresh() {
       .range(from, from + PAGE - 1)
     if (error) throw new Error(`Bulk refresh page fetch: ${error.message}`)
     for (const row of rows ?? []) {
+      if (watchedAssignmentIds.has(row.id)) continue
       const isOpen = openSet.has(String(row.index_number))
       if (isOpen && row.open_status !== true) toOpen.push(row.id)
       else if (!isOpen && row.open_status !== false) toClose.push(row.id)
@@ -455,6 +462,7 @@ async function runBulkStatusRefresh() {
     soc_open_indexes: openSet.size,
     opened: toOpen.length,
     closed: toClose.length,
+    excluded_watched: watchedAssignmentIds.size,
     ms: Date.now() - startedAt,
   }))
 }
