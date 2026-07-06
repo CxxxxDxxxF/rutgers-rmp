@@ -139,6 +139,32 @@ Note: the log only fills while a writer is actually running. If every row in
 refresh is not running and no events are being recorded — start/verify the
 worker first.
 
+## Budget mode: cron status collector
+
+`worker/status-collector.mjs` is a one-shot version of the bulk refresh: it
+runs a single site-wide open/closed sweep and exits. Deploy it as a **Railway
+cron service** (not an always-on worker) to keep the catalog's `open_status`
+fresh — and fill `section_status_events` — without paying for a 24/7 process
+or any provider API keys. It only needs `NEXT_PUBLIC_SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY`.
+
+It is an alternative to the always-on worker's bulk refresh, not a companion:
+run one or the other. It unions the `openSections.json` open lists across every
+ingested campus (`COLLECTOR_CAMPUSES`, default `NB,NK,CM`) so non-NB sections
+are not wrongly closed, and it skips watched sections so the always-on poller
+stays their sole writer whenever it is running.
+
+| File | Purpose |
+| --- | --- |
+| `railway.collector.json` | Cron service config: `Dockerfile.worker`, `npm run worker:collect`, `cronSchedule: */15 * * * *`, `restartPolicyType: NEVER` |
+| `worker/status-collector.mjs` | One-shot sweep |
+| `package.json` | `npm run worker:collect` start script |
+
+Deploy as its own Railway service pointed at `railway.collector.json`; because
+`restartPolicyType` is `NEVER` and `cronSchedule` is set, Railway runs the
+container on the schedule and it exits after each sweep, so you pay only for
+the few seconds of compute per run.
+
 ## Latency Expectations
 
 Railway Pro gives the project an always-on worker, which is necessary for
