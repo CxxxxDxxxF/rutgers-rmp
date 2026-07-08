@@ -52,7 +52,7 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 1. **Professor data**: RMP GraphQL → `lib/rmp.ts` fetches raw data → `/api/analyze` caches in Supabase `professor_cache` table (30-day TTL) → AI summary generated via OpenRouter (Claude Haiku) through `lib/ai.ts`.
 2. **Course data**: Rutgers SOC API → `scripts/ingest-soc.ts` → Supabase `courses`/`sections` tables → `/api/courses` serves filtered results.
 3. **Watchlist/sniper**: Browser → `lib/watchlist-client.ts` (anon Supabase client) → `watched_sections` table → `worker/sniper-worker.mjs` polls SOC every 500 ms, updates section status, sends email/SMS alerts via Resend/Twilio when provider keys are present.
-4. **Section status history**: every real change to `teaching_assignments.open_status` — from ingest, the worker, or the cron collector — fires a Postgres trigger (migration `024`) that appends to `section_status_events`. This log powers the home page "Just Opened" feed and future open-probability/seat-risk analytics; it cannot be reconstructed after the fact. Feed it with either the always-on worker's bulk refresh **or** the standalone cron collector (`worker/status-collector.mjs`) — never both (duplicate Rutgers requests).
+4. **Section status history**: every real change to `teaching_assignments.open_status` — from ingest, the worker, or the cron collector — fires a Postgres trigger (migration `024`) that appends to `section_status_events`. This log powers the home page "Just Opened" feed, the per-section "reopened N×" churn badge (`/api/courses/[slug]`), and future open-probability/seat-risk analytics; it cannot be reconstructed after the fact. Feed it with either the always-on worker's bulk refresh **or** the standalone cron collector (`worker/status-collector.mjs`) — never both (duplicate Rutgers requests). In history-only mode (no alerts configured) the cron collector alone is the intended setup — the always-on worker is only needed once email/SMS alerts are live.
 
 ### Key modules
 
@@ -63,7 +63,7 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 | `app/api/courses/route.ts` | Course search with dept/query/credits/level/semester filters |
 | `app/api/professors/route.ts` | Professor browse — reads the `professor_directory` view (every teaching professor, ratings/AI joined when present); filters: `rated`, `analyzed`, `verdict`, `min_ratings` |
 | `app/api/watchlist/` | Watchlist CRUD (+ `claim/` re-keys anonymous watches to a signed-in user) |
-| `app/api/courses/[slug]/route.ts` | Course detail: sections by semester, professor joins, per-section `watch_count` demand signal |
+| `app/api/courses/[slug]/route.ts` | Course detail: sections by semester, professor joins, per-section `watch_count` demand signal + `reopen_count`/`last_opened_at` churn signal (14-day CLOSED→OPEN count from `section_status_events`) |
 | `app/api/compare/route.ts` | Side-by-side professor comparison (cache-only; never calls RMP live) |
 | `app/api/schedule/route.ts` | Paste-a-schedule instructor ranking (verdict → grade → rating) |
 | `app/api/search/route.ts`, `semesters/`, `departments/` | Global autocomplete, semester switcher, department directory |

@@ -199,6 +199,46 @@ Only run the collector OR the always-on `rurate-sniper-worker` bulk refresh —
 not both. Prerequisite: apply migration `024` first, or the sweep will keep
 `open_status` fresh but record no history.
 
+## AI analysis collector (professor verdicts)
+
+The always-on worker also runs a background AI-analysis batch, but in
+history-only mode (worker off) the professor-verdict backlog would never drain.
+`worker/ai-analysis-collector.mjs` is a one-shot version that processes a batch
+of professors with RMP data but no `ai_analysis` (highest `num_ratings` first),
+generates verdicts via OpenRouter, upserts them into `professor_cache`, and
+exits — so it runs as its own **Railway cron service**, independent of the
+sniper worker. Once the backlog is empty each run is a cheap no-op, so it safely
+stays scheduled to pick up newly RMP-enriched professors.
+
+Requires `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
+`OPENROUTER_API_KEY`. Tunable via `AI_BATCH_SIZE` (default 25) and
+`AI_ITEM_DELAY_MS` (default 800).
+
+| File | Purpose |
+| --- | --- |
+| `railway.ai-collector.json` | Cron config: `Dockerfile.worker`, `npm run worker:ai`, `cronSchedule: */10 * * * *`, `restartPolicyType: NEVER` |
+| `worker/ai-analysis-collector.mjs` | One-shot backlog drainer |
+| `package.json` | `npm run worker:ai` start script |
+
+### Deploy the AI collector
+
+```bash
+railway service create rurate-ai-collector --environment production
+railway variables set NEXT_PUBLIC_SUPABASE_URL="…" SUPABASE_SERVICE_ROLE_KEY="…" \
+  OPENROUTER_API_KEY="…" --service rurate-ai-collector --environment production
+
+tmp_dir="$(mktemp -d)"
+cp package.json package-lock.json Dockerfile.worker "$tmp_dir/"
+cp railway.ai-collector.json "$tmp_dir/railway.json"
+cp -R worker "$tmp_dir/worker"
+railway up "$tmp_dir" --path-as-root --service rurate-ai-collector --environment production --detach -m "Deploy AI analysis collector"
+rm -rf "$tmp_dir"
+```
+
+Verify: logs show `ai_collector_start` with a `backlog_remaining` count that
+shrinks each run, then `ai_collector_idle` once drained. Safe to run alongside
+the status collector — they touch different tables.
+
 ## Latency Expectations
 
 Railway Pro gives the project an always-on worker, which is necessary for
