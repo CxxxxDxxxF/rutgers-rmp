@@ -115,7 +115,7 @@ Class and course routes:
 | Method | Route | Purpose | Data source |
 | --- | --- | --- | --- |
 | `GET` | `/api/courses` | Course browser list with optional filters: `dept`, `q`, `credits`, `level`, semester/status inputs. | Supabase `courses`, `course_departments`, `teaching_assignments`, `course_browser_stats` RPC |
-| `GET` | `/api/courses/[slug]` | Course detail, sections by semester, professor links, open status, index numbers. | Supabase `courses`, `teaching_assignments`, `semesters`, `professors`, `professor_cache` |
+| `GET` | `/api/courses/[slug]` | Course detail, sections by semester, professor links, open status, index numbers, per-section `watch_count` (watchlist demand) and `reopen_count`/`last_opened_at` (14-day CLOSED→OPEN churn). | Supabase `courses`, `teaching_assignments`, `semesters`, `professors`, `professor_cache`, `watched_sections`, `section_status_events` |
 | `GET` | `/api/departments` | Department directory with professor counts and average cached ratings. | Supabase `departments`, `professor_departments`, `professors`, `professor_cache` |
 | `GET` | `/api/departments/[slug]` | Department detail with related professors and courses. | Supabase department/course/professor join tables |
 | `GET` | `/api/search?q=` | Global search across cached professors, SOC professors, live RMP matches, and courses. | Supabase plus RMP GraphQL for live professor matches |
