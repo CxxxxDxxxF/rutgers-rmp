@@ -147,6 +147,7 @@ export async function GET(
     }
     const nativeStats = await loadNativeReviewStats(profList.map(p => p.id))
     const watchCounts = await loadWatchCounts(rows.map(r => r.id))
+    const reopenStats = await loadReopenStats(rows.map(r => r.id))
 
     const professors = profList
       .map(prof => {
@@ -214,6 +215,8 @@ export async function GET(
         status_updated_at: r.status_updated_at ?? null,
         source_url: r.source_url ?? null,
         watch_count: watchCounts.get(r.id) ?? 0,
+        reopen_count: reopenStats.get(r.id)?.reopens ?? 0,
+        last_opened_at: reopenStats.get(r.id)?.lastOpened ?? null,
         professor: r.professor
           ? {
               id: r.professor.id,
@@ -281,6 +284,50 @@ async function loadWatchCounts(assignmentIds: string[]) {
   return counts
 }
 
+// Historical churn signal: how many times each section has flipped CLOSED->OPEN
+// in the trailing window, plus when it last opened. Descriptive, not predictive
+// — "reopened 3x recently" is an observed fact that stays honest even on thin
+// history (unlike an open-probability estimate, which needs far more data).
+// section_status_events is RLS-locked, so this reads via the service client.
+const REOPEN_WINDOW_DAYS = 14
+
+async function loadReopenStats(assignmentIds: string[]) {
+  const stats = new Map<string, { reopens: number; lastOpened: string | null }>()
+  if (assignmentIds.length === 0) return stats
+
+  try {
+    const db = createServiceClient()
+    const since = new Date(Date.now() - REOPEN_WINDOW_DAYS * 86400 * 1000).toISOString()
+    const { data, error } = await db
+      .from('section_status_events')
+      .select('assignment_id, observed_at')
+      .in('assignment_id', assignmentIds)
+      .eq('prev_status', false)
+      .eq('new_status', true)
+      .gte('observed_at', since)
+
+    if (error) {
+      log.error('Course detail reopen stats error:', error)
+      return stats
+    }
+
+    for (const row of data ?? []) {
+      const id = row.assignment_id as string | null
+      if (!id) continue
+      const prev = stats.get(id) ?? { reopens: 0, lastOpened: null }
+      const observedAt = row.observed_at as string
+      stats.set(id, {
+        reopens: prev.reopens + 1,
+        lastOpened: !prev.lastOpened || observedAt > prev.lastOpened ? observedAt : prev.lastOpened,
+      })
+    }
+  } catch (err) {
+    // Service credentials absent (local read-only setup) — degrade to no stats.
+    log.error('Course detail reopen stats unavailable:', err)
+  }
+  return stats
+}
+
 async function loadNativeReviewStats(professorIds: string[]) {
   const stats = new Map<string, NativeReviewStats>()
   if (!supabase || professorIds.length === 0) return stats
@@ -324,6 +371,8 @@ interface SectionPayload {
   status_updated_at: string | null
   source_url: string | null
   watch_count: number
+  reopen_count: number
+  last_opened_at: string | null
   professor: {
     id: string
     slug: string

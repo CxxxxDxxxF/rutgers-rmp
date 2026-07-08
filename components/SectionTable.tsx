@@ -19,6 +19,8 @@ export interface SectionRow {
   status_updated_at: string | null
   source_url: string | null
   watch_count?: number | null
+  reopen_count?: number | null
+  last_opened_at?: string | null
   professor: {
     id: string
     slug: string
@@ -62,6 +64,21 @@ function StatusBadge({ section }: { section: SectionRow }) {
   if (section.open_status === true) return <Badge tone="green">OPEN</Badge>
   if (section.open_status === false) return <Badge tone="red">CLOSED</Badge>
   return <Badge tone="neutral">UNKNOWN</Badge>
+}
+
+// Churn signal: how many times this section has reopened recently. Descriptive,
+// not a prediction — only shown at 2+ reopens, where a real pattern exists.
+function ReopenBadge({ count }: { count?: number | null }) {
+  if (!count || count < 2) return null
+  return (
+    <span
+      title={`This section has reopened ${count} times in the last 14 days — seats here tend to churn, so watching it is worthwhile`}
+      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-amber-950/60 border-amber-800/70 text-amber-400 leading-none"
+    >
+      <span aria-hidden>🔁</span>
+      reopened {count}×
+    </span>
+  )
 }
 
 // Demand signal: how many students have this section on their watchlist.
@@ -227,6 +244,7 @@ export default function SectionTable({
                   <span className="inline-flex items-center gap-1.5 flex-wrap">
                     <StatusBadge section={s} />
                     <WatchCountBadge count={s.watch_count} />
+                    <ReopenBadge count={s.reopen_count} />
                   </span>
                 </td>
                 <td className="px-3 py-2.5">
@@ -293,6 +311,7 @@ export default function SectionTable({
               <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge section={s} />
                 <WatchCountBadge count={s.watch_count} />
+                <ReopenBadge count={s.reopen_count} />
                 <span className="text-xs text-zinc-500">Sec {s.section_number ?? '—'}</span>
               </div>
               {courseId && (
