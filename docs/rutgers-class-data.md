@@ -79,6 +79,19 @@ SUPABASE_SERVICE_ROLE_KEY
 Unknown subject codes still ingest courses and sections. They skip the
 department join until `lib/rutgers-subject-map.ts` is extended.
 
+## Section Status History
+
+Every real change to `teaching_assignments.open_status` — whether written by
+the ingest, the sniper worker, or the cron status collector — fires a Postgres
+trigger (migration `024_section_status_events.sql`) that appends a row to
+`section_status_events` (`assignment_id`, prev/new status + text, `observed_at`,
+optional `source`). The table is append-only and RLS-locked (service-role reads
+only). It powers the home page "Just Opened" feed and future open-probability /
+seat-risk analytics. This history cannot be reconstructed after the fact, so a
+status writer (worker bulk refresh **or** `worker/status-collector.mjs` as a
+Railway cron — never both) should always be running. Trigger behavior is tested
+by `scripts/verify-status-events.sql` (transactional, safe on any DB).
+
 ## Course Sniper Data Flow
 
 The always-on worker documented in [`sniper-worker.md`](sniper-worker.md)
