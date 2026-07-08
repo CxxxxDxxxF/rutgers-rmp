@@ -316,7 +316,45 @@ function ReviewsContent() {
           ))}
         </div>
       ) : reviews.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500">No reviews found</div>
+        ratingFilter !== 0 ? (
+          <div className="text-center py-16 space-y-3">
+            <div className="text-2xl">🔍</div>
+            <p className="text-sm font-semibold text-white">No reviews match this filter</p>
+            <p className="text-xs text-zinc-500">Try a wider rating range.</p>
+            <button
+              onClick={() => setRatingFilter(0)}
+              className="mt-1 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-85"
+              style={{ backgroundColor: '#CC0033' }}
+            >
+              Show all reviews
+            </button>
+          </div>
+        ) : (
+          <div className="max-w-md mx-auto text-center py-16 space-y-3">
+            <div className="text-3xl">📝</div>
+            <p className="text-base font-semibold text-white">No student reviews yet</p>
+            <p className="text-sm text-zinc-500 leading-relaxed">
+              RU Rate reviews are written by Rutgers students, for Rutgers students — real talk on
+              grading, workload, and whether a professor is worth taking. Be the first.
+            </p>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <Link
+                href="/professors"
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-85"
+                style={{ backgroundColor: '#CC0033' }}
+              >
+                Find a professor to review
+              </Link>
+              <Link
+                href="/courses"
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-300 border transition-colors hover:text-white hover:border-zinc-500"
+                style={{ borderColor: 'var(--border)', background: 'var(--card-2)' }}
+              >
+                Browse courses
+              </Link>
+            </div>
+          </div>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {reviews.map(r => <ReviewCard key={r.id} review={r} />)}
