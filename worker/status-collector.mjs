@@ -18,6 +18,7 @@
 // ==========================================================================
 
 import { createClient } from '@supabase/supabase-js'
+import { termToSocCode, parseInterval } from './lib/soc-status.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -152,16 +153,6 @@ async function loadWatchedAssignmentIds() {
   return ids
 }
 
-function termToSocCode(value) {
-  if (!value) return null
-  const normalized = String(value).toUpperCase()
-  if (normalized.includes('F')) return '9'
-  if (normalized.includes('SU')) return '7'
-  if (normalized.includes('S')) return '1'
-  if (['1', '7', '9'].includes(normalized)) return normalized
-  return null
-}
-
 async function fetchWithTimeout(url, init, timeoutMs) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -173,12 +164,6 @@ async function fetchWithTimeout(url, init, timeoutMs) {
   } finally {
     clearTimeout(timeout)
   }
-}
-
-function parseInterval(value, fallback, minimum) {
-  const parsed = Number.parseInt(value ?? '', 10)
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.max(parsed, minimum)
 }
 
 function errorMessage(error) {
