@@ -1,4 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  termToSocCode,
+  subjectFromCourseNumber,
+  normalize,
+  statusLabel,
+  parseSocSourceUrl,
+  parseInterval,
+} from './lib/soc-status.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -489,6 +497,12 @@ async function sendStatusNotifications(watch, openStatus, openStatusText, detect
     return { attempted: 0, sent: 0, notifiedStatus: null }
   }
 
+  // Secondary dedup only. The primary guarantee against duplicate alerts is in
+  // pollOnce: a detected change updates watch.previousOpenStatus in memory
+  // immediately, so the same transition is never re-processed and this function
+  // isn't called twice for it. This guard is a belt-and-suspenders check for the
+  // exact-same detection (same status at the same detected timestamp); it does
+  // NOT fire across distinct real transitions, which we always want to notify.
   if (
     normalize(watch.lastNotifiedStatus) === normalize(status) &&
     watch.lastNotifiedAssignmentStatusAt === statusAt
@@ -648,12 +662,6 @@ function courseLink(watch) {
     : null
 }
 
-function statusLabel(openStatus, openStatusText) {
-  if (openStatus === true) return 'OPEN'
-  if (openStatus === false) return 'CLOSED'
-  return normalize(openStatusText) ?? 'UNKNOWN'
-}
-
 function inferSource({ assignment, course, semester }) {
   const parsed = parseSocSourceUrl(assignment?.source_url)
   return {
@@ -664,50 +672,11 @@ function inferSource({ assignment, course, semester }) {
   }
 }
 
-function parseSocSourceUrl(sourceUrl) {
-  if (!sourceUrl) return {}
-  try {
-    const url = new URL(sourceUrl)
-    const subject = url.searchParams.get('subject') ?? undefined
-    const campus = url.searchParams.get('campus') ?? undefined
-    const semester = url.searchParams.get('semester') ?? undefined
-    if (!semester || semester.length < 5) return { subject, campus }
-    return {
-      subject,
-      campus,
-      year: parseInt(semester.slice(0, 4), 10),
-      term: semester.slice(4),
-    }
-  } catch {
-    return {}
-  }
-}
-
-function termToSocCode(value) {
-  if (!value) return null
-  const normalized = String(value).toUpperCase()
-  if (normalized.includes('F')) return '9'
-  if (normalized.includes('SU')) return '7'
-  if (normalized.includes('S')) return '1'
-  if (['1', '7', '9'].includes(normalized)) return normalized
-  return null
-}
-
-function subjectFromCourseNumber(courseNumber) {
-  if (!courseNumber) return null
-  const parts = String(courseNumber).split(':')
-  return parts.length >= 3 ? parts[1] : null
-}
-
 function sourceKey(source) {
   // The current Rutgers endpoint ignores subject as a filter, so the network
   // request is campus/term/year scoped. Keep subject in source metadata for logs
   // and future endpoint changes, but do not split requests by it.
   return `${source.year}:${source.term}:${source.campus}`
-}
-
-function normalize(value) {
-  return value?.trim().toUpperCase() ?? null
 }
 
 function one(value) {
@@ -938,12 +907,6 @@ async function fetchWithTimeout(url, init, timeoutMs) {
   } finally {
     clearTimeout(timeout)
   }
-}
-
-function parseInterval(value, fallback, minimum) {
-  const parsed = Number.parseInt(value ?? '', 10)
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.max(parsed, minimum)
 }
 
 function nextBackoff(current) {
