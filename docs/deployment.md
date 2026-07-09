@@ -1,6 +1,29 @@
 # Deployment
 
-RU Rate production runs on Railway.
+RU Rate production runs on Railway, with the database and status-history trigger
+on Supabase.
+
+## Launch checklist (current state → live)
+
+The ordered path from "code merged on `main`" to "everything running." Each step
+links to its detail section below.
+
+1. **Apply database migrations** — `supabase db push` (migration `024` adds the
+   `section_status_events` trigger). Already applied in production as of Jul 2026.
+2. **Redeploy `rurate-web`** — ships the latest merged features. Auto-deploys from
+   `main`, or deploy manually (see *Deploy Web Service*).
+3. **Run a status writer** — deploy `rurate-status-collector` (history-only mode)
+   so `open_status` stays fresh and `section_status_events` fills. Runbook in
+   [`sniper-worker.md`](sniper-worker.md).
+4. **Drain professor verdicts** — deploy `rurate-ai-collector` with
+   `OPENROUTER_API_KEY` to clear the AI backlog. Runbook in
+   [`sniper-worker.md`](sniper-worker.md).
+5. **(When alerts go live)** configure a domain + `RESEND_API_KEY` and switch
+   from the status collector to the always-on `rurate-sniper-worker`.
+6. **Verify** — `curl .../api/health` should report `status: "ok"` with a small
+   `status_history.minutes_since` and a shrinking `ai_analysis_backlog`.
+
+
 
 ## Current Railway Layout
 
@@ -20,11 +43,22 @@ the Railway names above when operating production.
 | Service | Runtime | Config |
 | --- | --- | --- |
 | `rurate-web` | Next.js standalone server | `railway.json` + `Dockerfile.web` |
-| `rurate-sniper-worker` | `npm run worker:sniper` | `railway.worker.json` + `Dockerfile.worker` |
+| `rurate-sniper-worker` | `npm run worker:sniper` (always-on) | `railway.worker.json` + `Dockerfile.worker` |
+| `rurate-status-collector` | `npm run worker:collect` (cron `*/5`) | `railway.collector.json` + `Dockerfile.worker` |
+| `rurate-ai-collector` | `npm run worker:ai` (cron `*/10`) | `railway.ai-collector.json` + `Dockerfile.worker` |
 
-The checked-in root `railway.json` is web-specific on purpose. The worker has a
-separate `railway.worker.json` because Railway CLI reads `railway.json` from the
-upload root.
+The checked-in root `railway.json` is web-specific on purpose. Each background
+service ships its own `railway.*.json` (copied to `railway.json` at upload time)
+because the Railway CLI reads `railway.json` from the upload root.
+
+**Operating modes.** The always-on `rurate-sniper-worker` does fast per-watch
+polling *and* a bulk status sweep *and* the AI batch. In **history-only mode**
+(no email/SMS alerts configured) it is not needed — instead run the two cron
+collectors, which cover the status sweep and the AI backlog for near-zero cost.
+Run the sniper worker **or** the status collector, never both (they'd duplicate
+Rutgers requests). Bring the worker back once alerts go live. The two cron
+services and their deploy runbooks are documented in
+[`sniper-worker.md`](sniper-worker.md).
 
 The web service is connected to GitHub `main` for automatic deploys. The worker
 service is intentionally not connected to the GitHub source because a repo-root
@@ -56,10 +90,16 @@ SNIPER_POLL_INTERVAL_MS=500
 SNIPER_WATCHLIST_REFRESH_MS=5000
 SNIPER_NO_WATCHES_INTERVAL_MS=1000
 SNIPER_MAX_BACKOFF_MS=15000
-SNIPER_DEFAULT_YEAR=2025
+SNIPER_DEFAULT_YEAR=2026
 SNIPER_DEFAULT_TERM=9
 SNIPER_DEFAULT_CAMPUS=NB
+SNIPER_BULK_CAMPUSES=NB,NK,CM
 ```
+
+Cron collector services (`rurate-status-collector`, `rurate-ai-collector`) need
+only `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`; the AI collector
+additionally needs `OPENROUTER_API_KEY`. See [`sniper-worker.md`](sniper-worker.md)
+for their tunables.
 
 Provider variables required before promising outbound alerts:
 
@@ -167,6 +207,16 @@ Run these after a web deploy:
 curl -sS -o /dev/null -w "%{http_code}\n" https://rurate-web-production.up.railway.app/
 ```
 
+Operational health (also suitable for a free uptime monitor):
+
+```bash
+curl -sS https://rurate-web-production.up.railway.app/api/health
+```
+
+Expected `status: "ok"` when the database is reachable and a status writer is
+running; `"degraded"` means no collector/worker is writing (the history feed is
+going cold); a `503` means the database is unreachable.
+
 Invalid watchlist email should be rejected:
 
 ```bash
@@ -199,6 +249,8 @@ npm run lint
 npm test
 npm run build
 node --check worker/sniper-worker.mjs
+node --check worker/status-collector.mjs
+node --check worker/ai-analysis-collector.mjs
 ```
 
 Optional data audit:
