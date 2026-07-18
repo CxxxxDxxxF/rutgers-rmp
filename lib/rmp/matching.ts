@@ -137,16 +137,21 @@ function formatRmpName(candidate: RMPProfessorSearchResult): string {
   return `${candidate.firstName} ${candidate.lastName}`.trim()
 }
 
+// Generational suffixes are routinely present on one side of a match (RMP or
+// the Schedule of Classes) but not the other, so strip them before comparing.
+const NAME_SUFFIXES = /\b(jr|sr|ii|iii|iv|v)\b/g
+
 function normalizeName(value: string | null | undefined): string {
   return normalizeText(value)
     .replace(/\b(dr|prof|professor|mr|mrs|ms)\b/g, '')
+    .replace(NAME_SUFFIXES, '')
     .replace(/\b[a-z]\b/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
 function normalizeNamePart(value: string | null | undefined): string {
-  return normalizeText(value).replace(/\s+/g, ' ').trim()
+  return normalizeText(value).replace(NAME_SUFFIXES, '').replace(/\s+/g, ' ').trim()
 }
 
 function departmentsOverlap(localDepartment: string, rmpDepartment: string): boolean {

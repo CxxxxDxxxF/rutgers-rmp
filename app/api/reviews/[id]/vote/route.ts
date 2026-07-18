@@ -64,18 +64,11 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to record vote' }, { status: 500 })
   }
 
-  // Recalculate from source of truth to prevent count drift
+  // reviews.helpful_count is maintained atomically by the AFTER trigger on
+  // review_votes (migration 016). Read the post-trigger value for the response;
+  // writing it here from the app would reintroduce the exact
+  // upsert -> count -> update race the trigger was added to eliminate.
   const helpful_count = await getHelpfulCount(supabase, review_id)
-
-  const { error: updateError } = await supabase
-    .from('reviews')
-    .update({ helpful_count })
-    .eq('id', review_id)
-
-  if (updateError) {
-    log.error('Error updating helpful_count:', updateError)
-    return NextResponse.json({ error: 'Failed to update count' }, { status: 500 })
-  }
 
   return NextResponse.json({ helpful_count })
 }

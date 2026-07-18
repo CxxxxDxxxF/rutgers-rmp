@@ -1,4 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  termToSocCode,
+  subjectFromCourseNumber,
+  normalize,
+  statusLabel,
+  parseSocSourceUrl,
+  parseInterval,
+} from './lib/soc-status.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -18,7 +26,18 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
-const AI_ANALYSIS_INTERVAL_MS = parseInterval(process.env.AI_ANALYSIS_INTERVAL_MS, 30 * 60 * 1000, 60 * 1000)
+// Default to a 10-minute cadence so the analysis backlog drains in hours.
+const AI_ANALYSIS_INTERVAL_MS = parseInterval(process.env.AI_ANALYSIS_INTERVAL_MS, 10 * 60 * 1000, 60 * 1000)
+const AI_ANALYSIS_BATCH_SIZE = Math.min(50, Math.max(1, parseInt(process.env.AI_ANALYSIS_BATCH_SIZE ?? '15', 10) || 15))
+const AI_ANALYSIS_ITEM_DELAY_MS = Math.max(0, parseInt(process.env.AI_ANALYSIS_ITEM_DELAY_MS ?? '800', 10) || 800)
+// Site-wide open/closed refresh via the lightweight SOC openSections endpoint.
+// One request per cycle keeps every section's status fresh even with no watches.
+const SNIPER_BULK_REFRESH_MS = parseInterval(process.env.SNIPER_BULK_REFRESH_MS, 10 * 60 * 1000, 60 * 1000)
+// The catalog is ingested across every Rutgers campus, so the bulk sweep unions
+// the open lists from each — an NB-only list would wrongly mark NK/CM sections
+// CLOSED.
+const SNIPER_BULK_CAMPUSES = (process.env.SNIPER_BULK_CAMPUSES ?? 'NB,NK,CM')
+  .split(',').map(c => c.trim().toUpperCase()).filter(Boolean)
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error(JSON.stringify({
@@ -53,6 +72,8 @@ let loopCount = 0
 let backoffMs = 0
 let lastAnalysisRun = 0
 let analysisRunning = false
+let lastBulkRefresh = 0
+let bulkRefreshRunning = false
 
 main().catch(error => {
   console.error(JSON.stringify({
@@ -85,6 +106,15 @@ async function main() {
       runAnalysisBatch().catch(err => {
         console.error(JSON.stringify({ event: 'analysis_batch_error', message: errorMessage(err) }))
       }).finally(() => { analysisRunning = false })
+    }
+
+    // Runs before the idle check so section statuses stay fresh with zero watches.
+    if (!bulkRefreshRunning && Date.now() - lastBulkRefresh >= SNIPER_BULK_REFRESH_MS) {
+      lastBulkRefresh = Date.now()
+      bulkRefreshRunning = true
+      runBulkStatusRefresh().catch(err => {
+        console.error(JSON.stringify({ event: 'bulk_refresh_error', message: errorMessage(err) }))
+      }).finally(() => { bulkRefreshRunning = false })
     }
 
     try {
@@ -357,6 +387,105 @@ async function updateAssignmentStatus(assignmentId, openStatus, openStatusText, 
   if (error) throw new Error(`Failed to update assignment ${assignmentId}: ${error.message}`)
 }
 
+// ── Site-wide open/closed refresh ──────────────────────────────────────────
+// openSections.json returns every open index number for a year/term/campus in
+// a single small payload, so one request per cycle keeps the whole catalog's
+// open_status current — the browse pages stop depending on stale ingest data.
+
+async function runBulkStatusRefresh() {
+  const startedAt = Date.now()
+
+  const { data: sem, error: semError } = await supabase
+    .from('semesters')
+    .select('id, year, term, code')
+    .eq('is_current', true)
+    .maybeSingle()
+  if (semError) throw new Error(`Bulk refresh semester lookup: ${semError.message}`)
+  if (!sem) {
+    console.log(JSON.stringify({ event: 'bulk_refresh_skip', reason: 'no_current_semester' }))
+    return
+  }
+
+  const year = sem.year ?? parseInt(String(sem.code ?? '').replace(/\D/g, ''), 10)
+  const term = termToSocCode(sem.term ?? sem.code) ?? DEFAULT_TERM
+  if (!Number.isFinite(year)) {
+    console.log(JSON.stringify({ event: 'bulk_refresh_skip', reason: 'unresolvable_year', code: sem.code }))
+    return
+  }
+
+  // Union the open index numbers across every ingested campus.
+  const openSet = new Set()
+  for (const campus of SNIPER_BULK_CAMPUSES) {
+    const url = new URL('https://classes.rutgers.edu/soc/api/openSections.json')
+    url.searchParams.set('year', String(year))
+    url.searchParams.set('term', term)
+    url.searchParams.set('campus', campus)
+    const response = await fetchWithTimeout(url, {
+      headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'RU-Rate-sniper-worker/1.0' },
+    }, SOC_FETCH_TIMEOUT_MS)
+    if (!response.ok) throw new Error(`openSections ${campus} HTTP ${response.status}`)
+    const openIndexes = await response.json()
+    if (Array.isArray(openIndexes)) {
+      for (const idx of openIndexes) openSet.add(String(idx))
+    }
+  }
+  if (openSet.size === 0) {
+    // An empty union mid-semester is far more likely an upstream glitch than
+    // every section in the university closing at once — don't mass-close.
+    console.log(JSON.stringify({ event: 'bulk_refresh_skip', reason: 'empty_open_list' }))
+    return
+  }
+
+  // Page through the semester's assignments and diff against the open set.
+  // Watched sections are intentionally left to the per-watch poller, which is
+  // their only status writer that also sends alerts. If the bulk pass flipped a
+  // watched row's open_status first, the poller's next reload would read the
+  // already-updated status, compute "no change", and never notify — a silently
+  // dropped alert, which is the one failure the sniper must not have.
+  const watchedAssignmentIds = new Set((watches ?? []).map(w => w.assignmentId).filter(Boolean))
+  const toOpen = []
+  const toClose = []
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data: rows, error } = await supabase
+      .from('teaching_assignments')
+      .select('id, index_number, open_status')
+      .eq('semester_id', sem.id)
+      .not('index_number', 'is', null)
+      .range(from, from + PAGE - 1)
+    if (error) throw new Error(`Bulk refresh page fetch: ${error.message}`)
+    for (const row of rows ?? []) {
+      if (watchedAssignmentIds.has(row.id)) continue
+      const isOpen = openSet.has(String(row.index_number))
+      if (isOpen && row.open_status !== true) toOpen.push(row.id)
+      else if (!isOpen && row.open_status !== false) toClose.push(row.id)
+    }
+    if (!rows || rows.length < PAGE) break
+  }
+
+  const detectedAt = new Date().toISOString()
+  const CHUNK = 400
+  for (const [ids, openStatus, text] of [[toOpen, true, 'OPEN'], [toClose, false, 'CLOSED']]) {
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const { error } = await supabase
+        .from('teaching_assignments')
+        .update({ open_status: openStatus, open_status_text: text, status_updated_at: detectedAt })
+        .in('id', ids.slice(i, i + CHUNK))
+      if (error) throw new Error(`Bulk refresh update: ${error.message}`)
+    }
+  }
+
+  console.log(JSON.stringify({
+    event: 'bulk_refresh_complete',
+    semester: sem.code ?? sem.id,
+    soc_open_indexes: openSet.size,
+    opened: toOpen.length,
+    closed: toClose.length,
+    excluded_watched: watchedAssignmentIds.size,
+    ms: Date.now() - startedAt,
+  }))
+}
+
 async function sendStatusNotifications(watch, openStatus, openStatusText, detectedAt) {
   const status = statusLabel(openStatus, openStatusText)
   const statusAt = detectedAt.toISOString()
@@ -368,6 +497,12 @@ async function sendStatusNotifications(watch, openStatus, openStatusText, detect
     return { attempted: 0, sent: 0, notifiedStatus: null }
   }
 
+  // Secondary dedup only. The primary guarantee against duplicate alerts is in
+  // pollOnce: a detected change updates watch.previousOpenStatus in memory
+  // immediately, so the same transition is never re-processed and this function
+  // isn't called twice for it. This guard is a belt-and-suspenders check for the
+  // exact-same detection (same status at the same detected timestamp); it does
+  // NOT fire across distinct real transitions, which we always want to notify.
   if (
     normalize(watch.lastNotifiedStatus) === normalize(status) &&
     watch.lastNotifiedAssignmentStatusAt === statusAt
@@ -527,12 +662,6 @@ function courseLink(watch) {
     : null
 }
 
-function statusLabel(openStatus, openStatusText) {
-  if (openStatus === true) return 'OPEN'
-  if (openStatus === false) return 'CLOSED'
-  return normalize(openStatusText) ?? 'UNKNOWN'
-}
-
 function inferSource({ assignment, course, semester }) {
   const parsed = parseSocSourceUrl(assignment?.source_url)
   return {
@@ -543,50 +672,11 @@ function inferSource({ assignment, course, semester }) {
   }
 }
 
-function parseSocSourceUrl(sourceUrl) {
-  if (!sourceUrl) return {}
-  try {
-    const url = new URL(sourceUrl)
-    const subject = url.searchParams.get('subject') ?? undefined
-    const campus = url.searchParams.get('campus') ?? undefined
-    const semester = url.searchParams.get('semester') ?? undefined
-    if (!semester || semester.length < 5) return { subject, campus }
-    return {
-      subject,
-      campus,
-      year: parseInt(semester.slice(0, 4), 10),
-      term: semester.slice(4),
-    }
-  } catch {
-    return {}
-  }
-}
-
-function termToSocCode(value) {
-  if (!value) return null
-  const normalized = String(value).toUpperCase()
-  if (normalized.includes('F')) return '9'
-  if (normalized.includes('SU')) return '7'
-  if (normalized.includes('S')) return '1'
-  if (['1', '7', '9'].includes(normalized)) return normalized
-  return null
-}
-
-function subjectFromCourseNumber(courseNumber) {
-  if (!courseNumber) return null
-  const parts = String(courseNumber).split(':')
-  return parts.length >= 3 ? parts[1] : null
-}
-
 function sourceKey(source) {
   // The current Rutgers endpoint ignores subject as a filter, so the network
   // request is campus/term/year scoped. Keep subject in source metadata for logs
   // and future endpoint changes, but do not split requests by it.
   return `${source.year}:${source.term}:${source.campus}`
-}
-
-function normalize(value) {
-  return value?.trim().toUpperCase() ?? null
 }
 
 function one(value) {
@@ -606,13 +696,14 @@ function groupBy(items, keyFn) {
 }
 
 async function runAnalysisBatch() {
-  const BATCH_SIZE = 5
-  const ITEM_DELAY_MS = 800
+  const BATCH_SIZE = AI_ANALYSIS_BATCH_SIZE
+  const ITEM_DELAY_MS = AI_ANALYSIS_ITEM_DELAY_MS
 
   const { data: batch, error } = await supabase
     .from('professor_cache')
     .select('rmp_id, first_name, last_name, department, avg_rating, avg_difficulty, would_take_again, num_ratings')
     .is('ai_analysis', null)
+    .not('rmp_id', 'is', null)
     .order('num_ratings', { ascending: false, nullsFirst: false })
     .limit(BATCH_SIZE)
 
@@ -816,12 +907,6 @@ async function fetchWithTimeout(url, init, timeoutMs) {
   } finally {
     clearTimeout(timeout)
   }
-}
-
-function parseInterval(value, fallback, minimum) {
-  const parsed = Number.parseInt(value ?? '', 10)
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.max(parsed, minimum)
 }
 
 function nextBackoff(current) {

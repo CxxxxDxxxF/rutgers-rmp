@@ -346,6 +346,12 @@ export async function PATCH(req: NextRequest) {
     ? notificationUpdate(body.notification_settings)
     : { last_seen_status: sanitizeStatus(body.last_seen_status) }
 
+  // A notification_settings payload with no recognized keys is a no-op — don't
+  // issue a blank UPDATE that would touch every matched row for nothing.
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ ok: true })
+  }
+
   try {
     const supabase = getServiceClient()
     if (!supabase) {
@@ -455,18 +461,30 @@ type NotificationSettingsInput = {
   notify_on_close?: boolean
 } | null | undefined
 
+// Build a PARTIAL update: only the notification columns whose keys are actually
+// present in the payload. Treating this as a full overwrite (the old behavior)
+// meant a partial PATCH — e.g. flipping notify_on_open — silently nulled the
+// saved email/phone and disabled both channels. Validation guarantees an
+// enabled channel arrives with a valid address in the same request, so the
+// email/email_enabled interdependency stays consistent under merging.
 function notificationUpdate(settings: NotificationSettingsInput) {
-  const email = sanitizeEmail(settings?.email)
-  const phone = sanitizePhone(settings?.phone_e164)
+  const update: Record<string, unknown> = {}
+  if (!settings) return update
 
-  return {
-    notify_email: email,
-    notify_phone_e164: phone,
-    notify_email_enabled: Boolean(settings?.email_enabled && email),
-    notify_sms_enabled: Boolean(settings?.sms_enabled && phone),
-    notify_on_open: settings?.notify_on_open !== false,
-    notify_on_close: settings?.notify_on_close !== false,
-  }
+  const has = (key: keyof NonNullable<NotificationSettingsInput>) =>
+    Object.prototype.hasOwnProperty.call(settings, key)
+
+  const email = sanitizeEmail(settings.email)
+  const phone = sanitizePhone(settings.phone_e164)
+
+  if (has('email')) update.notify_email = email
+  if (has('phone_e164')) update.notify_phone_e164 = phone
+  if (has('email_enabled')) update.notify_email_enabled = Boolean(settings.email_enabled && email)
+  if (has('sms_enabled')) update.notify_sms_enabled = Boolean(settings.sms_enabled && phone)
+  if (has('notify_on_open')) update.notify_on_open = settings.notify_on_open !== false
+  if (has('notify_on_close')) update.notify_on_close = settings.notify_on_close !== false
+
+  return update
 }
 
 function validateNotificationSettings(settings: NotificationSettingsInput) {

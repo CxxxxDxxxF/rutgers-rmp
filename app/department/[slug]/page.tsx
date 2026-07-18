@@ -508,7 +508,7 @@ function DepartmentContent({ slug }: { slug: string }) {
                       {profSearch && <> · matching &ldquo;{profSearch}&rdquo;</>}
                     </p>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 stagger-grid">
                     {visibleProfs.map((prof) => (
                       <ProfessorCard key={prof.slug} prof={prof} />
                     ))}
