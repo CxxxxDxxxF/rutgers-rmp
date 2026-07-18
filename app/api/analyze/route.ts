@@ -6,6 +6,7 @@ import { analyzeProfessor } from '@/lib/ai'
 import { log } from '@/lib/logger'
 
 const CACHE_DAYS = 30
+const hasOpenRouterKey = Boolean(process.env.OPENROUTER_API_KEY)
 
 // Cache reads use the anon client (RLS allows SELECT on professor_cache) so
 // cached profiles stay available even when the service role key isn't set.
@@ -46,9 +47,9 @@ export async function POST(req: NextRequest) {
 
     if (cached && !forceRefresh) {
       const age = Date.now() - new Date(cached.cached_at).getTime()
-      // Rows cached without an AI verdict count as stale so they self-heal
-      // once an OpenRouter key is configured.
-      const isStale = age > CACHE_DAYS * 24 * 60 * 60 * 1000 || !cached.ai_analysis
+      // RMP data freshness is independent from AI availability. Missing
+      // analysis should self-heal only when an OpenRouter key is configured.
+      const isStale = age > CACHE_DAYS * 24 * 60 * 60 * 1000 || (hasOpenRouterKey && !cached.ai_analysis)
 
       if (!isStale) {
         if (serviceClient) {
@@ -65,20 +66,21 @@ export async function POST(req: NextRequest) {
     const professor = await getProfessorById(rmpId)
     if (!professor) return NextResponse.json({ error: 'Professor not found' }, { status: 404 })
 
-    // Run AI analysis; a failure (e.g. missing OPENROUTER_API_KEY) degrades to
-    // a profile without a verdict instead of failing the whole request.
-    let ai_analysis = null
-    try {
-      ai_analysis = await analyzeProfessor(
-        `${professor.firstName} ${professor.lastName}`,
-        professor.department,
-        professor.avgRating,
-        professor.avgDifficulty,
-        professor.wouldTakeAgainPercent,
-        professor.ratings
-      )
-    } catch (err) {
-      log.error('AI analysis error:', err)
+    // AI is optional. Preserve prior analysis if the provider is unavailable or fails.
+    let ai_analysis = cached?.ai_analysis ?? null
+    if (hasOpenRouterKey) {
+      try {
+        ai_analysis = await analyzeProfessor(
+          `${professor.firstName} ${professor.lastName}`,
+          professor.department,
+          professor.avgRating,
+          professor.avgDifficulty,
+          professor.wouldTakeAgainPercent,
+          professor.ratings
+        )
+      } catch (err) {
+        log.error('AI analysis error:', err)
+      }
     }
 
     const slug = makeSlug(professor.firstName, professor.lastName, professor.id)
@@ -109,8 +111,7 @@ export async function POST(req: NextRequest) {
       search_count: (cached?.search_count ?? 0) + 1,
     }
 
-    // Only cache complete records — a null analysis shouldn't be served for 30 days.
-    if (!serviceClient || !ai_analysis) {
+    if (!serviceClient) {
       return NextResponse.json(record)
     }
 
