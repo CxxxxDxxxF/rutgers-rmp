@@ -22,6 +22,7 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     ".next_old/**",
+    ".next.trash-*/**",
     "out/**",
     "build/**",
     ".tmp-test-build/**",

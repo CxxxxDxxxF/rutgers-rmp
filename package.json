@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "rm -rf .tmp-test-build && tsc -p tsconfig.test.json && node --test .tmp-test-build/lib/*.test.js .tmp-test-build/lib/rmp/*.test.js",
@@ -13,9 +13,11 @@
     "ingest:dry": "npx tsx scripts/ingest-soc.ts --dry-run",
     "ingest:cs": "npx tsx scripts/ingest-soc.ts --subjects 198",
     "ingest:all": "npx tsx scripts/ingest-soc.ts",
+    "ingest:bulk": "npx tsx scripts/ingest-soc-bulk.ts",
     "worker:sniper": "node worker/sniper-worker.mjs",
     "migrate": "npx tsx scripts/apply-migration.ts",
     "enrich:rmp": "npx tsx scripts/enrich-rmp.ts",
+    "refresh:rmp-cache": "npx tsx scripts/refresh-rmp-cache.ts",
     "audit:data": "npx tsx scripts/audit-data.ts"
   },
   "dependencies": {
