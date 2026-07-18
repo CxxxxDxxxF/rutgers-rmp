@@ -235,7 +235,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
       'X-Title': 'RU Rate',
     },
     body: JSON.stringify({
-      model: 'anthropic/claude-haiku-4-5',
+      model: 'google/gemini-2.5-flash-lite',
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     }),
