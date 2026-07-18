@@ -3,25 +3,43 @@
 RU Rate production runs on Railway, with the database and status-history trigger
 on Supabase.
 
-## Launch checklist (current state → live)
+## Launch checklist
 
-The ordered path from "code merged on `main`" to "everything running." Each step
-links to its detail section below.
+Launch prep completed **Jul 18, 2026**: migrations `001`–`029` applied, security
+advisors clean, `rurate-web` live on the latest `main`, status collector writing
+fresh events, and the AI verdict backlog fully drained (all cached professors
+analyzed with `google/gemini-2.5-flash-lite`). `rurate-ai-collector` stays on a
+`*/10` cron as the automatic top-up for newly RMP-enriched professors.
 
-1. **Apply database migrations** — `supabase db push` (migration `024` adds the
-   `section_status_events` trigger). Already applied in production as of Jul 2026.
-2. **Redeploy `rurate-web`** — ships the latest merged features. Auto-deploys from
-   `main`, or deploy manually (see *Deploy Web Service*).
-3. **Run a status writer** — deploy `rurate-status-collector` (history-only mode)
-   so `open_status` stays fresh and `section_status_events` fills. Runbook in
+### Ongoing (every deploy)
+
+1. **Migrations first** — `supabase db push` (or Supabase MCP `apply_migration`
+   mirrored into `supabase/migrations/`) before shipping code that depends on them.
+2. **Ship** — merge to `main`; `rurate-web` auto-deploys. Cron/worker services
+   need a manual `railway up` (see *Deploy Web Service* / runbooks) — note that
+   `railway up` against a cron service reports `SKIPPED` and simply becomes the
+   build the next scheduled run uses.
+3. **Verify** — `curl .../api/health` must report `status: "ok"`, a small
+   `status_history.minutes_since`, and `ai_analysis_backlog` near 0.
+
+### Alerts go-live (next milestone)
+
+4. **Sending domain** — buy/point a domain, verify it in Resend, set
+   `RESEND_API_KEY` + `NOTIFY_EMAIL_FROM` on `rurate-sniper-worker`.
+5. **SMS (optional)** — set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+   `TWILIO_FROM_NUMBER` on `rurate-sniper-worker`.
+6. **Switch status writers** — once the always-on worker's bulk refresh is
+   feeding `section_status_events`, disable the `rurate-status-collector` cron
+   (never run both; duplicate Rutgers requests). Runbook in
    [`sniper-worker.md`](sniper-worker.md).
-4. **Drain professor verdicts** — deploy `rurate-ai-collector` with
-   `OPENROUTER_API_KEY` to clear the AI backlog. Runbook in
-   [`sniper-worker.md`](sniper-worker.md).
-5. **(When alerts go live)** configure a domain + `RESEND_API_KEY` and switch
-   from the status collector to the always-on `rurate-sniper-worker`.
-6. **Verify** — `curl .../api/health` should report `status: "ok"` with a small
-   `status_history.minutes_since` and a shrinking `ai_analysis_backlog`.
+7. **Verify an alert end-to-end** — watch a closed section, flip it in a test,
+   confirm email/SMS delivery and no PII in logs.
+
+### Seasonal
+
+8. **Semester rollover** — ingest the new term (`npm run ingest -- --dry-run …`
+   first), add the semester migration if needed, and update
+   `SNIPER_DEFAULT_YEAR` / `SNIPER_DEFAULT_TERM` on the worker.
 
 
 
