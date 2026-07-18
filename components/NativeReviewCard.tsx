@@ -109,7 +109,7 @@ export default function NativeReviewCard({ review }: { review: NativeReview }) {
   }
 
   return (
-    <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+    <div className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
       {/* Left quality accent bar */}
       <div
         className="absolute left-0 top-0 bottom-0 w-[3px]"

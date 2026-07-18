@@ -78,7 +78,7 @@ function DeptCard({ dept }: { dept: DepartmentRow }) {
         if (analyzed === 0) return null
         return (
           <div className="mt-3">
-            <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-900 gap-px">
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-[var(--card)] gap-px">
               {dept.take_count > 0 && (
                 <div style={{ flex: dept.take_count, backgroundColor: '#22c55e' }} title={`${dept.take_count} TAKE`} />
               )}

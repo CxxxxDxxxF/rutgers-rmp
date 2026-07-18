@@ -24,7 +24,7 @@ function StatusBadge({ status }: { status: string }) {
     )
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold text-zinc-500 bg-zinc-900 border border-zinc-700">
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold text-zinc-500 bg-[var(--card)] border border-zinc-700">
       Free
     </span>
   )

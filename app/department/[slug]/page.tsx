@@ -110,7 +110,7 @@ function VerdictBreakdown({ professors }: { professors: ProfessorRow[] }) {
         <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">AI verdict breakdown</span>
         <span className="text-[10px] text-zinc-700">{analyzed} of {professors.length} analyzed</span>
       </div>
-      <div className="flex h-2 rounded-full overflow-hidden bg-zinc-900">
+      <div className="flex h-2 rounded-full overflow-hidden bg-[var(--card)]">
         {takes > 0 && (
           <div style={{ width: `${takePct}%`, backgroundColor: '#22c55e' }} />
         )}

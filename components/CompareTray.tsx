@@ -11,7 +11,7 @@ export default function CompareTray() {
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl">
-      <div className="bg-zinc-900/95 backdrop-blur border border-zinc-700 rounded-2xl shadow-2xl px-4 py-3 flex flex-wrap items-center gap-2">
+      <div className="bg-[#140f11]/95 backdrop-blur border border-zinc-700 rounded-2xl shadow-2xl px-4 py-3 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-zinc-400 mr-1">Compare:</span>
 
         {items.map(item => (
