@@ -30,8 +30,8 @@ Deployment details and runbooks live in
 - Course search by title, course number, department, credits, and level.
 - Semester-aware course pages with sections, buildings, meeting times, credits,
   instructors, index numbers, and open/closed status.
-- Rutgers New Brunswick professor search with RateMyProfessors data, cached AI
-  summaries, and native RU Rate reviews.
+- Rutgers New Brunswick professor search with RateMyProfessors data, optional
+  cached AI summaries, and native RU Rate reviews.
 - Professor comparison for ratings, difficulty, would-take-again, workload,
   grading, courses taught, and student review signals.
 - Schedule ranking from pasted instructor names.
@@ -48,7 +48,7 @@ Deployment details and runbooks live in
 - Supabase for cached professor data, Rutgers course data, watchlists, native
   reviews, submissions, and Pro interest
 - RateMyProfessors GraphQL for professor search/review source data
-- OpenRouter for Claude Haiku review summaries
+- Optional OpenRouter support for Claude Haiku review summaries
 - Rutgers Schedule of Classes API for courses and section status
 - Railway for the web service and always-on sniper worker
 
@@ -73,9 +73,14 @@ Server-side features also need:
 
 ```text
 SUPABASE_SERVICE_ROLE_KEY
-OPENROUTER_API_KEY
 ADMIN_SECRET
 VOTE_FINGERPRINT_SALT
+```
+
+Optional AI summaries need:
+
+```text
+OPENROUTER_API_KEY
 ```
 
 Run the app:
@@ -112,6 +117,12 @@ groups:
 | `020` | Summer 2026 semester |
 | `021` | User subscriptions (Stripe Pro) |
 | `022` | Normalize department school labels to canonical NB names |
+| `023` | Professor directory view and advisor security fixes |
+| `024` | User submissions app-contract columns |
+| `025` | Generated subject departments for all-campus SOC coverage |
+| `026` | Correct generated subject `975` department slug |
+| `027` | Repair professor-department links from verified teaching assignments |
+| `028` | Repair missing `professor_cache.tag_counts` column |
 | `20260618223316` | Backfill Rutgers SOC subject-code → department links |
 
 Migration numbers `004`-`005` are intentionally unused (no gap in applied
@@ -152,7 +163,21 @@ server credentials are present:
 npm run ingest -- --year 2025 --term 9 --campus all
 ```
 
+For large all-campus backfills, prefer the bulk ingest path after a dry-run:
+
+```bash
+npm run ingest:bulk -- --dry-run --year 2026 --term 9 --campus all
+npm run ingest:bulk -- --year 2026 --term 9 --campus all
+```
+
 More detail is in [`docs/rutgers-class-data.md`](docs/rutgers-class-data.md).
+
+Refresh stale RateMyProfessors cache rows after reviewing a dry run:
+
+```bash
+npm run refresh:rmp-cache -- --limit 25
+npm run refresh:rmp-cache -- --apply --confirm-rmp-refresh-reviewed --limit 25
+```
 
 ## Course Sniper
 

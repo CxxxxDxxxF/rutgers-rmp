@@ -56,6 +56,19 @@ environment variables are set:
 npm run ingest -- --year 2025 --term 9 --campus all
 ```
 
+For large all-campus backfills, use the bulk path after the same dry-run review:
+
+```bash
+npm run ingest:bulk -- --dry-run --year 2026 --term 9 --campus all
+npm run ingest:bulk -- --year 2026 --term 9 --campus all
+```
+
+The bulk ingest preserves New Brunswick course slugs like `198-111`, gives
+non-New-Brunswick courses full-code slugs like `21-198-111` to avoid collisions,
+creates generated department rows for unmapped Rutgers subject codes, and treats
+`instructorsText` as a fallback when Rutgers leaves the structured instructor
+array empty.
+
 Required for write mode:
 
 ```text

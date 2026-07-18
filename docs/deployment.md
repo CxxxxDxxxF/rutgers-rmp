@@ -43,9 +43,14 @@ Web variables:
 
 ```text
 NEXT_PUBLIC_SUPABASE_ANON_KEY
-OPENROUTER_API_KEY
 ADMIN_SECRET
 VOTE_FINGERPRINT_SALT
+```
+
+Optional AI summaries:
+
+```text
+OPENROUTER_API_KEY
 ```
 
 Worker variables:
