@@ -18,6 +18,12 @@ export async function POST(req: NextRequest) {
   if (!isAdminAuthorized(req.headers.get('authorization'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  if (!process.env.OPENROUTER_API_KEY) {
+    return NextResponse.json({
+      error: 'AI analysis is not configured',
+      hint: 'Set OPENROUTER_API_KEY to enable batch AI summaries. RMP profile cache works without it.',
+    }, { status: 503 })
+  }
 
   let limit = DEFAULT_LIMIT
   try {
@@ -101,6 +107,9 @@ export async function GET(req: NextRequest) {
     total: total ?? 0,
     with_ai: withAI ?? 0,
     missing_ai: (total ?? 0) - (withAI ?? 0),
-    hint: 'POST to this endpoint with { "limit": 20 } and Authorization: Bearer <ADMIN_SECRET> to batch-analyze',
+    ai_configured: Boolean(process.env.OPENROUTER_API_KEY),
+    hint: process.env.OPENROUTER_API_KEY
+      ? 'POST to this endpoint with { "limit": 20 } and Authorization: Bearer <ADMIN_SECRET> to batch-analyze'
+      : 'Set OPENROUTER_API_KEY to enable batch AI summaries. RMP profile cache works without it.',
   })
 }

@@ -9,6 +9,7 @@ import {
   type NativeReviewStats,
   type ProfessorGrade,
 } from '@/lib/professor-grade'
+import type { CandidateMatchLevel } from '@/lib/rmp/types'
 
 export const maxDuration = 60
 
@@ -25,6 +26,7 @@ export interface ScheduleProfResult {
   slug: string
   ai_analysis: AIAnalysis | null
   student_grade: ProfessorGrade | null
+  matchLevel: CandidateMatchLevel
 }
 
 export async function POST(req: NextRequest) {
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
     unique.map(async (name): Promise<ScheduleProfResult | null> => {
       try {
         const candidates = await lookupProfessorCandidates(name)
-        const top = candidates.find(c => c.matchLevel !== 'weak_candidate')
+        const top = candidates.find(c => c.matchLevel !== 'weak_candidate') ?? candidates[0]
         if (!top) return null
         const prof = top.professor
         return {
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
           slug: makeSlug(prof.firstName, prof.lastName, prof.id),
           ai_analysis: null,
           student_grade: null,
+          matchLevel: top.matchLevel,
         }
       } catch {
         return null

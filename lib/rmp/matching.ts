@@ -108,7 +108,7 @@ export function rankProfessorCandidates(
 }
 
 function normalizeProfessorInput(input: LocalProfessorCandidateInput | string): LocalProfessorCandidateInput {
-  if (typeof input === 'string') return { name: input }
+  if (typeof input === 'string') input = { name: input }
 
   const name = input.name ?? formatLocalProfessorName(input)
   const split = splitName(name)

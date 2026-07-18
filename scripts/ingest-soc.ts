@@ -113,11 +113,12 @@ let deptCache: Record<string, string> | null = null
 async function loadDeptCache(): Promise<Record<string, string>> {
   if (DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) return {}
   if (deptCache) return deptCache
-  const { data, error } = await supabase.from('departments').select('id, slug')
+  const { data, error } = await supabase.from('departments').select('id, slug, code')
   if (error) throw new Error(`Failed to load departments: ${error.message}`)
   const map: Record<string, string> = {}
   for (const d of data ?? []) {
     map[d.slug] = d.id
+    map[`code:${d.code}`] = d.id
   }
   deptCache = map
   return map
@@ -168,9 +169,12 @@ function generateSlug(name: NormalizedName): string {
 // ── Course slug from courseString ─────────────────────────────────────────
 
 function courseSlug(courseString: string): string {
-  // "01:198:111" => "198-111" (subject + number, unique across subjects)
+  // Preserve existing New Brunswick URLs ("01:198:111" => "198-111").
+  // Include the school prefix for Newark/Camden to avoid cross-campus
+  // collisions such as 01:198:111 and 21:198:111.
   const parts = courseString.split(':')
-  return parts.slice(-2).join('-').toLowerCase()
+  const slugParts = parts[0] === '01' ? parts.slice(-2) : parts
+  return slugParts.join('-').toLowerCase()
 }
 
 interface CampusCourse {
@@ -367,9 +371,9 @@ async function main() {
         console.log(`    CREATED course`)
 
         // Link course to department if we have a mapping
-        const deptSlug = RUTGERS_SUBJECT_TO_DEPT_SLUG[subject]
-        if (deptSlug && deptMap[deptSlug]) {
-          const deptId = deptMap[deptSlug]
+        const deptKey = RUTGERS_SUBJECT_TO_DEPT_SLUG[subject] ?? `code:${subject}`
+        if (deptMap[deptKey]) {
+          const deptId = deptMap[deptKey]
           const { error: linkErr } = await supabase
             .from('course_departments')
             .insert({ course_id: courseId, department_id: deptId, is_primary: true })
@@ -387,6 +391,12 @@ async function main() {
       const indexNum = section.index
       const instructorsRaw = section.instructors ?? []
       const instructorsText = section.instructorsText ?? ''
+      const instructorNames = instructorsRaw
+        .map((instructor: any) => instructor.name as string | undefined)
+        .filter((name: string | undefined): name is string => !!name?.trim())
+      if (instructorNames.length === 0 && instructorsText.trim()) {
+        instructorNames.push(instructorsText.trim())
+      }
       const campusCode = section.campusCode ?? campus
       const openStatus: boolean | null = typeof section.openStatus === 'boolean' ? section.openStatus : null
       const openStatusText: string | null = section.openStatusText ?? null
@@ -401,7 +411,7 @@ async function main() {
 
       stats.sections_processed++
 
-      if (instructorsRaw.length === 0) {
+      if (instructorNames.length === 0) {
         stats.sections_no_instructor++
         // Still create a teaching_assignment with null professor_id
         // This represents an unassigned section (TBD)
@@ -427,13 +437,7 @@ async function main() {
         continue
       }
 
-      for (const instructor of instructorsRaw) {
-        const rawName: string = instructor.name ?? ''
-        if (!rawName.trim()) {
-          stats.sections_no_instructor++
-          continue
-        }
-
+      for (const rawName of instructorNames) {
         const normalized = normalizeName(rawName)
         const profSlug = generateSlug(normalized)
         let professorId: string | null = null
@@ -487,9 +491,9 @@ async function main() {
               stats.professors_created++
 
               // Link professor to department
-              const deptSlug = RUTGERS_SUBJECT_TO_DEPT_SLUG[subject]
-              if (deptSlug && deptMap[deptSlug]) {
-                const deptId = deptMap[deptSlug]
+              const deptKey = RUTGERS_SUBJECT_TO_DEPT_SLUG[subject] ?? `code:${subject}`
+              if (deptMap[deptKey]) {
+                const deptId = deptMap[deptKey]
                 const { error: linkErr } = await supabase
                   .from('professor_departments')
                   .insert({ professor_id: professorId, department_id: deptId, is_primary: true })

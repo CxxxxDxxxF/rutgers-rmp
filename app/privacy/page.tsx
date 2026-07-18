@@ -193,7 +193,7 @@ export default function PrivacyPage() {
 
         </div>
 
-        <div className="mt-10 pt-6 border-t border-zinc-800 flex gap-4 text-xs text-zinc-600">
+        <div className="mt-10 pt-6 border-t border-[var(--border)] flex gap-4 text-xs text-zinc-600">
           <Link href="/terms" className="hover:text-zinc-400 transition-colors">Terms of Service</Link>
           <Link href="/" className="hover:text-zinc-400 transition-colors">Home</Link>
         </div>

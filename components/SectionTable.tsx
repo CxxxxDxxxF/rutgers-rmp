@@ -216,7 +216,7 @@ export default function SectionTable({
             className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
               openFirst
                 ? 'bg-green-950 border-green-800 text-green-400'
-                : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                : 'bg-[var(--card)] border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
             }`}
           >
             {openFirst ? '↑ Open first' : 'Sort: Open first'}
@@ -224,10 +224,10 @@ export default function SectionTable({
         </div>
       )}
       {/* Desktop table */}
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-zinc-800">
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-[var(--border)]">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-zinc-900 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+            <tr className="bg-[var(--card-2)] text-left text-[11px] uppercase tracking-wider text-zinc-500">
               <th className="px-3 py-2.5 font-semibold">Status</th>
               <th className="px-3 py-2.5 font-semibold">Index</th>
               <th className="px-3 py-2.5 font-semibold">Sec</th>
@@ -306,7 +306,7 @@ export default function SectionTable({
       {/* Mobile cards */}
       <div className="md:hidden space-y-2">
         {displayed.map(s => (
-          <div key={s.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2.5">
+          <div key={s.id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge section={s} />

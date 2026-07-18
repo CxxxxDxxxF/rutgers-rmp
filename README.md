@@ -96,14 +96,16 @@ node --check worker/sniper-worker.mjs   # worker syntax check
 
 Environment: copy `.env.local.example` → `.env.local`. Read-only mode needs
 `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`; full features add
-`SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, `ADMIN_SECRET`,
-`VOTE_FINGERPRINT_SALT`, and (for alerts) Resend/Twilio keys.
+`SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_SECRET`, `VOTE_FINGERPRINT_SALT`, and
+(for alerts) Resend/Twilio keys. AI summaries are optional and need
+`OPENROUTER_API_KEY`.
 
 - **Hosting**: Railway project `rurate-production` — `rurate-web` (site) and
   `rurate-sniper-worker` (worker). Runbooks: [`docs/deployment.md`](docs/deployment.md).
 - **Database**: Supabase; migrations in `supabase/migrations/` (`supabase db push`).
 - **Data ingest**: `npm run ingest -- --year 2026 --term 9 --campus all`
-  (always `--dry-run` first). Details: [`docs/rutgers-class-data.md`](docs/rutgers-class-data.md).
+  (always `--dry-run` first); use `npm run ingest:bulk` for large all-campus
+  backfills. Details: [`docs/rutgers-class-data.md`](docs/rutgers-class-data.md).
 - **Sniper worker docs**: [`docs/sniper-worker.md`](docs/sniper-worker.md).
 - Developer/AI-agent conventions live in [`CLAUDE.md`](CLAUDE.md).
 

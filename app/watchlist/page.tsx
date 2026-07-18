@@ -1173,7 +1173,7 @@ function LiveStatusBar({
   const stale = !noSync && now - lastWorkerSync! > 5 * 60_000
 
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 sm:px-5">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-2)] px-4 py-2.5 sm:px-5">
       <div className="flex items-center gap-2.5 min-w-0">
         <span className="relative flex h-2 w-2 shrink-0">
           {!stale && !noSync && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />}

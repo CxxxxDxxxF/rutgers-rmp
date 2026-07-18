@@ -21,7 +21,7 @@ export interface ProfessorCache {
   would_take_again: number
   num_ratings: number
   ratings: Rating[]
-  ai_analysis: AIAnalysis
+  ai_analysis: AIAnalysis | null
   cached_at: string
   search_count: number
   tag_counts?: Record<string, number> | null

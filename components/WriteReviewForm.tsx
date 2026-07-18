@@ -197,7 +197,7 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2 }}
-      className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6"
+      className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 space-y-6"
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-white">Write a Review</h3>

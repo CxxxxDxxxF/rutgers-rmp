@@ -86,7 +86,7 @@ function LockScreen({ onUnlock }: { onUnlock: (secret: string) => void }) {
             onChange={e => setInput(e.target.value)}
             placeholder="Admin secret"
             autoFocus
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 text-sm"
+            className="w-full bg-[var(--card)] border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 text-sm"
           />
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <button
@@ -208,7 +208,7 @@ function AdminPanel({ secret }: { secret: string }) {
               className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all border ${
                 filter === f
                   ? 'bg-zinc-100 text-black border-zinc-100'
-                  : 'text-zinc-400 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                  : 'text-zinc-400 border-[var(--border)] hover:border-zinc-600 hover:text-white'
               }`}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -232,7 +232,7 @@ function AdminPanel({ secret }: { secret: string }) {
             <p className="text-red-400">{error}</p>
           </div>
         ) : submissions.length === 0 ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-12 text-center">
             <p className="text-zinc-400 font-semibold">No submissions</p>
             <p className="text-zinc-600 text-sm mt-1">Nothing to review right now.</p>
           </div>
@@ -241,7 +241,7 @@ function AdminPanel({ secret }: { secret: string }) {
             {submissions.map(sub => (
               <div
                 key={sub.id}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3"
+                className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 space-y-1">
@@ -276,7 +276,7 @@ function AdminPanel({ secret }: { secret: string }) {
                 </div>
 
                 {sub.status === 'pending' && (
-                  <div className="flex items-center gap-2 pt-1 border-t border-zinc-800">
+                  <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
                     <button
                       onClick={() => updateStatus(sub.id, 'approved')}
                       disabled={updating === sub.id}

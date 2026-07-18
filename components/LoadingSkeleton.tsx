@@ -4,7 +4,7 @@ export function SkeletonBlock({ className = '' }: { className?: string }) {
 
 export function CourseCardSkeleton() {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
+    <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
       <SkeletonBlock className="h-5 w-24" />
       <SkeletonBlock className="h-4 w-3/4" />
       <div className="flex gap-2">
@@ -30,7 +30,7 @@ export function RowListSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="space-y-3">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
+        <div key={i} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex items-center gap-4">
           <SkeletonBlock className="h-4 w-20" />
           <SkeletonBlock className="h-4 flex-1" />
           <SkeletonBlock className="h-4 w-16" />

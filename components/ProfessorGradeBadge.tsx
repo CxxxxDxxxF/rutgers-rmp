@@ -30,7 +30,7 @@ export default function ProfessorGradeBadge({
   }
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2">
+    <div className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-2)] px-3 py-2">
       <div
         className="text-lg font-black leading-none"
         style={{ color }}

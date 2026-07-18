@@ -79,7 +79,7 @@ function LockScreen({ onUnlock }: { onUnlock: (secret: string) => void }) {
             onChange={e => setInput(e.target.value)}
             placeholder="Admin secret"
             autoFocus
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 text-sm"
+            className="w-full bg-[var(--card)] border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 text-sm"
           />
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <button
@@ -142,7 +142,7 @@ function ReviewRow({
     : 'Unknown professor'
 
   return (
-    <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+    <div className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: qColor }} />
 
       <div className="pl-4 pr-5 pt-4 pb-4 space-y-3">
@@ -338,7 +338,7 @@ function AdminPanel({ secret }: { secret: string }) {
               className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all border ${
                 filter === f.value
                   ? 'bg-zinc-100 text-black border-zinc-100'
-                  : 'text-zinc-400 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                  : 'text-zinc-400 border-[var(--border)] hover:border-zinc-600 hover:text-white'
               }`}
             >
               {f.label}
@@ -362,7 +362,7 @@ function AdminPanel({ secret }: { secret: string }) {
             </button>
           </div>
         ) : reviews.length === 0 ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-12 text-center">
             <p className="text-zinc-400 font-semibold">No reviews</p>
             <p className="text-zinc-600 text-sm mt-1">
               {filter === 'flagged' ? 'No flagged reviews right now.' : filter === 'removed' ? 'No removed reviews.' : 'No reviews found.'}
@@ -377,7 +377,7 @@ function AdminPanel({ secret }: { secret: string }) {
               <button
                 onClick={() => fetchReviews(filter, page + 1, true)}
                 disabled={loadingMore}
-                className="w-full py-3 rounded-xl border border-zinc-800 text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
+                className="w-full py-3 rounded-xl border border-[var(--border)] text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
               >
                 {loadingMore ? 'Loading…' : `Load more (${total - reviews.length} remaining)`}
               </button>

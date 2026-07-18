@@ -27,7 +27,7 @@ function DepartmentCard({ dept }: { dept: DepartmentRow }) {
   return (
     <Link
       href={`/department/${dept.slug}`}
-      className="block bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-[#CC0033]/50 hover:bg-zinc-800/50 transition-all group"
+      className="block bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 hover:border-[#CC0033]/50 hover:bg-[var(--card-2)] transition-all group"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -127,7 +127,7 @@ export default function DepartmentsGrid({ departments }: { departments: Departme
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Filter by name, code, or school…"
-            className="w-full pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
+            className="w-full pl-10 pr-4 py-2.5 bg-[var(--card)] border border-[var(--border)] rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#CC0033] focus:ring-1 focus:ring-[#CC0033]"
             autoComplete="off"
           />
         </div>
@@ -152,7 +152,7 @@ export default function DepartmentsGrid({ departments }: { departments: Departme
             className={`text-xs px-3 py-2 rounded-lg border transition-colors ${
               showEmpty
                 ? 'border-zinc-600 text-zinc-300 bg-zinc-800'
-                : 'border-zinc-800 text-zinc-600 hover:text-zinc-400'
+                : 'border-[var(--border)] text-zinc-600 hover:text-zinc-400'
             }`}
           >
             {showEmpty ? `Hide ${emptyCount} empty` : `Show ${emptyCount} empty`}

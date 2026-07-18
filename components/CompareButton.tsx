@@ -46,7 +46,7 @@ export default function CompareButton({
       className={`${base} font-semibold rounded-lg border transition-colors ${
         inTray
           ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
-          : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white'
+          : 'bg-[var(--card)] border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white'
       }`}
     >
       {full ? `Max ${MAX_COMPARE} profs` : inTray ? '✓ Comparing' : '+ Compare'}

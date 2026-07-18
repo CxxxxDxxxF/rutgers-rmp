@@ -8,6 +8,7 @@ import CompareButton from '@/components/CompareButton'
 import { MAX_COMPARE } from '@/lib/compare'
 import type { AIAnalysis } from '@/lib/supabase'
 import type { ProfessorGrade } from '@/lib/professor-grade'
+import type { CandidateMatchLevel } from '@/lib/rmp/types'
 
 interface ProfResult {
   searchedName: string
@@ -22,6 +23,7 @@ interface ProfResult {
   slug: string
   ai_analysis: AIAnalysis | null
   student_grade: ProfessorGrade | null
+  matchLevel: CandidateMatchLevel
 }
 
 function parseScheduleText(text: string): string[] {
@@ -354,6 +356,11 @@ export default function SchedulePage() {
                             {prof.firstName} {prof.lastName}
                           </div>
                           <div className="text-sm text-zinc-500">{prof.department}</div>
+                          {(prof.matchLevel === 'possible_candidate' || prof.matchLevel === 'weak_candidate') && (
+                            <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-amber-400">
+                              ⚠ Low-confidence match — searched &quot;{prof.searchedName}&quot;, double-check this is right
+                            </div>
+                          )}
                         </div>
                       </div>
 

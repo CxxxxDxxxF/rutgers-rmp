@@ -10,7 +10,7 @@ export default function StatCard({
   color?: string
 }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-center">
+    <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl px-4 py-3 text-center">
       <div className="text-xl font-black text-white" style={color ? { color } : undefined}>
         {value}
       </div>
