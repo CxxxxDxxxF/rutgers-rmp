@@ -76,6 +76,10 @@ function CoursesContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadKey, setLoadKey] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [serverQuery, setServerQuery] = useState(searchParams.get('q') ?? '')
   const [serverInstructor, setServerInstructor] = useState(searchParams.get('instructor') ?? '')
@@ -232,25 +236,33 @@ function CoursesContent() {
     }
   }
 
+  // Build the /api/courses query string for the current filters at an offset.
+  const buildCoursesUrl = useCallback((atOffset: number) => {
+    const params = new URLSearchParams()
+    if (selectedDept) params.set('dept', selectedDept)
+    if (selectedSemester) params.set('semester', selectedSemester)
+    if (serverQuery.length >= 2) params.set('q', serverQuery)
+    if (serverInstructor.length >= 2) params.set('instructor', serverInstructor)
+    if (credits) params.set('credits', credits)
+    if (level) params.set('level', level)
+    if (campus) params.set('campus', campus)
+    if (atOffset > 0) params.set('offset', String(atOffset))
+    const qs = params.toString()
+    return qs ? `/api/courses?${qs}` : '/api/courses'
+  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus])
+
   // Fetch courses whenever server-side filters or loadKey change
   useEffect(() => {
     async function loadCourses() {
       setLoading(true)
       setError(null)
       try {
-        const params = new URLSearchParams()
-        if (selectedDept) params.set('dept', selectedDept)
-        if (selectedSemester) params.set('semester', selectedSemester)
-        if (serverQuery.length >= 2) params.set('q', serverQuery)
-        if (serverInstructor.length >= 2) params.set('instructor', serverInstructor)
-        if (credits) params.set('credits', credits)
-        if (level) params.set('level', level)
-        if (campus) params.set('campus', campus)
-        const qs = params.toString()
-        const res = await fetch(qs ? `/api/courses?${qs}` : '/api/courses')
+        const res = await fetch(buildCoursesUrl(0))
         if (!res.ok) throw new Error('Failed to load courses')
         const data = await res.json()
         setCourses(Array.isArray(data?.courses) ? data.courses : [])
+        setHasMore(data?.hasMore ?? false)
+        setOffset(0)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong')
       } finally {
@@ -258,7 +270,36 @@ function CoursesContent() {
       }
     }
     loadCourses()
-  }, [selectedDept, selectedSemester, serverQuery, serverInstructor, credits, level, campus, loadKey])
+  }, [buildCoursesUrl, loadKey])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || loading || !hasMore) return
+    const nextOffset = offset + 160
+    setLoadingMore(true)
+    try {
+      const res = await fetch(buildCoursesUrl(nextOffset))
+      if (!res.ok) return
+      const data = await res.json()
+      setCourses(prev => [...prev, ...(Array.isArray(data?.courses) ? data.courses : [])])
+      setHasMore(data?.hasMore ?? false)
+      setOffset(nextOffset)
+    } catch {
+      // non-fatal
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [buildCoursesUrl, loadingMore, loading, hasMore, offset])
+
+  // Infinite scroll: fetch the next page when the sentinel nears the viewport.
+  useEffect(() => {
+    if (!sentinelRef.current) return
+    const observer = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) loadMore() },
+      { rootMargin: '400px' }
+    )
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [loadMore])
 
   // Instant client-side narrowing while typing + section filter + sort
   const filtered = useMemo(() => {
@@ -590,7 +631,7 @@ function CoursesContent() {
         {/* Result count */}
         {!loading && !error && (
           <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-600 motion-fade">
-            <span className="text-zinc-400 font-semibold">{filtered.length} course{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="text-zinc-400 font-semibold">{filtered.length}{hasMore ? '+' : ''} course{filtered.length !== 1 ? 's' : ''}</span>
             <span className="flex items-center gap-1.5">
               <span className="dot-open" style={{ width: 6, height: 6 }} />
               <span className="text-green-500 font-semibold">
@@ -659,6 +700,10 @@ function CoursesContent() {
             ))}
           </div>
         )}
+
+        {/* Load more sentinel */}
+        <div ref={sentinelRef} className="h-10" />
+        {loadingMore && <CourseGridSkeleton count={4} />}
       </main>
 
       {/* Review nudge — shown once courses load */}
