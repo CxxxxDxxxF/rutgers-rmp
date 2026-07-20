@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
 import AppHeader from '@/components/AppHeader'
-import FlipBoardBanner from '@/components/FlipBoardBanner'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import { CopyButton } from '@/components/SectionTable'
@@ -847,8 +846,11 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
 
 // ─── QuickSnipeBox ─────────────────────────────────────────────────────────────
 
+const MAX_SNIPE_INDEXES = 10
+
 function QuickSnipeBox() {
-  const [indexNumber, setIndexNumber] = useState('')
+  // WebReg-style multi-index entry: track one section or a whole schedule at once.
+  const [indexes, setIndexes] = useState<string[]>(['', '', ''])
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [emailEnabled, setEmailEnabled] = useState(true)
@@ -856,7 +858,7 @@ function QuickSnipeBox() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const firstRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const prefs = readQuickPrefs()
@@ -867,40 +869,81 @@ function QuickSnipeBox() {
     setSmsEnabled(prefs.smsEnabled ?? false)
   }, [])
 
+  const digitsOf = (v: string) => v.replace(/\D/g, '')
+  const validCount = indexes.filter(v => /^\d{5}$/.test(digitsOf(v))).length
+
+  function setIndexAt(i: number, val: string) {
+    setError(null)
+    setIndexes(prev => {
+      const next = [...prev]
+      next[i] = val
+      // Auto-grow: entering a value in the last field reveals the next, up to 10.
+      if (i === next.length - 1 && digitsOf(val).length > 0 && next.length < MAX_SNIPE_INDEXES) {
+        next.push('')
+      }
+      return next
+    })
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (saving) return
     setError(null)
     setSuccess(null)
-    const digits = indexNumber.replace(/\D/g, '')
-    if (!/^\d{5}$/.test(digits)) {
-      setError('Enter the 5-digit Rutgers section index number.')
-      inputRef.current?.focus()
+
+    const seen = new Set<string>()
+    const targets: string[] = []
+    const invalid: string[] = []
+    for (const v of indexes) {
+      const d = digitsOf(v)
+      if (d.length === 0) continue
+      if (!/^\d{5}$/.test(d)) { invalid.push(v.trim()); continue }
+      if (!seen.has(d)) { seen.add(d); targets.push(d) }
+    }
+
+    if (targets.length === 0) {
+      setError(invalid.length
+        ? `Not a 5-digit index: ${invalid.join(', ')}`
+        : 'Enter at least one 5-digit section index.')
+      firstRef.current?.focus()
       return
     }
+
     setSaving(true)
     try {
-      const result = await addWatchByIndex({
-        indexNumber: digits,
-        notificationSettings: {
-          email,
-          phone_e164: phone,
-          email_enabled: emailEnabled,
-          sms_enabled: smsEnabled,
-          notify_on_open: true,
-          notify_on_close: false,
-        },
-      })
-      if (!result.ok) {
-        setError(result.error ?? 'Could not snipe that index — check the number and try again.')
-        return
+      const settings = {
+        email, phone_e164: phone,
+        email_enabled: emailEnabled, sms_enabled: smsEnabled,
+        notify_on_open: true, notify_on_close: false,
       }
+      const results = await Promise.all(targets.map(async idx => {
+        try {
+          const r = await addWatchByIndex({ indexNumber: idx, notificationSettings: settings })
+          return { idx, ok: r.ok, duplicate: r.duplicate ?? false }
+        } catch {
+          return { idx, ok: false, duplicate: false }
+        }
+      }))
       writeQuickPrefs({ email, phone, emailEnabled, smsEnabled })
-      setSuccess(result.duplicate ? `Already sniping ${digits}.` : `Locked on ${digits}. Watching for opens.`)
-      setIndexNumber('')
-      setTimeout(() => setSuccess(null), 5000)
-    } catch {
-      setError('Network error — check your connection and try again.')
+
+      const added = results.filter(r => r.ok && !r.duplicate).map(r => r.idx)
+      const dupes = results.filter(r => r.ok && r.duplicate).map(r => r.idx)
+      const failed = results.filter(r => !r.ok).map(r => r.idx)
+
+      if (added.length || dupes.length) {
+        const parts: string[] = []
+        if (added.length) parts.push(`Locked on ${added.length} section${added.length > 1 ? 's' : ''}`)
+        if (dupes.length) parts.push(`${dupes.length} already watched`)
+        if (failed.length) parts.push(`${failed.length} not found (${failed.join(', ')})`)
+        setSuccess(parts.join(' · '))
+        // Keep only the sections that failed, so they can be corrected and retried.
+        const keep = failed.length ? [...failed] : []
+        while (keep.length < 3) keep.push('')
+        setIndexes(keep)
+        setTimeout(() => setSuccess(null), 6000)
+      } else {
+        setError(`Couldn't snipe ${failed.join(', ')} — check the numbers against the current semester.`)
+      }
     } finally {
       setSaving(false)
     }
@@ -910,64 +953,85 @@ function QuickSnipeBox() {
     <section className="mb-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card-2)]">
       <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 sm:px-5">
         <div className="h-2 w-2 rounded-full bg-[#CC0033] motion-pulse-soft" />
-        <span className="text-sm font-semibold text-white">Paste an index. Start sniping.</span>
+        <span className="text-sm font-semibold text-white">Add sections to snipe</span>
         <Badge tone="scarlet" className="ml-auto">Live worker</Badge>
       </div>
 
       <form onSubmit={submit} className="p-4 sm:p-5">
         <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-          {/* index input */}
+          {/* multi-index grid — mirrors WebReg's Add-to-Registration panel */}
           <div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative flex-1">
-                <input
-                  ref={inputRef}
-                  inputMode="numeric"
-                  value={indexNumber}
-                  onChange={e => { setIndexNumber(e.target.value); setError(null) }}
-                  placeholder="5-digit section index (e.g. 26253)"
-                  maxLength={12}
-                  className={`w-full min-h-12 rounded-xl border bg-black px-4 py-3 font-mono text-lg font-black tracking-wider text-white outline-none transition-all ${
-                    error ? 'border-red-500 focus:border-red-400' : 'border-[var(--border)] focus:border-[#CC0033]'
-                  }`}
-                />
-                {indexNumber.replace(/\D/g, '').length === 5 && !error && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-400">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                )}
-              </div>
+            <div className="mb-2 flex items-baseline justify-between">
+              <p className="text-xs font-semibold text-zinc-300">
+                Section index numbers <span className="font-normal text-zinc-600">— one or many</span>
+              </p>
+              <span className="text-[11px] tabular-nums text-zinc-600">{validCount}/{MAX_SNIPE_INDEXES} ready</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+              {indexes.map((val, i) => {
+                const d = digitsOf(val)
+                const ok = /^\d{5}$/.test(d)
+                return (
+                  <div key={i}>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                      Index {i + 1}
+                    </label>
+                    <div className="relative">
+                      <input
+                        ref={i === 0 ? firstRef : undefined}
+                        inputMode="numeric"
+                        value={val}
+                        onChange={e => setIndexAt(i, e.target.value)}
+                        placeholder="00000"
+                        maxLength={6}
+                        aria-label={`Section index ${i + 1}`}
+                        className={`w-full min-h-11 rounded-lg border bg-black px-3 py-2 pr-8 font-mono text-base font-bold tracking-[0.15em] text-white outline-none transition-all placeholder:text-zinc-700 ${
+                          ok ? 'border-green-700/60' : 'border-[var(--border)] focus:border-[#CC0033]'
+                        }`}
+                      />
+                      {ok && (
+                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-green-400">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
                 type="submit"
                 disabled={saving}
-                className="min-h-12 rounded-xl bg-[#CC0033] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#a8002b] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100 whitespace-nowrap"
+                className="min-h-12 rounded-xl bg-[#CC0033] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#a8002b] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100"
               >
                 {saving ? (
                   <span className="flex items-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                     Locking on…
                   </span>
-                ) : 'Snipe it'}
+                ) : validCount > 1 ? `Snipe all ${validCount} →` : 'Snipe it →'}
               </button>
+              <p className="text-[11px] text-zinc-600 sm:ml-1">
+                Find index numbers on the{' '}
+                <a
+                  href="https://sis.rutgers.edu/soc/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-zinc-400 underline underline-offset-2 transition-colors hover:text-white"
+                >
+                  Schedule of Classes ↗
+                </a>
+                {' '}or in WebReg.
+              </p>
             </div>
-
-            <p className="mt-1.5 text-[11px] text-zinc-600">
-              The index number is the 5-digit code listed next to each section in the{' '}
-              <a
-                href="https://sis.rutgers.edu/soc/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-zinc-400 underline underline-offset-2 hover:text-white transition-colors"
-              >
-                Rutgers Schedule of Classes ↗
-              </a>
-              {' '}and in WebReg.
-            </p>
 
             <AnimatePresence mode="wait">
               {error && (
@@ -978,7 +1042,7 @@ function QuickSnipeBox() {
                   exit={{ opacity: 0 }}
                   className="mt-2 flex items-center gap-1.5 text-sm text-red-400"
                 >
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                   {error}
@@ -992,7 +1056,7 @@ function QuickSnipeBox() {
                   exit={{ opacity: 0 }}
                   className="mt-2 flex items-center gap-1.5 text-sm text-green-400"
                 >
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                   {success}
@@ -1001,28 +1065,29 @@ function QuickSnipeBox() {
             </AnimatePresence>
           </div>
 
-          {/* alert contact */}
+          {/* alert contact — applies to every section added */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)]/40 p-4 lg:w-64">
-            <p className="text-xs font-semibold text-zinc-300 mb-3">Alert contact</p>
+            <p className="mb-3 text-xs font-semibold text-zinc-300">Alert contact</p>
             <div className="space-y-2">
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="Email"
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#CC0033]"
               />
               <PhoneInput value={phone} onChange={setPhone} />
               <div className="flex gap-3 text-xs text-zinc-400">
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex cursor-pointer items-center gap-1.5">
                   <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} className="accent-[#CC0033]" />
                   Email
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex cursor-pointer items-center gap-1.5">
                   <input type="checkbox" checked={smsEnabled} onChange={e => setSmsEnabled(e.target.checked)} className="accent-[#CC0033]" />
                   SMS
                 </label>
               </div>
+              <p className="pt-1 text-[10px] leading-snug text-zinc-600">Used for every section you add above.</p>
             </div>
           </div>
         </div>
@@ -1030,12 +1095,12 @@ function QuickSnipeBox() {
         {/* how it works */}
         <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] text-zinc-500">
           {[
-            { n: '1', title: 'Validate', desc: 'Index looked up in current SOC' },
+            { n: '1', title: 'Validate', desc: 'Each index checked against current SOC' },
             { n: '2', title: 'Alert', desc: 'Email · SMS · browser notification' },
             { n: '3', title: 'Register', desc: 'Copy index → WebReg' },
           ].map(step => (
             <div key={step.n} className="rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/30 p-2.5">
-              <span className="block font-bold text-zinc-400 mb-0.5">{step.n}. {step.title}</span>
+              <span className="mb-0.5 block font-bold text-zinc-400">{step.n}. {step.title}</span>
               {step.desc}
             </div>
           ))}
@@ -1369,8 +1434,6 @@ export default function WatchlistPage() {
             Track any Rutgers section by index number. Get alerted by email or SMS the moment a seat opens. Jump straight to WebReg with the index ready.
           </p>
         </div>
-
-        <FlipBoardBanner />
 
         {/* Browser alert prompt shown before the first snipe so permission can
             be granted before a seat opens — it is dismissible and self-hides
