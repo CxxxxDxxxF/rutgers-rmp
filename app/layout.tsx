@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { Space_Grotesk } from 'next/font/google'
 import CompareTray from '@/components/CompareTray'
 import { SITE_URL } from '@/lib/seo'
@@ -27,6 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.className} text-white min-h-screen antialiased`} style={{ background: 'var(--bg)' }}>
+        {/* Public runtime config (Supabase URL + anon key) served fresh from
+            /api/public-env and loaded before the app bundle, so the browser
+            Supabase client works even if the image was built without
+            NEXT_PUBLIC_* build args. See lib/public-env.ts / docs/signup.md. */}
+        <Script src="/api/public-env" strategy="beforeInteractive" />
         {children}
         <CompareTray />
       </body>

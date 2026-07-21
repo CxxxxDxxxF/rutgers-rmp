@@ -61,6 +61,36 @@ reaches Supabase.
 Verify the project ref in the baked bundle matches this project —
 `lnqauobmiocrmuvjkjet` → `https://lnqauobmiocrmuvjkjet.supabase.co`.
 
+### Second layer: runtime config injection (no rebuild required)
+
+Relying on build-time inlining alone is fragile — it failed silently once and
+broke every signup, and whether Railway wires the service variables as build
+args is easy to get wrong and hard to verify from outside the deploy. So the
+app no longer depends on it exclusively:
+
+- `app/api/public-env/route.ts` is a `force-dynamic` route handler that runs at
+  **request time** and returns JavaScript assigning `window.__RU_PUBLIC_ENV__`
+  from the server's **runtime** env — which is confirmed present, since the
+  server-side API routes already read it.
+- `app/layout.tsx` loads it with `<Script src="/api/public-env"
+  strategy="beforeInteractive" />`, so it executes before the app bundle. This
+  is served the same way for statically prerendered pages (e.g. `/login`) and
+  dynamically rendered ones, so the runtime values reach every page — a plain
+  inline injection would instead bake build-time (empty) values into static
+  pages.
+- `lib/public-env.ts` `resolvePublicEnv()` returns the **build-time** value
+  first and falls back to that injected runtime value only when the build-time
+  one is missing. `lib/supabase.ts` builds the browser client through it.
+
+Because build-time wins, a correctly built bundle behaves exactly as before;
+the fallback engages only in the broken build-arg case. This means the fix
+lands from **runtime** env alone — a plain redeploy (or even a variable change
+that restarts the service) is enough; a full rebuild with build args is no
+longer strictly required for signup to reach Supabase. Only the public URL,
+anon key, and app URL are exposed — never the service-role key or any secret
+(they are already public: the anon key ships in every Supabase browser bundle
+and is gated by RLS).
+
 ## Auth settings for launch (instant signup)
 
 This is a **separate** decision from the root-cause fix above. Even with the
