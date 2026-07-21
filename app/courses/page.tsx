@@ -3,10 +3,12 @@
 import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
+import AppSelect from '@/components/AppSelect'
 import CourseCard, { type CourseCardData } from '@/components/CourseCard'
 import EmptyState from '@/components/EmptyState'
 import FilterMenu, { FilterRow, filterControlClass } from '@/components/FilterMenu'
 import { CourseGridSkeleton } from '@/components/LoadingSkeleton'
+import { COURSE_SORT_OPTIONS, type CourseSortKey } from '@/lib/course-sort'
 import { resolveSemesterParam } from '@/lib/semester'
 
 interface Department {
@@ -70,8 +72,8 @@ function CoursesContent() {
   const [verdictFilter, setVerdictFilter] = useState<'' | 'take' | 'depends' | 'avoid'>(
     (searchParams.get('verdict') as '' | 'take' | 'depends' | 'avoid') ?? ''
   )
-  const [sortBy, setSortBy] = useState<'number' | 'open' | 'rating'>(
-    (searchParams.get('sort') as 'number' | 'open' | 'rating') ?? 'number'
+  const [sortBy, setSortBy] = useState<CourseSortKey>(
+    (searchParams.get('sort') as CourseSortKey) ?? 'number'
   )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -450,19 +452,20 @@ function CoursesContent() {
             </div>
 
             {/* Semester dropdown */}
-            <select
+            <AppSelect
               value={selectedSemester}
-              onChange={e => setSelectedSemester(e.target.value)}
-              className="px-4 py-2.5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#CC0033] sm:min-w-[160px] transition-colors"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-            >
-              <option value="">All Semesters</option>
-              {semesters.map(s => (
-                <option key={s.id} value={s.slug ?? ''}>
-                  {s.name}{s.is_current ? ' — current' : ''}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedSemester}
+              ariaLabel="Semester"
+              options={[
+                { value: '', label: 'All Semesters' },
+                ...semesters.map(s => ({
+                  value: s.slug ?? '',
+                  label: `${s.name}${s.is_current ? ' — current' : ''}`,
+                })),
+              ]}
+              triggerClassName="w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm text-zinc-200 sm:min-w-[160px] transition-colors"
+              triggerStyle={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+            />
 
             <div ref={deptComboRef} className="relative sm:min-w-[200px]">
               <input
@@ -546,48 +549,61 @@ function CoursesContent() {
                 />
               </FilterRow>
               <FilterRow label="Campus">
-                <select value={campus} onChange={e => setCampus(e.target.value)} className={filterControlClass}>
-                  {CAMPUS_OPTIONS.map(opt => (
-                    <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={campus}
+                  onChange={setCampus}
+                  ariaLabel="Campus"
+                  options={CAMPUS_OPTIONS}
+                  triggerClassName={filterControlClass}
+                />
               </FilterRow>
               <div className="grid grid-cols-2 gap-2">
                 <FilterRow label="Credits">
-                  <select value={credits} onChange={e => setCredits(e.target.value)} className={filterControlClass}>
-                    {CREDIT_OPTIONS.map(c => (
-                      <option key={c} value={c}>{c === '' ? 'Any' : `${c} cr`}</option>
-                    ))}
-                  </select>
+                  <AppSelect
+                    value={credits}
+                    onChange={setCredits}
+                    ariaLabel="Credits"
+                    options={CREDIT_OPTIONS.map(c => ({ value: c, label: c === '' ? 'Any' : `${c} cr` }))}
+                    triggerClassName={filterControlClass}
+                  />
                 </FilterRow>
                 <FilterRow label="Level">
-                  <select value={level} onChange={e => setLevel(e.target.value)} className={filterControlClass}>
-                    <option value="">Any</option>
-                    {levels.map(l => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
+                  <AppSelect
+                    value={level}
+                    onChange={setLevel}
+                    ariaLabel="Level"
+                    options={[{ value: '', label: 'Any' }, ...levels.map(l => ({ value: l, label: l }))]}
+                    triggerClassName={filterControlClass}
+                  />
                 </FilterRow>
               </div>
               <FilterRow label="Professor rating">
-                <select value={minRating} onChange={e => setMinRating(e.target.value)} className={filterControlClass}>
-                  <option value="">Any rating</option>
-                  <option value="3.0">3.0★ and up</option>
-                  <option value="3.5">3.5★ and up</option>
-                  <option value="4.0">4.0★ and up</option>
-                </select>
+                <AppSelect
+                  value={minRating}
+                  onChange={setMinRating}
+                  ariaLabel="Professor rating"
+                  options={[
+                    { value: '', label: 'Any rating' },
+                    { value: '3.0', label: '3.0★ and up' },
+                    { value: '3.5', label: '3.5★ and up' },
+                    { value: '4.0', label: '4.0★ and up' },
+                  ]}
+                  triggerClassName={filterControlClass}
+                />
               </FilterRow>
               <FilterRow label="AI verdict">
-                <select
+                <AppSelect
                   value={verdictFilter}
-                  onChange={e => setVerdictFilter(e.target.value as '' | 'take' | 'depends' | 'avoid')}
-                  className={filterControlClass}
-                >
-                  <option value="">Any verdict</option>
-                  <option value="take">TAKE — recommended</option>
-                  <option value="depends">DEPENDS — mixed</option>
-                  <option value="avoid">AVOID — flagged</option>
-                </select>
+                  onChange={v => setVerdictFilter(v as '' | 'take' | 'depends' | 'avoid')}
+                  ariaLabel="AI verdict"
+                  options={[
+                    { value: '', label: 'Any verdict' },
+                    { value: 'take', label: 'TAKE — recommended' },
+                    { value: 'depends', label: 'DEPENDS — mixed' },
+                    { value: 'avoid', label: 'AVOID — flagged' },
+                  ]}
+                  triggerClassName={filterControlClass}
+                />
               </FilterRow>
               <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer pt-1">
                 <input
@@ -601,20 +617,20 @@ function CoursesContent() {
             </FilterMenu>
 
             <div className="ml-auto flex items-center gap-2">
-              <select
+              <AppSelect
                 value={sortBy}
-                onChange={e => setSortBy(e.target.value as 'number' | 'open' | 'rating')}
-                className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
-                style={{
+                onChange={v => setSortBy(v as CourseSortKey)}
+                ariaLabel="Sort courses"
+                prefix="Sort: "
+                options={COURSE_SORT_OPTIONS}
+                align="right"
+                triggerClassName="px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
+                triggerStyle={{
                   background: sortBy !== 'number' ? 'var(--card-2)' : 'var(--card)',
                   border: `1px solid ${sortBy !== 'number' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
                   color: sortBy !== 'number' ? 'white' : '#a1a1aa',
                 }}
-              >
-                <option value="number">Sort: Course #</option>
-                <option value="open">Sort: Most Open</option>
-                <option value="rating">Sort: Best Prof</option>
-              </select>
+              />
 
               {hasActiveFilters && (
                 <button

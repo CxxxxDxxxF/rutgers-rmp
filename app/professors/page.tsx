@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
+import AppSelect from '@/components/AppSelect'
 import EmptyState from '@/components/EmptyState'
 import FilterMenu from '@/components/FilterMenu'
 import { SkeletonBlock } from '@/components/LoadingSkeleton'
@@ -286,21 +287,23 @@ function ProfessorsContent() {
 
           {/* Verdict select + filters + sort */}
           <div className="flex flex-wrap items-center gap-2">
-            <select
+            <AppSelect
               value={verdict}
-              onChange={e => setVerdict(e.target.value)}
-              className="px-3 py-2 rounded-lg text-xs font-bold focus:outline-none transition-colors"
-              style={{
+              onChange={setVerdict}
+              ariaLabel="AI verdict filter"
+              options={[
+                { value: '', label: 'All verdicts' },
+                { value: 'take', label: 'TAKE — recommended' },
+                { value: 'depends', label: 'DEPENDS — mixed' },
+                { value: 'avoid', label: 'AVOID — flagged' },
+              ]}
+              triggerClassName="px-3 py-2 rounded-lg text-xs font-bold transition-colors"
+              triggerStyle={{
                 background: verdict ? 'rgba(204,0,51,0.12)' : 'var(--card)',
                 border: `1px solid ${verdict ? 'rgba(204,0,51,0.5)' : 'var(--border)'}`,
                 color: verdict ? '#ff4d6d' : '#a1a1aa',
               }}
-            >
-              <option value="">All verdicts</option>
-              <option value="take">TAKE — recommended</option>
-              <option value="depends">DEPENDS — mixed</option>
-              <option value="avoid">AVOID — flagged</option>
-            </select>
+            />
 
             <FilterMenu activeCount={(ratedOnly ? 1 : 0) + (analyzedOnly ? 1 : 0)}>
               <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
@@ -327,21 +330,25 @@ function ProfessorsContent() {
             </FilterMenu>
 
             <div className="ml-auto flex items-center gap-2">
-              <select
+              <AppSelect
                 value={sort}
-                onChange={e => setSort(e.target.value)}
-                className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
-                style={{
+                onChange={setSort}
+                ariaLabel="Sort professors"
+                prefix="Sort: "
+                align="right"
+                options={[
+                  { value: 'rating', label: 'Best Rating' },
+                  { value: 'difficulty', label: 'Easiest' },
+                  { value: 'again', label: '% Again' },
+                  { value: 'name', label: 'Name' },
+                ]}
+                triggerClassName="px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
+                triggerStyle={{
                   background: sort !== 'rating' ? 'var(--card-2)' : 'var(--card)',
                   border: `1px solid ${sort !== 'rating' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
                   color: sort !== 'rating' ? 'white' : '#a1a1aa',
                 }}
-              >
-                <option value="rating">Sort: Best Rating</option>
-                <option value="difficulty">Sort: Easiest</option>
-                <option value="again">Sort: % Again</option>
-                <option value="name">Sort: Name</option>
-              </select>
+              />
 
               {hasActiveFilters && (
                 <button

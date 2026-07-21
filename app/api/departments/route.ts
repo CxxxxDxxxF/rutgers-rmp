@@ -2,27 +2,58 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { log } from '@/lib/logger'
 
+// PostgREST returns at most 1000 rows per request. professor_departments and
+// course_departments each have several thousand rows, so a single un-ranged
+// select silently truncates at 1000 — which made every department beyond the
+// first 1000 mappings report 0 profs/0 courses and pinned the site-wide totals
+// to a bogus "1,000 / 1,000". Page through all rows with a stable order so the
+// counts reflect the real database.
+const PAGE_SIZE = 1000
+
+// Page through a ranged query until fewer than PAGE_SIZE rows come back.
+// `page(from)` must apply its own .order().range() so each page is stable.
+async function fetchAllRows<T>(
+  page: (from: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const all: T[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from)
+    if (error) throw new Error(error.message)
+    const rows = data ?? []
+    all.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+  }
+  return all
+}
+
 export async function GET() {
   if (!supabase) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
   }
 
   try {
-    const [deptResult, profResult, courseResult] = await Promise.all([
-      supabase
+    const db = supabase
+    const [deptResult, profRows, courseRows] = await Promise.all([
+      db
         .from('departments')
         .select('id, code, name, full_name, school, slug')
         .order('school')
         .order('name'),
 
       // LEFT join — count all profs in dept, grab rating + verdict for those with cache
-      supabase
-        .from('professor_departments')
-        .select('department_id, professors(professor_cache(avg_rating, ai_analysis))'),
+      fetchAllRows<{ department_id: string; professors: unknown }>(from =>
+        db
+          .from('professor_departments')
+          .select('department_id, professors(professor_cache(avg_rating, ai_analysis))')
+          .order('department_id')
+          .range(from, from + PAGE_SIZE - 1)),
 
-      supabase
-        .from('course_departments')
-        .select('department_id'),
+      fetchAllRows<{ department_id: string }>(from =>
+        db
+          .from('course_departments')
+          .select('department_id')
+          .order('department_id')
+          .range(from, from + PAGE_SIZE - 1)),
     ])
 
     if (deptResult.error) throw deptResult.error
@@ -30,7 +61,7 @@ export async function GET() {
 
     // Aggregate professor stats per department
     const deptStats: Record<string, { count: number; ratings: number[]; take: number; depends: number; avoid: number }> = {}
-    for (const row of profResult.data ?? []) {
+    for (const row of profRows) {
       const deptId = row.department_id as string
       if (!deptStats[deptId]) deptStats[deptId] = { count: 0, ratings: [], take: 0, depends: 0, avoid: 0 }
       deptStats[deptId].count++
