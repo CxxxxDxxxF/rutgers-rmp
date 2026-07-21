@@ -47,9 +47,15 @@ export async function POST(req: NextRequest) {
 
     if (cached && !forceRefresh) {
       const age = Date.now() - new Date(cached.cached_at).getTime()
-      // RMP data freshness is independent from AI availability. Missing
-      // analysis should self-heal only when an OpenRouter key is configured.
-      const isStale = age > CACHE_DAYS * 24 * 60 * 60 * 1000 || (hasOpenRouterKey && !cached.ai_analysis)
+      // A cached row can lack the individual RMP reviews (e.g. an aggregate-only
+      // enrichment). Treat a missing/empty ratings array as stale so the reviews
+      // self-heal on the next view — independent of AI availability. Missing AI
+      // only self-heals when an OpenRouter key is configured.
+      const missingReviews = !Array.isArray(cached.ratings) || cached.ratings.length === 0
+      const isStale =
+        age > CACHE_DAYS * 24 * 60 * 60 * 1000 ||
+        missingReviews ||
+        (hasOpenRouterKey && !cached.ai_analysis)
 
       if (!isStale) {
         if (serviceClient) {

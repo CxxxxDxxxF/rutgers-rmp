@@ -14,28 +14,44 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (loading || !supabase) return
+    if (loading) return
+    if (!supabase) {
+      setError('Accounts are temporarily unavailable. Please try again later.')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.')
+      return
+    }
     setLoading(true)
     setError(null)
 
     if (mode === 'signin') {
       const { error: err } = await supabase.auth.signInWithPassword({ email, password })
       if (err) {
-        setError(err.message)
+        setError(err.message === 'Invalid login credentials'
+          ? 'Wrong email or password. New here? Switch to Sign up.'
+          : err.message)
         setLoading(false)
       } else {
         window.location.href = '/'
       }
     } else {
-      const { error: err } = await supabase.auth.signUp({
+      const { data, error: err } = await supabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: window.location.origin + '/login' },
       })
       if (err) {
-        setError(err.message)
+        setError(err.message.includes('already registered') || err.message.includes('already been registered')
+          ? 'That email already has an account — switch to Sign in.'
+          : err.message)
         setLoading(false)
+      } else if (data.session) {
+        // Email confirmation is disabled → the account is live immediately.
+        window.location.href = '/'
       } else {
+        // Confirmation required → tell them to check their inbox.
         setSignedUp(true)
         setLoading(false)
       }

@@ -858,6 +858,8 @@ function QuickSnipeBox() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [semesters, setSemesters] = useState<{ slug: string; name: string; is_current: boolean }[]>([])
+  const [semesterSlug, setSemesterSlug] = useState<string>('')
   const firstRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -867,6 +869,23 @@ function QuickSnipeBox() {
     setPhone(prefs.phone ?? '')
     setEmailEnabled(prefs.emailEnabled ?? true)
     setSmsEnabled(prefs.smsEnabled ?? false)
+  }, [])
+
+  // Load the semesters we have data for, so index numbers resolve against the
+  // right term — a code only exists in the semester it was issued for.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/semesters')
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: { slug: string; name: string; is_current: boolean }[]) => {
+        if (cancelled) return
+        const list = Array.isArray(data) ? data : []
+        setSemesters(list)
+        const current = list.find(s => s.is_current) ?? list[0]
+        if (current) setSemesterSlug(current.slug)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
   const digitsOf = (v: string) => v.replace(/\D/g, '')
@@ -918,7 +937,11 @@ function QuickSnipeBox() {
       }
       const results = await Promise.all(targets.map(async idx => {
         try {
-          const r = await addWatchByIndex({ indexNumber: idx, notificationSettings: settings })
+          const r = await addWatchByIndex({
+            indexNumber: idx,
+            semesterSlug: semesterSlug || undefined,
+            notificationSettings: settings,
+          })
           return { idx, ok: r.ok, duplicate: r.duplicate ?? false }
         } catch {
           return { idx, ok: false, duplicate: false }
@@ -961,11 +984,27 @@ function QuickSnipeBox() {
         <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
           {/* multi-index grid — mirrors WebReg's Add-to-Registration panel */}
           <div>
-            <div className="mb-2 flex items-baseline justify-between">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-semibold text-zinc-300">
                 Section index numbers <span className="font-normal text-zinc-600">— one or many</span>
               </p>
-              <span className="text-[11px] tabular-nums text-zinc-600">{validCount}/{MAX_SNIPE_INDEXES} ready</span>
+              <div className="flex items-center gap-2">
+                {semesters.length > 0 && (
+                  <select
+                    value={semesterSlug}
+                    onChange={e => setSemesterSlug(e.target.value)}
+                    aria-label="Semester for these index numbers"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs font-medium text-zinc-200 outline-none transition-colors focus:border-[#CC0033]"
+                  >
+                    {semesters.map(s => (
+                      <option key={s.slug} value={s.slug}>
+                        {s.name}{s.is_current ? ' · current' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <span className="text-[11px] tabular-nums text-zinc-600">{validCount}/{MAX_SNIPE_INDEXES}</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
