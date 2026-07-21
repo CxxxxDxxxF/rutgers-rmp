@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
+import { resolvePublicEnv } from './public-env'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+// Build-time inlined NEXT_PUBLIC_* first; if the browser bundle was built
+// without those build args, fall back to the runtime config the root layout
+// injects into the page (see lib/public-env.ts / docs/signup.md).
+const { NEXT_PUBLIC_SUPABASE_URL: supabaseUrl, NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey } =
+  resolvePublicEnv()
 
 export const supabase =
   supabaseUrl && supabaseAnonKey
