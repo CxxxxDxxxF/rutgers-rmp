@@ -80,7 +80,7 @@ export async function GET() {
 
     // Course counts per department
     const courseCounts: Record<string, number> = {}
-    for (const row of courseResult.data ?? []) {
+    for (const row of courseRows) {
       const deptId = row.department_id as string
       courseCounts[deptId] = (courseCounts[deptId] ?? 0) + 1
     }

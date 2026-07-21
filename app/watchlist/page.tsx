@@ -396,9 +396,8 @@ function ChurnBadge({ churn, status, now }: {
 // Rolling 7-day log of open/close flips across the user's snipes — the "is
 // anything actually moving?" answer that raw open/closed pips can't give.
 
-function SniperActivityFeed({ activity, items }: { activity: WatchActivity; items: WatchedSection[] }) {
+function SniperActivityFeed({ activity, items, now }: { activity: WatchActivity; items: WatchedSection[]; now: number }) {
   const [expanded, setExpanded] = useState(false)
-  const now = Date.now()
 
   const byAssignment = useMemo(() => {
     const map = new Map<string, WatchedSection>()
@@ -465,6 +464,7 @@ function WatchCard({ watch, isNew, churn }: {
   watch: WatchedSection
   isNew?: boolean
   churn?: { reopen_count: number; last_opened_at: string | null }
+  now?: number
 }) {
   const [removing, setRemoving] = useState(false)
   const [showNotifs, setShowNotifs] = useState(false)
@@ -523,6 +523,7 @@ function WatchCard({ watch, isNew, churn }: {
                 </span>
               )}
               {newly && <Badge tone="green">NEW OPEN ↑</Badge>}
+              <ChurnBadge churn={churn} status={status} now={now ?? 0} />
             </div>
 
             {/* course name */}
@@ -1496,6 +1497,7 @@ export default function WatchlistPage() {
   const { user, loading: authLoading } = useAuth()
   const [tab, setTab] = useState<FilterTab>('all')
   const [sort, setSort] = useState<SortMode>('status')
+  const [activity, setActivity] = useState<WatchActivity>({ events: [], stats: {} })
   const prevItemIds = useRef(new Set<string>())
 
   useEffect(() => {
@@ -1516,11 +1518,16 @@ export default function WatchlistPage() {
     setRefreshing(true)
     try {
       await reload()
+      setActivity(await fetchWatchActivity())
     } finally {
       setLastRefreshAt(Date.now())
       setRefreshing(false)
     }
   }, [reload])
+
+  useEffect(() => {
+    if (!loading && !error) void fetchWatchActivity().then(setActivity)
+  }, [loading, error, items.length])
 
   // track which IDs are freshly added this session
   const [newIds, setNewIds] = useState<Set<string>>(new Set())
@@ -1605,6 +1612,8 @@ export default function WatchlistPage() {
 
             <GlobalNotificationCenter items={items} />
 
+            <SniperActivityFeed activity={activity} items={items} now={lastRefreshAt} />
+
             <FilterBar
               tab={tab} setTab={setTab}
               sort={sort} setSort={setSort}
@@ -1639,7 +1648,12 @@ export default function WatchlistPage() {
                         delay: newIds.has(w.id) ? 0 : i * 0.04,
                       }}
                     >
-                      <WatchCard watch={w} isNew={newIds.has(w.id)} />
+                      <WatchCard
+                        watch={w}
+                        isNew={newIds.has(w.id)}
+                        churn={w.teaching_assignment_id ? activity.stats[w.teaching_assignment_id] : undefined}
+                        now={lastRefreshAt}
+                      />
                     </motion.div>
                   ))}
                 </AnimatePresence>
