@@ -196,8 +196,10 @@ railway logs --service rurate-status-collector --environment production --lines 
 ```
 
 Only run the collector OR the always-on `rurate-sniper-worker` bulk refresh —
-not both. Prerequisite: apply migration `024` first, or the sweep will keep
-`open_status` fresh but record no history.
+not both. When the cron collector owns status ingestion, set
+`SNIPER_BULK_REFRESH_DISABLED=true` on the worker so it skips its own sweep and
+runs only the per-watch alert path. Prerequisite: apply migration `024` first,
+or the sweep will keep `open_status` fresh but record no history.
 
 ## AI analysis collector (professor verdicts)
 
