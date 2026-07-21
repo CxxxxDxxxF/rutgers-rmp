@@ -267,6 +267,32 @@ export async function updateWatchNotificationsDetailed(
   }
 }
 
+export interface WatchActivityEvent {
+  id: string
+  assignment_id: string
+  index_number: string | null
+  opened: boolean
+  observed_at: string
+}
+
+export interface WatchActivity {
+  events: WatchActivityEvent[]
+  stats: Record<string, { reopen_count: number; last_opened_at: string | null }>
+}
+
+export async function fetchWatchActivity(): Promise<WatchActivity> {
+  const empty: WatchActivity = { events: [], stats: {} }
+  const watcher = getWatcherId()
+  if (!watcher) return empty
+  const res = await fetch(`/api/watchlist/activity?watcher=${encodeURIComponent(watcher)}`)
+  if (!res.ok) return empty
+  const data = await res.json().catch(() => empty)
+  return {
+    events: Array.isArray(data.events) ? data.events : [],
+    stats: data.stats && typeof data.stats === 'object' ? data.stats : {},
+  }
+}
+
 export function currentSectionStatus(watch: WatchedSection): string | null {
   const section = watch.section
   if (!section) return null

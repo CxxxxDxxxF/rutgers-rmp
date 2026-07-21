@@ -12,11 +12,13 @@ import { RowListSkeleton } from '@/components/LoadingSkeleton'
 import {
   addWatchByIndex,
   currentSectionStatus,
+  fetchWatchActivity,
   isNewlyOpen,
   markWatchStatusSeen,
   removeWatch,
   updateWatchNotificationsDetailed,
   useWatchlist,
+  type WatchActivity,
   type WatchedSection,
 } from '@/lib/watchlist-client'
 import { useAuth } from '@/hooks/useAuth'
@@ -362,9 +364,108 @@ function InlineNotificationPanel({ watch, onClose }: { watch: WatchedSection; on
   )
 }
 
+// ─── ChurnBadge ───────────────────────────────────────────────────────────────
+// Seat-churn signal from section_status_events: how often this section has
+// flipped CLOSED→OPEN recently. High churn on a closed section means a snipe
+// is likely to pay off; zero churn means don't hold your breath.
+
+function ChurnBadge({ churn, status, now }: {
+  churn: { reopen_count: number; last_opened_at: string | null } | undefined
+  status: 'open' | 'closed' | 'unknown'
+  now: number
+}) {
+  if (!churn || churn.reopen_count === 0) return null
+  const lastOpenedMs = churn.last_opened_at ? new Date(churn.last_opened_at).getTime() : NaN
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-300/90 bg-amber-500/10 border border-amber-700/40 rounded px-1.5 py-0.5"
+      title="CLOSED→OPEN flips seen in the last 14 days"
+    >
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      reopened {churn.reopen_count}× / 14d
+      {status === 'closed' && !Number.isNaN(lastOpenedMs) && (
+        <span className="text-amber-200/60 font-normal">· last open {formatRelative(lastOpenedMs, now)}</span>
+      )}
+    </span>
+  )
+}
+
+// ─── SniperActivityFeed ───────────────────────────────────────────────────────
+// Rolling 7-day log of open/close flips across the user's snipes — the "is
+// anything actually moving?" answer that raw open/closed pips can't give.
+
+function SniperActivityFeed({ activity, items }: { activity: WatchActivity; items: WatchedSection[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const now = Date.now()
+
+  const byAssignment = useMemo(() => {
+    const map = new Map<string, WatchedSection>()
+    for (const w of items) {
+      if (w.teaching_assignment_id) map.set(w.teaching_assignment_id, w)
+    }
+    return map
+  }, [items])
+
+  if (activity.events.length === 0) return null
+  const shown = expanded ? activity.events : activity.events.slice(0, 6)
+
+  return (
+    <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--card-2)] overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <p className="text-sm font-semibold text-white">Recent activity</p>
+          <span className="text-[11px] text-zinc-600">last 7 days · your snipes</span>
+        </div>
+        <span className="text-[11px] font-bold tabular-nums text-zinc-500">{activity.events.length} flips</span>
+      </div>
+
+      <ul className="divide-y divide-[var(--border)]/60">
+        {shown.map(ev => {
+          const w = byAssignment.get(ev.assignment_id)
+          const label = w
+            ? `${w.course?.course_number ?? '—'}${w.section?.section_number ? ` §${w.section.section_number}` : ''}`
+            : ev.index_number ? `Index ${ev.index_number}` : 'Watched section'
+          const ms = new Date(ev.observed_at).getTime()
+          return (
+            <li key={ev.id} className="flex items-center gap-3 px-4 py-2 sm:px-5">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ev.opened ? 'bg-green-400' : 'bg-red-500/70'}`} />
+              <span className={`text-[11px] font-bold w-14 shrink-0 ${ev.opened ? 'text-green-400' : 'text-red-400/80'}`}>
+                {ev.opened ? 'OPENED' : 'CLOSED'}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">
+                {label}
+                {w?.course?.name && <span className="text-zinc-600"> · {w.course.name}</span>}
+              </span>
+              <span className="shrink-0 text-[11px] tabular-nums text-zinc-600">{formatRelative(ms, now)}</span>
+            </li>
+          )
+        })}
+      </ul>
+
+      {activity.events.length > 6 && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="w-full px-4 py-2 text-[11px] font-semibold text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
+        >
+          {expanded ? 'Show less' : `Show all ${activity.events.length}`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── WatchCard ────────────────────────────────────────────────────────────────
 
-function WatchCard({ watch, isNew }: { watch: WatchedSection; isNew?: boolean }) {
+function WatchCard({ watch, isNew, churn }: {
+  watch: WatchedSection
+  isNew?: boolean
+  churn?: { reopen_count: number; last_opened_at: string | null }
+}) {
   const [removing, setRemoving] = useState(false)
   const [showNotifs, setShowNotifs] = useState(false)
   const status = openStatus(watch)
