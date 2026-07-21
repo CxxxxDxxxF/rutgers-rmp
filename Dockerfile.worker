@@ -8,6 +8,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY worker ./worker
 
+# The worker is plain untranspiled ESM; fail the image build on a syntax error
+# instead of crash-looping at runtime.
+RUN node --check worker/sniper-worker.mjs
+
 USER node
 
 CMD ["npm", "run", "worker:sniper"]
