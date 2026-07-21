@@ -19,6 +19,13 @@ const DEFAULT_YEAR = parseInt(process.env.SNIPER_DEFAULT_YEAR ?? '2026', 10)
 const DEFAULT_TERM = process.env.SNIPER_DEFAULT_TERM ?? '9'
 const DEFAULT_CAMPUS = process.env.SNIPER_DEFAULT_CAMPUS ?? 'NB'
 const SOC_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_SOC_FETCH_TIMEOUT_MS, 10000, 1000)
+// Every await in the main loop must be bounded: one unbounded network call
+// (DB, email, SMS, AI) that never settles freezes the poll loop silently —
+// production hung exactly this way (zero CPU, no logs, no exit, no restart).
+const DB_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_DB_TIMEOUT_MS, 15000, 1000)
+const PROVIDER_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_PROVIDER_TIMEOUT_MS, 15000, 1000)
+const AI_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_AI_TIMEOUT_MS, 120000, 10000)
+const WATCHDOG_STALL_MS = parseInterval(process.env.SNIPER_WATCHDOG_STALL_MS, 5 * 60 * 1000, 60 * 1000)
 const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.RAILWAY_PUBLIC_DOMAIN
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const NOTIFY_EMAIL_FROM = process.env.NOTIFY_EMAIL_FROM
@@ -64,6 +71,9 @@ process.on('uncaughtException', error => {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
+  // supabase-js inherits fetch's no-timeout default, so a silently dropped
+  // connection would otherwise hang loadActiveWatches/updates forever.
+  global: { fetch: (input, init) => fetchWithTimeout(input, init ?? {}, DB_FETCH_TIMEOUT_MS) },
 })
 
 let watches = []
@@ -74,6 +84,19 @@ let lastAnalysisRun = 0
 let analysisRunning = false
 let lastBulkRefresh = 0
 let bulkRefreshRunning = false
+let lastLoopTick = Date.now()
+
+// Self-heal from anything that slips past the per-call timeouts (e.g. a body
+// stream that stalls after headers): if the main loop hasn't ticked in
+// WATCHDOG_STALL_MS, exit nonzero so Railway's ALWAYS restart policy brings up
+// a fresh process instead of leaving a hung one marked healthy.
+setInterval(() => {
+  const stalledMs = Date.now() - lastLoopTick
+  if (stalledMs > WATCHDOG_STALL_MS) {
+    console.error(JSON.stringify({ event: 'sniper_watchdog_exit', stalled_ms: stalledMs }))
+    process.exit(1)
+  }
+}, 30000)
 
 main().catch(error => {
   console.error(JSON.stringify({
@@ -99,6 +122,7 @@ async function main() {
 
   while (true) {
     const startedAt = Date.now()
+    lastLoopTick = startedAt
 
     if (OPENROUTER_API_KEY && !analysisRunning && Date.now() - lastAnalysisRun >= AI_ANALYSIS_INTERVAL_MS) {
       lastAnalysisRun = Date.now()
@@ -278,6 +302,7 @@ async function pollOnce(activeWatches) {
   let notificationsSent = 0
 
   for (const watch of activeWatches) {
+    lastLoopTick = Date.now()
     const sectionsByIndex = snapshots.get(sourceKey(watch.source))
     const section = sectionsByIndex?.get(watch.indexNumber)
     if (!section) continue
@@ -592,7 +617,7 @@ async function sendEmailNotification(watch, status, statusAt) {
     'RU Rate only sends alerts. Confirm in WebReg and register yourself.',
   ].filter(Boolean).join('\n')
 
-  const response = await fetch('https://api.resend.com/emails', {
+  const response = await fetchWithTimeout('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${RESEND_API_KEY}`,
@@ -604,7 +629,7 @@ async function sendEmailNotification(watch, status, statusAt) {
       subject,
       text,
     }),
-  })
+  }, PROVIDER_FETCH_TIMEOUT_MS)
 
   if (!response.ok) {
     throw new Error(`Resend failed: HTTP ${response.status}`)
@@ -627,14 +652,14 @@ async function sendSmsNotification(watch, status) {
   })
 
   const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64')
-  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
+  const response = await fetchWithTimeout(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${auth}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: params,
-  })
+  }, PROVIDER_FETCH_TIMEOUT_MS)
 
   if (!response.ok) {
     throw new Error(`Twilio failed: HTTP ${response.status}`)
@@ -864,7 +889,7 @@ Return a JSON object with these exact fields:
 
 Be direct and honest. Rutgers students want real talk, not sugarcoating. Use student-friendly language.`
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -877,7 +902,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     }),
-  })
+  }, AI_FETCH_TIMEOUT_MS)
 
   if (!res.ok) throw new Error(`OpenRouter error: ${res.status}`)
   const data = await res.json()
