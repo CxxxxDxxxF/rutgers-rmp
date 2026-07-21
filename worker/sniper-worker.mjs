@@ -40,6 +40,11 @@ const AI_ANALYSIS_ITEM_DELAY_MS = Math.max(0, parseInt(process.env.AI_ANALYSIS_I
 // Site-wide open/closed refresh via the lightweight SOC openSections endpoint.
 // One request per cycle keeps every section's status fresh even with no watches.
 const SNIPER_BULK_REFRESH_MS = parseInterval(process.env.SNIPER_BULK_REFRESH_MS, 10 * 60 * 1000, 60 * 1000)
+// The site-wide sweep and the standalone status-collector cron do the same job;
+// running both duplicates Rutgers requests. Set this to 'true' when the cron
+// collector owns status ingestion so this worker only runs the per-watch alert
+// path. See docs/sniper-worker.md.
+const SNIPER_BULK_REFRESH_DISABLED = process.env.SNIPER_BULK_REFRESH_DISABLED === 'true'
 // The catalog is ingested across every Rutgers campus, so the bulk sweep unions
 // the open lists from each — an NB-only list would wrongly mark NK/CM sections
 // CLOSED.
@@ -118,6 +123,7 @@ async function main() {
     default_campus: DEFAULT_CAMPUS,
     email_enabled: Boolean(RESEND_API_KEY && NOTIFY_EMAIL_FROM),
     sms_enabled: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER),
+    bulk_refresh_disabled: SNIPER_BULK_REFRESH_DISABLED,
   }))
 
   while (true) {
@@ -133,7 +139,8 @@ async function main() {
     }
 
     // Runs before the idle check so section statuses stay fresh with zero watches.
-    if (!bulkRefreshRunning && Date.now() - lastBulkRefresh >= SNIPER_BULK_REFRESH_MS) {
+    // Skipped entirely when the standalone status-collector cron owns the sweep.
+    if (!SNIPER_BULK_REFRESH_DISABLED && !bulkRefreshRunning && Date.now() - lastBulkRefresh >= SNIPER_BULK_REFRESH_MS) {
       lastBulkRefresh = Date.now()
       bulkRefreshRunning = true
       runBulkStatusRefresh().catch(err => {
