@@ -3,17 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { NAV_ITEMS, isNavItemActive } from '@/lib/nav'
 import { supabase } from '@/lib/supabase'
 import { useWatchlistSync } from '@/lib/watchlist-client'
-
-const NAV = [
-  { href: '/courses', label: 'Courses' },
-  { href: '/departments', label: 'Departments' },
-  { href: '/professors', label: 'Professors' },
-  { href: '/watchlist', label: 'Sniper' },
-  { href: '/compare', label: 'Compare' },
-  { href: '/schedule', label: 'Ranker' },
-]
 
 export default function AppHeader() {
   const pathname = usePathname()
@@ -38,42 +30,33 @@ export default function AppHeader() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center h-14 gap-3">
 
-          {/* Wordmark */}
-          <Link href="/" className="shrink-0 flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center"
+          {/* Brand lockup — icon + wordmark as one clickable unit */}
+          <Link href="/" aria-label="RU Rate home" className="shrink-0 flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-[10px] flex items-center justify-center shrink-0 text-white font-black text-lg sm:text-xl leading-none select-none"
               style={{
                 background: 'linear-gradient(135deg, #CC0033 0%, #990026 100%)',
-                boxShadow: '0 0 14px rgba(204,0,51,0.35)',
+                boxShadow: '0 1px 4px rgba(204,0,51,0.25)',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                <text
-                  x="8" y="13"
-                  textAnchor="middle"
-                  fill="white"
-                  fontSize="13"
-                  fontWeight="900"
-                  fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-                >
-                  R
-                </text>
-              </svg>
-            </div>
-            <span className="font-black tracking-tight text-base leading-none">
+              R
+            </span>
+            <span className="font-black tracking-tighter text-lg leading-none whitespace-nowrap">
               <span style={{ color: '#CC0033' }}>RU</span>
               <span className="text-white"> Rate</span>
             </span>
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center ml-3">
-            {NAV.map(({ href, label }) => {
-              const active = pathname === href || pathname.startsWith(`${href}/`)
+          <nav className="hidden md:flex items-center gap-1 mx-auto">
+            {NAV_ITEMS.map(({ href, label }) => {
+              const active = isNavItemActive(href, pathname)
               return (
                 <Link
                   key={href}
                   href={href}
+                  aria-current={active ? 'page' : undefined}
                   className={`relative px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors rounded-lg ${
                     active ? 'text-white' : 'text-zinc-500 hover:text-zinc-200'
                   }`}
@@ -91,7 +74,7 @@ export default function AppHeader() {
           </nav>
 
           {/* Right side */}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto md:ml-0 flex items-center gap-2 shrink-0">
             <Link
               href="/pro"
               className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
@@ -136,19 +119,19 @@ export default function AppHeader() {
 
         {/* Mobile nav */}
         <nav className="md:hidden flex gap-0.5 pb-2.5 -mx-1 px-1 overflow-x-auto">
-          {NAV.map(({ href, label }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`)
-            const short = label === 'Departments' ? 'Depts' : label === 'Professors' ? 'Profs' : label
+          {NAV_ITEMS.map(({ href, label, shortLabel }) => {
+            const active = isNavItemActive(href, pathname)
             return (
               <Link
                 key={href}
                 href={href}
+                aria-current={active ? 'page' : undefined}
                 className={`relative flex-1 min-w-fit px-3 py-1.5 rounded-lg text-center text-xs font-semibold whitespace-nowrap transition-colors ${
                   active ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
                 style={active ? { background: 'rgba(255,255,255,0.05)' } : {}}
               >
-                {short}
+                {shortLabel ?? label}
                 {active && (
                   <span
                     className="absolute left-2 right-2 bottom-0 h-[2px] rounded-t"

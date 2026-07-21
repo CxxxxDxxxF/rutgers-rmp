@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AppHeader from '@/components/AppHeader'
+import AppSelect from '@/components/AppSelect'
 
 interface ReviewProfessor {
   first_name: string
@@ -287,20 +288,18 @@ function ReviewsContent() {
         {/* Sort */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-zinc-600">Sort:</span>
-          <select
+          <AppSelect
             value={sort}
-            onChange={e => setSort(e.target.value)}
-            className="text-xs rounded-lg px-2 py-1.5 outline-none border"
-            style={{
+            onChange={setSort}
+            ariaLabel="Sort reviews"
+            options={SORT_OPTIONS}
+            triggerClassName="text-xs rounded-lg px-2 py-1.5 border"
+            triggerStyle={{
               background: 'rgba(255,255,255,0.04)',
               borderColor: 'rgba(255,255,255,0.1)',
               color: '#a1a1aa',
             }}
-          >
-            {SORT_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          />
         </div>
       </div>
 

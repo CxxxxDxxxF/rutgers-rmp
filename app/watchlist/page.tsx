@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
 import AppHeader from '@/components/AppHeader'
+import AppSelect from '@/components/AppSelect'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import { CopyButton } from '@/components/SectionTable'
@@ -990,18 +991,17 @@ function QuickSnipeBox() {
               </p>
               <div className="flex items-center gap-2">
                 {semesters.length > 0 && (
-                  <select
+                  <AppSelect
                     value={semesterSlug}
-                    onChange={e => setSemesterSlug(e.target.value)}
-                    aria-label="Semester for these index numbers"
-                    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs font-medium text-zinc-200 outline-none transition-colors focus:border-[#CC0033]"
-                  >
-                    {semesters.map(s => (
-                      <option key={s.slug} value={s.slug}>
-                        {s.name}{s.is_current ? ' · current' : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSemesterSlug}
+                    ariaLabel="Semester for these index numbers"
+                    align="right"
+                    options={semesters.map(s => ({
+                      value: s.slug,
+                      label: `${s.name}${s.is_current ? ' · current' : ''}`,
+                    }))}
+                    triggerClassName="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs font-medium text-zinc-200 transition-colors"
+                  />
                 )}
                 <span className="text-[11px] tabular-nums text-zinc-600">{validCount}/{MAX_SNIPE_INDEXES}</span>
               </div>

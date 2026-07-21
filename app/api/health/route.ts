@@ -10,6 +10,23 @@ export const revalidate = 0
 // calling the history feed stale.
 const COLLECTOR_STALE_MINUTES = 20
 
+// Presence-only view of the browser-facing Supabase configuration. The URL
+// host and anon key already ship inside the client bundle, so naming the host
+// leaks nothing — but no key material is ever included. Lets an operator
+// confirm Railway supplied the NEXT_PUBLIC_* values without shell access.
+function publicConfig() {
+  let host: string | null = null
+  try {
+    host = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').host || null
+  } catch {
+    host = null
+  }
+  return {
+    supabase_url_host: host,
+    anon_key_present: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+  }
+}
+
 // Point a free uptime monitor (UptimeRobot, etc.) at this route. It returns:
 //   200 { status: "ok" }        — database reachable, history feed fresh
 //   200 { status: "degraded" }  — reachable but no status writer is running
@@ -23,7 +40,7 @@ export async function GET() {
     db = createServiceClient()
   } catch {
     return NextResponse.json(
-      { status: 'down', db: 'unconfigured', checked_at: new Date().toISOString() },
+      { status: 'down', db: 'unconfigured', public_config: publicConfig(), checked_at: new Date().toISOString() },
       { status: 503 }
     )
   }
@@ -56,6 +73,7 @@ export async function GET() {
       },
       ai_analysis_backlog: aiBacklog.count ?? null,
       active_sections: sections.count ?? null,
+      public_config: publicConfig(),
     })
   } catch (err) {
     log.error('Health check failed:', err)

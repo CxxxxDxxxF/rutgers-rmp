@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import AppSelect from '@/components/AppSelect'
 import { supabase } from '@/lib/supabase'
 import type { NativeReview } from './NativeReviewCard'
 
@@ -260,16 +261,16 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
                 <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                   Grade received
                 </label>
-                <select
+                <AppSelect
                   value={gradeReceived}
-                  onChange={(e) => setGradeReceived(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white focus:outline-none focus:border-zinc-500"
-                >
-                  <option value="">Select grade</option>
-                  {GRADE_OPTIONS.map((g) => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
+                  onChange={setGradeReceived}
+                  ariaLabel="Grade received"
+                  options={[
+                    { value: '', label: 'Select grade' },
+                    ...GRADE_OPTIONS.map(g => ({ value: g, label: g })),
+                  ]}
+                  triggerClassName="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -278,19 +279,20 @@ export default function WriteReviewForm({ rmpId, professorId, onSubmitted, onCan
                 </label>
                 {knownCourses.length > 0 ? (
                   <div className="space-y-2">
-                    <select
+                    <AppSelect
                       value={courseNumber}
-                      onChange={e => setCourseNumber(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white focus:outline-none focus:border-zinc-500"
-                    >
-                      <option value="">Select a course…</option>
-                      {knownCourses.map(c => (
-                        <option key={c.course_number} value={c.course_number}>
-                          {c.course_number} — {c.name}
-                        </option>
-                      ))}
-                      <option value="__manual__">Other / enter manually</option>
-                    </select>
+                      onChange={setCourseNumber}
+                      ariaLabel="Course taken"
+                      options={[
+                        { value: '', label: 'Select a course…' },
+                        ...knownCourses.map(c => ({
+                          value: c.course_number,
+                          label: `${c.course_number} — ${c.name}`,
+                        })),
+                        { value: '__manual__', label: 'Other / enter manually' },
+                      ]}
+                      triggerClassName="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white"
+                    />
                     {courseNumber === '__manual__' && (
                       <input
                         type="text"

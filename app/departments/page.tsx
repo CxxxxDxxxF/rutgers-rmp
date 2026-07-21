@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
+import AppSelect from '@/components/AppSelect'
 
 interface DepartmentRow {
   id: string
@@ -410,20 +411,20 @@ export default function DepartmentsPage() {
               >
                 ★ Rated
               </button>
-              <select
+              <AppSelect
                 value={sort}
-                onChange={e => setSort(e.target.value as SortKey)}
-                className="px-3 py-2 rounded-lg text-xs font-semibold focus:outline-none transition-colors"
-                style={{
+                onChange={v => setSort(v as SortKey)}
+                ariaLabel="Sort departments"
+                prefix="Sort: "
+                align="right"
+                options={SORT_OPTIONS}
+                triggerClassName="px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
+                triggerStyle={{
                   background: sort !== 'name' ? 'var(--card-2)' : 'var(--card)',
                   border: `1px solid ${sort !== 'name' ? 'rgba(255,255,255,0.15)' : 'var(--border)'}`,
                   color: sort !== 'name' ? 'white' : '#a1a1aa',
                 }}
-              >
-                {SORT_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>Sort: {opt.label}</option>
-                ))}
-              </select>
+              />
             </div>
           </div>
         )}
