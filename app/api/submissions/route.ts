@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 
-function submitterFingerprint(req: NextRequest): string {
-  const salt = process.env.VOTE_FINGERPRINT_SALT ?? ''
+function submitterFingerprint(req: NextRequest): string | null {
+  const salt = process.env.VOTE_FINGERPRINT_SALT
+  if (!salt) return null
   const forwarded = req.headers.get('x-forwarded-for')
   const realIp = req.headers.get('x-real-ip')
   const ip = (forwarded ? forwarded.split(',')[0].trim() : realIp) ?? '0.0.0.0'
@@ -27,6 +28,9 @@ export async function POST(req: NextRequest) {
 
     // Rate limit: max 5 submissions per IP
     const fingerprint = submitterFingerprint(req)
+    if (!fingerprint) {
+      return NextResponse.json({ error: 'Submissions unavailable' }, { status: 503 })
+    }
     const { count } = await db
       .from('user_submissions')
       .select('id', { count: 'exact', head: true })

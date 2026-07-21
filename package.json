@@ -19,6 +19,8 @@
     "worker:ai": "node worker/ai-analysis-collector.mjs",
     "migrate": "npx tsx scripts/apply-migration.ts",
     "enrich:rmp": "npx tsx scripts/enrich-rmp.ts",
+    "backfill:departments": "npx tsx scripts/backfill-department-links.ts",
+    "backfill:rutgers-subjects": "npx tsx scripts/backfill-rutgers-subject-departments.ts",
     "refresh:rmp-cache": "npx tsx scripts/refresh-rmp-cache.ts",
     "audit:data": "npx tsx scripts/audit-data.ts"
   },

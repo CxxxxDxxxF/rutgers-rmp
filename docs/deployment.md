@@ -48,13 +48,33 @@ analyzed with `google/gemini-2.5-flash-lite`). `rurate-ai-collector` stays on a
 | Railway item | Current value |
 | --- | --- |
 | Project | `rurate-production` |
-| Environment | `production` |
+| Production environment | `production` |
+| Testing environment | `staging` |
 | Web service | `rurate-web` |
 | Worker service | `rurate-sniper-worker` |
-| Public URL | `https://rurate-web-production.up.railway.app` |
+| Production URL | `https://rurate-web-production.up.railway.app` |
+| Staging URL | `https://rurate-web-staging.up.railway.app` |
 
 The local package name is still `rmp-web`; that is a development artifact. Use
 the Railway names above when operating production.
+
+## Environments
+
+| Environment | Web service | Worker service | Notes |
+| --- | --- | --- | --- |
+| `production` | Running | Running | Live student-facing app and sniper worker |
+| `staging` | Running | Not deployed intentionally | Web testing server; worker is intentionally idle |
+
+The local Railway CLI context may be linked to `staging` to make accidental
+production deploys less likely. Use explicit `--environment production` or
+`--environment staging` flags for operational commands.
+
+Do not start the staging worker against production Supabase credentials unless
+duplicate polling/alert side effects are acceptable. Prefer a separate Supabase
+project or disabled notification providers before running a staging worker.
+
+For the staging web service, set
+`NEXT_PUBLIC_APP_URL=https://rurate-web-staging.up.railway.app`.
 
 ## Service Responsibilities
 

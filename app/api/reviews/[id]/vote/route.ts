@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 
-function buildFingerprint(req: NextRequest): string {
-  const salt = process.env.VOTE_FINGERPRINT_SALT ?? ''
+function buildFingerprint(req: NextRequest): string | null {
+  const salt = process.env.VOTE_FINGERPRINT_SALT
+  if (!salt) return null
   const forwarded = req.headers.get('x-forwarded-for')
   const realIp = req.headers.get('x-real-ip')
   const ip = (forwarded ? forwarded.split(',')[0].trim() : realIp) ?? '0.0.0.0'
@@ -26,7 +27,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: review_id } = await params
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
   const { vote } = body
 
   if (vote !== 'helpful' && vote !== 'not_helpful') {
@@ -36,6 +42,9 @@ export async function POST(
   const vote_type: string = vote
   const supabase = createServiceClient()
   const voter_fingerprint = buildFingerprint(req)
+  if (!voter_fingerprint) {
+    return NextResponse.json({ error: 'Voting unavailable' }, { status: 503 })
+  }
 
   // Check for an existing vote from this fingerprint
   const { data: existing } = await supabase

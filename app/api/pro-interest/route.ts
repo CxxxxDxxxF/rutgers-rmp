@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const MAX_EXISTING_INTEREST_PER_CONTACT = 3
 
 export async function POST(req: NextRequest) {
   let body: {
@@ -29,6 +30,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const db = createServiceClient()
+    const existingCounts = await Promise.all([
+      email ? countExistingInterest(db, 'email', email) : Promise.resolve(0),
+      phone ? countExistingInterest(db, 'phone_e164', phone) : Promise.resolve(0),
+    ])
+
+    if (existingCounts.some(count => count == null)) {
+      return NextResponse.json({ error: 'Failed to save interest' }, { status: 500 })
+    }
+
+    if (existingCounts.some(count => (count ?? 0) >= MAX_EXISTING_INTEREST_PER_CONTACT)) {
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
     const { error } = await db
       .from('pro_interest')
       .insert({
@@ -55,6 +69,23 @@ function sanitizeEmail(value: string | undefined) {
   const email = value.trim().toLowerCase()
   if (!email) return null
   return email.length <= 254 && EMAIL_RE.test(email) ? email : null
+}
+
+async function countExistingInterest(
+  db: ReturnType<typeof createServiceClient>,
+  column: 'email' | 'phone_e164',
+  value: string
+) {
+  const { count, error } = await db
+    .from('pro_interest')
+    .select('id', { count: 'exact', head: true })
+    .eq(column, value)
+
+  if (error) {
+    log.error('Pro interest duplicate check error:', error)
+    return null
+  }
+  return count ?? 0
 }
 
 function sanitizePhone(value: string | undefined) {

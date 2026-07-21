@@ -12,7 +12,8 @@ first, then follow the linked docs for the specific task.
 - Railway project: `rurate-production`
 - Web service: `rurate-web`
 - Worker service: `rurate-sniper-worker`
-- Public URL: `https://rurate-web-production.up.railway.app`
+- Production URL: `https://rurate-web-production.up.railway.app`
+- Staging URL: `https://rurate-web-staging.up.railway.app` (web only; worker intentionally not deployed)
 
 Do not confuse the local package/repo name `rmp-web` with production service
 names. Production should use the RU Rate names above.

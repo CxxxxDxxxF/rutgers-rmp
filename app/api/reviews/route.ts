@@ -190,6 +190,9 @@ export async function POST(req: NextRequest) {
   }
 
   const reviewer_ip = buildReviewerFingerprint(req)
+  if (!reviewer_ip) {
+    return NextResponse.json({ error: 'Review submission unavailable' }, { status: 503 })
+  }
 
   // Resolve professor ID: prefer direct UUID, fall back to rmp_id lookup
   let professor_id: string
@@ -302,8 +305,9 @@ export async function POST(req: NextRequest) {
   )
 }
 
-function buildReviewerFingerprint(req: NextRequest): string {
-  const salt = process.env.VOTE_FINGERPRINT_SALT ?? ''
+function buildReviewerFingerprint(req: NextRequest): string | null {
+  const salt = process.env.VOTE_FINGERPRINT_SALT
+  if (!salt) return null
   const forwarded = req.headers.get('x-forwarded-for')
   const realIp = req.headers.get('x-real-ip')
   const ip = (forwarded ? forwarded.split(',')[0].trim() : realIp) ?? '0.0.0.0'
