@@ -8,19 +8,32 @@ This is intentional — signup does not run any app-side insert that could fail.
 
 ## Root cause of the first-user signup failure (Jul 2026)
 
-The first real external user could not create an account. Diagnosis:
+The first real external user could not create an account. What the evidence
+**proves**:
 
 - `auth.users` had **zero rows** — signup had never succeeded for anyone.
 - No trigger exists on `auth.users`, and there is no `profiles` table, so the
-  "Database error saving new user" trigger class was ruled out.
+  "Database error saving new user" trigger class is ruled out.
 - A failed *confirmation email* still leaves an **unconfirmed** row. Zero rows
-  means GoTrue was rejecting the request **before** persisting the user.
+  therefore proves GoTrue rejected the request **before** persisting the user.
 
-That signature is **"Confirm email" ON with no working SMTP**: GoTrue tries to
-send the confirmation mail, the send fails (the built-in Supabase email service
-does not reliably deliver to external addresses and is heavily rate-limited),
-and the whole signup is rolled back. This is a **provider-configuration**
-issue, not a code, database, or frontend bug.
+What the evidence does **not** prove: *which* pre-creation cause it is. Zero
+rows is consistent with several, and the **Auth logs are authoritative** — read
+them to confirm before concluding:
+
+- **"Confirm email" ON with no working sender** (leading hypothesis): GoTrue
+  tries to send the confirmation mail, the built-in Supabase sender fails or is
+  rate-limited, and the signup is rolled back.
+- **New-user signup disabled** ("Allow new users to sign up" off).
+- **A Before-User-Created auth hook** rejecting the request.
+- **Auth rate limiting.**
+- **Invalid request parameters.**
+- **Wrong project / environment configuration** (ruled out here — this DB
+  serves all the app's live data, so the browser reaches this GoTrue).
+
+All of these are **provider/configuration** issues, not code, database, or
+frontend bugs. Confirm the specific one in **Authentication → Logs** (or the
+`auth` service logs) before and after the fix.
 
 ## The fix (launch configuration)
 
