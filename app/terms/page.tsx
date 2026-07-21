@@ -65,7 +65,7 @@ export default function TermsPage() {
             </ul>
             <p className="mt-3">
               Seat-open alerts are delivered on a best-effort basis. Alert delivery depends on
-              polling frequency, third-party infrastructure (Resend, Twilio), and network
+              polling frequency, third-party email infrastructure (Resend), and network
               conditions. We do not guarantee that an alert will reach you before a seat is
               taken.
             </p>

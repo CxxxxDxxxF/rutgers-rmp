@@ -11,20 +11,16 @@ import { CopyButton } from '@/components/SectionTable'
 import { RowListSkeleton } from '@/components/LoadingSkeleton'
 import {
   addWatchByIndex,
-  currentSectionStatus,
   fetchWatchActivity,
   isNewlyOpen,
   markWatchStatusSeen,
   removeWatch,
-  updateWatchNotificationsDetailed,
   useWatchlist,
   type WatchActivity,
   type WatchedSection,
 } from '@/lib/watchlist-client'
 import { useAuth } from '@/hooks/useAuth'
 
-const ALERT_NOTIFIED_KEY = 'ru-rate-open-alert-notified'
-const QUICK_ALERT_PREFS_KEY = 'ru-rate-sniper-alert-prefs'
 const WEBREG_URL = 'https://sims.rutgers.edu/webreg/'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -34,14 +30,6 @@ function openStatus(w: WatchedSection): 'open' | 'closed' | 'unknown' {
   if (w.section.open_status === true) return 'open'
   if (w.section.open_status === false) return 'closed'
   return 'unknown'
-}
-
-function watchTitle(w: WatchedSection) {
-  return `${w.course?.course_number ?? 'Course'} ${w.section?.section_number ? `Sec ${w.section.section_number}` : ''}`.trim()
-}
-
-function alertKey(w: WatchedSection) {
-  return `${w.id}:${w.section?.status_updated_at ?? currentSectionStatus(w) ?? 'open'}`
 }
 
 function formatLocation(section: WatchedSection['section']): string | null {
@@ -82,98 +70,6 @@ function latestWorkerSync(items: WatchedSection[]): number | null {
     if (!Number.isNaN(ms) && (latest === null || ms > latest)) latest = ms
   }
   return latest
-}
-
-function readNotifiedKeys() {
-  try { return new Set(JSON.parse(localStorage.getItem(ALERT_NOTIFIED_KEY) ?? '[]') as string[]) }
-  catch { return new Set<string>() }
-}
-
-function writeNotifiedKeys(keys: Set<string>) {
-  try { localStorage.setItem(ALERT_NOTIFIED_KEY, JSON.stringify([...keys].slice(-200))) }
-  catch { /* localStorage blocked */ }
-}
-
-function readQuickPrefs() {
-  if (typeof window === 'undefined') return null
-  try { return JSON.parse(localStorage.getItem(QUICK_ALERT_PREFS_KEY) ?? 'null') as { email?: string; phone?: string; emailEnabled?: boolean; smsEnabled?: boolean } | null }
-  catch { return null }
-}
-
-function writeQuickPrefs(prefs: { email: string; phone: string; emailEnabled: boolean; smsEnabled: boolean }) {
-  try { localStorage.setItem(QUICK_ALERT_PREFS_KEY, JSON.stringify(prefs)) }
-  catch { /* localStorage blocked */ }
-}
-
-// ─── Phone helpers ────────────────────────────────────────────────────────────
-
-// Converts raw input → display format "(732) 555-1234"
-function formatPhoneDisplay(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 10)
-  if (digits.length <= 3) return digits
-  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
-}
-
-// Converts E.164 "+17325551234" → display "(732) 555-1234" for pre-populating inputs
-function e164ToDisplay(e164: string): string {
-  const digits = e164.replace(/\D/g, '')
-  const local = digits.startsWith('1') ? digits.slice(1) : digits
-  return formatPhoneDisplay(local)
-}
-
-// Converts display input → E.164 "+1XXXXXXXXXX" (returns '' if incomplete)
-function displayToE164(display: string): string {
-  const digits = display.replace(/\D/g, '')
-  if (digits.length !== 10) return ''
-  return `+1${digits}`
-}
-
-// ─── PhoneInput ───────────────────────────────────────────────────────────────
-
-function PhoneInput({
-  value,
-  onChange,
-  className = '',
-}: {
-  value: string        // E.164 stored value
-  onChange: (e164: string) => void
-  className?: string
-}) {
-  const [display, setDisplay] = useState(value ? e164ToDisplay(value) : '')
-
-  // Sync when the stored value changes (e.g., loaded from DB)
-  useEffect(() => {
-    setDisplay(value ? e164ToDisplay(value) : '')
-  }, [value])
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value
-    const formatted = formatPhoneDisplay(raw)
-    setDisplay(formatted)
-    onChange(displayToE164(formatted))
-  }
-
-  return (
-    <div className={`relative ${className}`}>
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-500 pointer-events-none select-none">
-        🇺🇸 +1
-      </span>
-      <input
-        type="tel"
-        inputMode="numeric"
-        value={display}
-        onChange={handleChange}
-        placeholder="(732) 555-1234"
-        maxLength={14}
-        className={`w-full pl-14 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm text-white outline-none focus:border-[#CC0033] transition-colors ${
-          display && displayToE164(display) === '' && display.replace(/\D/g, '').length > 0
-            ? 'border-red-800/60'
-            : ''
-        }`}
-      />
-    </div>
-  )
 }
 
 // ─── StatusPip ────────────────────────────────────────────────────────────────
@@ -255,112 +151,6 @@ function WebRegButton({ indexNumber, compact = false }: { indexNumber: string; c
         </>
       )}
     </button>
-  )
-}
-
-// ─── InlineNotificationPanel ──────────────────────────────────────────────────
-
-function InlineNotificationPanel({ watch, onClose }: { watch: WatchedSection; onClose: () => void }) {
-  const ns = watch.notification_settings
-  const [email, setEmail] = useState(ns?.email ?? '')
-  const [phone, setPhone] = useState(ns?.phone_e164 ?? '')
-  const [emailEnabled, setEmailEnabled] = useState(ns?.email_enabled ?? false)
-  const [smsEnabled, setSmsEnabled] = useState(ns?.sms_enabled ?? false)
-  const [notifyOnOpen, setNotifyOnOpen] = useState(ns?.notify_on_open ?? true)
-  const [notifyOnClose, setNotifyOnClose] = useState(ns?.notify_on_close ?? false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function save() {
-    if (saving) return
-    setSaving(true)
-    setSaved(false)
-    setError(null)
-    try {
-      const result = await updateWatchNotificationsDetailed(
-        { email, phone_e164: phone, email_enabled: emailEnabled, sms_enabled: smsEnabled, notify_on_open: notifyOnOpen, notify_on_close: notifyOnClose },
-        [watch.id]
-      )
-      if (result.ok) { setSaved(true); setTimeout(onClose, 800) }
-      else setError(result.error ?? 'Failed to save')
-    } catch {
-      setError('Network error — check your connection')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.22, ease: 'easeInOut' }}
-      className="overflow-hidden"
-    >
-      <div className="border-t border-[var(--border)] mt-3 pt-3 space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Alert settings for this snipe</p>
-
-        <div className="grid sm:grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-[11px] text-zinc-500 font-medium">Email</span>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] text-zinc-500 font-medium">Phone (SMS)</span>
-            <PhoneInput value={phone} onChange={setPhone} className="mt-1" />
-          </label>
-        </div>
-
-        <div className="flex flex-wrap gap-4">
-          {[
-            { label: 'Email alerts', checked: emailEnabled, set: setEmailEnabled },
-            { label: 'SMS alerts', checked: smsEnabled, set: setSmsEnabled },
-            { label: 'Notify when open', checked: notifyOnOpen, set: setNotifyOnOpen },
-            { label: 'Notify when closed', checked: notifyOnClose, set: setNotifyOnClose },
-          ].map(({ label, checked, set }) => (
-            <label key={label} className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
-              <div
-                onClick={() => set(!checked)}
-                className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer ${checked ? 'bg-[#CC0033]' : 'bg-zinc-700'}`}
-              >
-                <div className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-              </div>
-              {label}
-            </label>
-          ))}
-        </div>
-
-        {error && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-red-400 flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            {error}
-          </motion.p>
-        )}
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-4 py-1.5 rounded-lg bg-[#CC0033] text-white text-xs font-semibold hover:bg-[#a8002b] disabled:opacity-50 transition-colors"
-          >
-            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save alerts'}
-          </button>
-          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </motion.div>
   )
 }
 
@@ -467,12 +257,10 @@ function WatchCard({ watch, isNew, churn, now }: {
   now?: number
 }) {
   const [removing, setRemoving] = useState(false)
-  const [showNotifs, setShowNotifs] = useState(false)
   const status = openStatus(watch)
   const s = watch.section
   const indexNumber = watch.index_number ?? s?.index_number ?? null
   const newly = isNew && isNewlyOpen(watch)
-  const hasAlerts = watch.notification_settings?.email_enabled || watch.notification_settings?.sms_enabled
 
   const location = formatLocation(s)
   const meets = formatMeets(s)
@@ -608,26 +396,6 @@ function WatchCard({ watch, isNew, churn, now }: {
                   SOC ↗
                 </a>
               )}
-              {/* bell toggle */}
-              <button
-                onClick={() => setShowNotifs(v => !v)}
-                title="Alert settings"
-                className={`p-1.5 rounded-lg border transition-colors ${
-                  hasAlerts
-                    ? 'bg-[#CC0033]/15 border-[#CC0033]/40 text-[#ff4d6d] hover:bg-[#CC0033]/25'
-                    : 'bg-[var(--card)] border-[var(--border)] text-zinc-500 hover:text-zinc-200 hover:border-zinc-500'
-                }`}
-              >
-                {hasAlerts ? (
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 20 20" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17H5a1 1 0 01-.707-1.707L5 14.586V11a7 7 0 0110 0v3.586l.707.707A1 1 0 0115 17zM10 19a2 2 0 01-2-2h4a2 2 0 01-2 2z" />
-                  </svg>
-                )}
-              </button>
               <button
                 onClick={handleRemove}
                 disabled={removing}
@@ -648,13 +416,6 @@ function WatchCard({ watch, isNew, churn, now }: {
             </div>
           </div>
         </div>
-
-        {/* expandable notification panel */}
-        <AnimatePresence>
-          {showNotifs && (
-            <InlineNotificationPanel watch={watch} onClose={() => setShowNotifs(false)} />
-          )}
-        </AnimatePresence>
       </div>
     </div>
   )
@@ -663,39 +424,10 @@ function WatchCard({ watch, isNew, churn, now }: {
 // ─── OpenSectionAlerts ────────────────────────────────────────────────────────
 
 function OpenSectionAlerts({ newlyOpen }: { newlyOpen: WatchedSection[] }) {
-  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
   const [markingSeen, setMarkingSeen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    setPermission('Notification' in window ? Notification.permission : 'unsupported')
-  }, [])
-
-  useEffect(() => {
-    if (permission !== 'granted' || newlyOpen.length === 0) return
-    const notified = readNotifiedKeys()
-    let changed = false
-    for (const watch of newlyOpen) {
-      const key = alertKey(watch)
-      if (notified.has(key)) continue
-      const idx = watch.index_number ?? watch.section?.index_number
-      new Notification('Seat opened!', {
-        body: `${watchTitle(watch)}${idx ? ` · Index ${idx}` : ''}`,
-        tag: key,
-      })
-      notified.add(key)
-      changed = true
-    }
-    if (changed) writeNotifiedKeys(notified)
-  }, [newlyOpen, permission])
-
   if (newlyOpen.length === 0) return null
-
-  async function enableNotifications() {
-    if (!('Notification' in window)) { setPermission('unsupported'); return }
-    const next = await Notification.requestPermission()
-    setPermission(next)
-  }
 
   async function markSeen() {
     if (markingSeen) return
@@ -729,17 +461,6 @@ function OpenSectionAlerts({ newlyOpen }: { newlyOpen: WatchedSection[] }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {permission === 'default' && (
-            <button
-              onClick={enableNotifications}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-500 text-black hover:bg-green-400 transition-colors"
-            >
-              Enable browser alerts
-            </button>
-          )}
-          {permission === 'denied' && (
-            <span className="text-[11px] text-green-100/50 py-1.5">Browser alerts blocked</span>
-          )}
           <button
             onClick={markSeen}
             disabled={markingSeen}
@@ -798,151 +519,12 @@ function OpenSectionAlerts({ newlyOpen }: { newlyOpen: WatchedSection[] }) {
 // ─── GlobalNotificationCenter ─────────────────────────────────────────────────
 
 function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
-  const [open, setOpen] = useState(false)
-  const first = items[0]?.notification_settings
-  const [email, setEmail] = useState(first?.email ?? '')
-  const [phone, setPhone] = useState(first?.phone_e164 ?? '')
-  const [emailEnabled, setEmailEnabled] = useState(first?.email_enabled ?? false)
-  const [smsEnabled, setSmsEnabled] = useState(first?.sms_enabled ?? false)
-  const [notifyOnOpen, setNotifyOnOpen] = useState(first?.notify_on_open ?? true)
-  const [notifyOnClose, setNotifyOnClose] = useState(first?.notify_on_close ?? false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setEmail(first?.email ?? '')
-    setPhone(first?.phone_e164 ?? '')
-    setEmailEnabled(first?.email_enabled ?? false)
-    setSmsEnabled(first?.sms_enabled ?? false)
-    setNotifyOnOpen(first?.notify_on_open ?? true)
-    setNotifyOnClose(first?.notify_on_close ?? false)
-  }, [first])
-
-  const activeChannels = [emailEnabled && 'email', smsEnabled && 'SMS'].filter(Boolean).join(' + ')
-
-  async function saveAll() {
-    if (saving) return
-    setSaving(true)
-    setSaved(false)
-    setError(null)
-    try {
-      const result = await updateWatchNotificationsDetailed(
-        { email, phone_e164: phone, email_enabled: emailEnabled, sms_enabled: smsEnabled, notify_on_open: notifyOnOpen, notify_on_close: notifyOnClose },
-        items.map(i => i.id)
-      )
-      if (result.ok) { setSaved(true); setTimeout(() => setOpen(false), 900) }
-      else setError(result.error ?? 'Failed to save')
-    } catch {
-      setError('Network error — check your connection')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
-    <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--card-2)] overflow-hidden">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 sm:px-5 hover:bg-white/5 transition-colors group"
-      >
-        <div className="flex items-center gap-3">
-          <div className={`p-1.5 rounded-lg border transition-colors ${
-            activeChannels ? 'bg-[#CC0033]/15 border-[#CC0033]/40 text-[#ff4d6d]' : 'bg-zinc-800 border-zinc-700 text-zinc-500 group-hover:text-zinc-300'
-          }`}>
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-            </svg>
-          </div>
-          <div className="text-left">
-            <p className="text-sm font-semibold text-white">Notification center</p>
-            <p className="text-[11px] text-zinc-500">
-              {activeChannels ? `Active: ${activeChannels} · applies to all ${items.length} snipes` : `No channels active · set email or SMS below`}
-            </p>
-          </div>
-        </div>
-        <svg
-          className={`w-4 h-4 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-[var(--border)] px-4 pt-4 pb-5 sm:px-5 space-y-4">
-              <p className="text-xs text-zinc-500">Applies to all your snipes. You can also set per-snipe alerts via the 🔔 on each card.</p>
-
-              <div className="grid sm:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Email</span>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-white outline-none focus:border-[#CC0033] transition-colors"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Phone (SMS)</span>
-                  <PhoneInput value={phone} onChange={setPhone} className="mt-1.5" />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: 'Email', sublabel: 'via Resend', checked: emailEnabled, set: setEmailEnabled },
-                  { label: 'SMS', sublabel: 'via Twilio', checked: smsEnabled, set: setSmsEnabled },
-                  { label: 'Notify open', sublabel: 'seat opens', checked: notifyOnOpen, set: setNotifyOnOpen },
-                  { label: 'Notify closed', sublabel: 'seat closes', checked: notifyOnClose, set: setNotifyOnClose },
-                ].map(({ label, sublabel, checked, set }) => (
-                  <button
-                    key={label}
-                    onClick={() => set(!checked)}
-                    className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
-                      checked
-                        ? 'bg-[#CC0033]/10 border-[#CC0033]/40 text-white'
-                        : 'bg-[var(--card)] border-[var(--border)] text-zinc-400 hover:border-zinc-600'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <span className="text-xs font-semibold">{label}</span>
-                      <div className={`w-3 h-3 rounded-full border-2 transition-colors ${checked ? 'bg-[#CC0033] border-[#CC0033]' : 'border-zinc-600'}`} />
-                    </div>
-                    <span className="text-[11px] text-zinc-600">{sublabel}</span>
-                  </button>
-                ))}
-              </div>
-
-              {error && (
-                <p className="text-xs text-red-400 flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  {error}
-                </p>
-              )}
-
-              <button
-                onClick={saveAll}
-                disabled={saving}
-                className="px-5 py-2 rounded-lg bg-[#CC0033] text-white text-sm font-semibold hover:bg-[#a8002b] disabled:opacity-50 transition-colors"
-              >
-                {saving ? 'Saving…' : saved ? '✓ Saved to all snipes' : `Save to all ${items.length} snipes`}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 sm:px-5">
+      <p className="text-sm font-semibold text-white">Email alerts active</p>
+      <p className="mt-0.5 text-[11px] text-zinc-500">
+        Seat-open alerts for all {items.length} snipes go to your RURate account email.
+      </p>
     </div>
   )
 }
@@ -951,28 +533,23 @@ function GlobalNotificationCenter({ items }: { items: WatchedSection[] }) {
 
 const MAX_SNIPE_INDEXES = 10
 
-function QuickSnipeBox() {
+function QuickSnipeBox({
+  accountEmail,
+  authenticated,
+  authLoading,
+}: {
+  accountEmail: string | null
+  authenticated: boolean
+  authLoading: boolean
+}) {
   // WebReg-style multi-index entry: track one section or a whole schedule at once.
   const [indexes, setIndexes] = useState<string[]>(['', '', ''])
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [emailEnabled, setEmailEnabled] = useState(true)
-  const [smsEnabled, setSmsEnabled] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [semesters, setSemesters] = useState<{ slug: string; name: string; is_current: boolean }[]>([])
   const [semesterSlug, setSemesterSlug] = useState<string>('')
   const firstRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    const prefs = readQuickPrefs()
-    if (!prefs) return
-    setEmail(prefs.email ?? '')
-    setPhone(prefs.phone ?? '')
-    setEmailEnabled(prefs.emailEnabled ?? true)
-    setSmsEnabled(prefs.smsEnabled ?? false)
-  }, [])
 
   // Load the semesters we have data for, so index numbers resolve against the
   // right term — a code only exists in the semester it was issued for.
@@ -1013,6 +590,19 @@ function QuickSnipeBox() {
     setError(null)
     setSuccess(null)
 
+    if (authLoading) {
+      setError('Checking your account. Try again in a moment.')
+      return
+    }
+    if (!authenticated) {
+      setError('Sign in to create a Course Sniper watch.')
+      return
+    }
+    if (!accountEmail) {
+      setError('Your RURate account needs a valid email before you can create a watch.')
+      return
+    }
+
     const seen = new Set<string>()
     const targets: string[] = []
     const invalid: string[] = []
@@ -1033,25 +623,17 @@ function QuickSnipeBox() {
 
     setSaving(true)
     try {
-      const settings = {
-        email, phone_e164: phone,
-        email_enabled: emailEnabled, sms_enabled: smsEnabled,
-        notify_on_open: true, notify_on_close: false,
-      }
       const results = await Promise.all(targets.map(async idx => {
         try {
           const r = await addWatchByIndex({
             indexNumber: idx,
             semesterSlug: semesterSlug || undefined,
-            notificationSettings: settings,
           })
           return { idx, ok: r.ok, duplicate: r.duplicate ?? false }
         } catch {
           return { idx, ok: false, duplicate: false }
         }
       }))
-      writeQuickPrefs({ email, phone, emailEnabled, smsEnabled })
-
       const added = results.filter(r => r.ok && !r.duplicate).map(r => r.idx)
       const dupes = results.filter(r => r.ok && r.duplicate).map(r => r.idx)
       const failed = results.filter(r => !r.ok).map(r => r.idx)
@@ -1147,7 +729,7 @@ function QuickSnipeBox() {
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || authLoading || !authenticated || !accountEmail}
                 className="min-h-12 rounded-xl bg-[#CC0033] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#a8002b] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100"
               >
                 {saving ? (
@@ -1158,7 +740,7 @@ function QuickSnipeBox() {
                     </svg>
                     Locking on…
                   </span>
-                ) : validCount > 1 ? `Snipe all ${validCount} →` : 'Snipe it →'}
+                ) : !authenticated && !authLoading ? 'Sign in to snipe' : validCount > 1 ? `Snipe all ${validCount} →` : 'Snipe it →'}
               </button>
               <p className="text-[11px] text-zinc-600 sm:ml-1">
                 Find index numbers on the{' '}
@@ -1206,30 +788,26 @@ function QuickSnipeBox() {
             </AnimatePresence>
           </div>
 
-          {/* alert contact — applies to every section added */}
+          {/* Notification destination comes exclusively from the authenticated account. */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)]/40 p-4 lg:w-64">
-            <p className="mb-3 text-xs font-semibold text-zinc-300">Alert contact</p>
-            <div className="space-y-2">
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="Email"
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#CC0033]"
-              />
-              <PhoneInput value={phone} onChange={setPhone} />
-              <div className="flex gap-3 text-xs text-zinc-400">
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} className="accent-[#CC0033]" />
-                  Email
-                </label>
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input type="checkbox" checked={smsEnabled} onChange={e => setSmsEnabled(e.target.checked)} className="accent-[#CC0033]" />
-                  SMS
-                </label>
-              </div>
-              <p className="pt-1 text-[10px] leading-snug text-zinc-600">Used for every section you add above.</p>
-            </div>
+            <p className="text-xs font-semibold text-zinc-300">Notification email</p>
+            {authLoading ? (
+              <p className="mt-2 text-xs text-zinc-500">Checking your account…</p>
+            ) : authenticated && accountEmail ? (
+              <>
+                <p className="mt-2 break-all text-sm font-semibold text-white">{accountEmail}</p>
+                <p className="mt-1 text-[10px] leading-snug text-zinc-600">Managed through your RURate account.</p>
+              </>
+            ) : authenticated ? (
+              <p className="mt-2 text-xs leading-relaxed text-red-400">Add a valid email to your RURate account before creating a watch.</p>
+            ) : (
+              <>
+                <p className="mt-2 text-xs leading-relaxed text-zinc-500">Sign in to create watches and receive seat-open alerts.</p>
+                <Link href="/login" className="mt-3 inline-flex rounded-lg bg-[#CC0033] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#a8002b]">
+                  Sign in
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -1237,7 +815,7 @@ function QuickSnipeBox() {
         <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] text-zinc-500">
           {[
             { n: '1', title: 'Validate', desc: 'Each index checked against current SOC' },
-            { n: '2', title: 'Alert', desc: 'Email · SMS · browser notification' },
+            { n: '2', title: 'Alert', desc: 'Email sent to your RURate account' },
             { n: '3', title: 'Register', desc: 'Copy index → WebReg' },
           ].map(step => (
             <div key={step.n} className="rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/30 p-2.5">
@@ -1278,79 +856,6 @@ function StatCards({ total, openCount, closedCount, alertCount }: { total: numbe
 }
 
 // ─── BrowserAlertPrompt ───────────────────────────────────────────────────────
-// Browser push is the fastest free alert, but it's only useful if permission is
-// granted BEFORE a seat opens. Surface a proactive, dismissible prompt instead of
-// burying the request inside the post-open banner.
-
-const BROWSER_ALERT_DISMISSED_KEY = 'ru-rate-browser-alert-dismissed'
-
-function BrowserAlertPrompt() {
-  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
-  const [dismissed, setDismissed] = useState(true)
-  const [requesting, setRequesting] = useState(false)
-
-  useEffect(() => {
-    setPermission('Notification' in window ? Notification.permission : 'unsupported')
-    try { setDismissed(localStorage.getItem(BROWSER_ALERT_DISMISSED_KEY) === '1') }
-    catch { setDismissed(false) }
-  }, [])
-
-  if (permission !== 'default' || dismissed) return null
-
-  async function enable() {
-    if (requesting || !('Notification' in window)) return
-    setRequesting(true)
-    try {
-      setPermission(await Notification.requestPermission())
-    } finally {
-      setRequesting(false)
-    }
-  }
-
-  function dismiss() {
-    setDismissed(true)
-    try { localStorage.setItem(BROWSER_ALERT_DISMISSED_KEY, '1') } catch { /* blocked */ }
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#CC0033]/40 bg-[#CC0033]/10 px-4 py-3 sm:px-5"
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="shrink-0 p-1.5 rounded-lg bg-[#CC0033]/20 text-[#ff4d6d]">
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-          </svg>
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-white">Turn on instant browser alerts</p>
-          <p className="text-[11px] text-zinc-400">Get notified the instant a seat opens — even faster than email. Grant it now so you don&apos;t miss it.</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          onClick={enable}
-          disabled={requesting}
-          className="rounded-lg bg-[#CC0033] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a8002b] disabled:opacity-50"
-        >
-          {requesting ? 'Enabling…' : 'Enable alerts'}
-        </button>
-        <button
-          onClick={dismiss}
-          className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:text-zinc-300"
-          aria-label="Dismiss"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </motion.div>
-  )
-}
 
 // ─── LiveStatusBar ────────────────────────────────────────────────────────────
 // Freshness + manual refresh. For a sniper the single most important thing is
@@ -1578,16 +1083,15 @@ export default function WatchlistPage() {
             Stop refreshing. Snipe the section.
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-            Track any Rutgers section by index number. Get alerted by email or SMS the moment a seat opens. Jump straight to WebReg with the index ready.
+            Track any Rutgers section by index number. Get an email at your RURate account address the moment a seat opens. Jump straight to WebReg with the index ready.
           </p>
         </div>
 
-        {/* Browser alert prompt shown before the first snipe so permission can
-            be granted before a seat opens — it is dismissible and self-hides
-            once granted or denied. */}
-        <BrowserAlertPrompt />
-
-        <QuickSnipeBox />
+        <QuickSnipeBox
+          accountEmail={user?.email ?? null}
+          authenticated={Boolean(user)}
+          authLoading={authLoading}
+        />
 
         {/* loaded state */}
         {!loading && !error && items.length > 0 && (
@@ -1682,7 +1186,7 @@ export default function WatchlistPage() {
           </div>
         )}
 
-        {!loading && !error && items.length === 0 && (
+        {!loading && !error && user && items.length === 0 && (
           <EmptyState
             icon="🎯"
             title="No active snipes yet"
@@ -1705,23 +1209,6 @@ export default function WatchlistPage() {
           />
         )}
 
-        {/* sign-in nudge — shown to anonymous users who have snipes */}
-        {!loading && !authLoading && !user && items.length > 0 && (
-          <div className="mt-6 rounded-xl border border-zinc-700/50 bg-zinc-900/60 px-5 py-4 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-zinc-200">Sign in to keep your snipes</p>
-              <p className="text-xs text-zinc-500 mt-0.5">Without an account your watchlist is tied to this browser. Sign in to sync across devices and browser clears.</p>
-            </div>
-            <Link
-              href="/login"
-              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-colors hover:brightness-110 whitespace-nowrap"
-              style={{ backgroundColor: '#CC0033' }}
-            >
-              Sign in
-            </Link>
-          </div>
-        )}
-
         {/* review nudge — shown when the user has snipes and is waiting */}
         {!loading && !error && items.length > 0 && (
           <div className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--card)]/50 px-5 py-4 flex items-center justify-between gap-4">
@@ -1742,8 +1229,8 @@ export default function WatchlistPage() {
         {/* footer explainer */}
         <div className="mt-10 rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/30 p-4 text-[11px] text-zinc-600 leading-relaxed space-y-1.5">
           <p className="font-semibold text-zinc-400 text-xs">How the sniper works</p>
-          <p>The Railway worker polls the Rutgers Schedule of Classes every 500 ms, compares open/closed status against what was last recorded, and fires email/SMS alerts when a watched section changes. Status is not live — always confirm in WebReg before planning around it.</p>
-          <p>RU Rate never auto-registers, never touches WebReg on your behalf, and never stores your NetID. Your watchlist is tied to this browser — clearing site data clears it.</p>
+          <p>The Railway worker polls the Rutgers Schedule of Classes every 500 ms, compares open/closed status against what was last recorded, and emails your RURate account address when a watched section opens. Status is not live — always confirm in WebReg before planning around it.</p>
+          <p>RU Rate never auto-registers, never touches WebReg on your behalf, and never stores your NetID. Your watchlist is tied to your authenticated RURate account.</p>
         </div>
       </main>
 

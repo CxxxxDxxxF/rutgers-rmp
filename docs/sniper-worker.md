@@ -71,16 +71,8 @@ RESEND_API_KEY
 NOTIFY_EMAIL_FROM=RU Rate <alerts@example.com>
 ```
 
-SMS delivery through Twilio:
-
-```text
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_FROM_NUMBER=+15555555555
-```
-
-Provider keys are optional at boot. If a watched section has email or SMS
-enabled but the matching provider variables are missing, the worker logs a
+Provider keys are optional at boot. If a watched section opens while Resend
+variables are missing, the worker logs a
 sanitized `notification_provider_missing` event and keeps polling.
 
 ## Runtime Behavior
@@ -95,8 +87,8 @@ Each active loop:
 5. Compare current SOC status to the last stored status.
 6. Update `teaching_assignments.open_status`, `open_status_text`, and
    `status_updated_at` when a status changes.
-7. Send email/SMS alerts when a watched section changes to an opted-in status
-   and provider credentials are configured.
+7. Email the authenticated watch owner when a watched section opens and Resend
+   credentials are configured.
 8. Back off on recoverable fetch errors, capped by `SNIPER_MAX_BACKOFF_MS`.
 
 The worker logs structured JSON events:
@@ -305,7 +297,6 @@ max_backoff_ms=15000
 - `SNIPER_POLL_INTERVAL_MS` is set to `500`.
 - `SNIPER_MAX_BACKOFF_MS` is set to `15000`.
 - Resend variables are set before promising email delivery.
-- Twilio variables are set before promising SMS delivery.
 - A private test watch has produced expected logs before public promotion.
 - The app copy continues to state that RU Rate never auto-registers.
 
@@ -324,6 +315,5 @@ Optional provider costs:
 | Feature | Cost note |
 | --- | --- |
 | Email alerts | Usually low cost at small volume; depends on Resend plan |
-| SMS alerts | Paid per message through Twilio |
 | Custom domain | Optional |
 | Native mobile push | Future mobile-app work; not part of the current web app |

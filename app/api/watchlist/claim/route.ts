@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
+import { accountEmailNotificationSnapshot, resolveWatchOwner } from '@/lib/watchlist-policy'
 
 function isValidUUID(id: string | null): id is string {
   return !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
@@ -40,10 +41,21 @@ export async function POST(req: NextRequest) {
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-
-  const userId = user.id
+  const owner = resolveWatchOwner(user)
+  if (!owner.ok) {
+    return NextResponse.json({ error: owner.error }, { status: owner.status })
+  }
+  const userId = owner.owner.id
 
   if (fromWatcher === userId) {
+    const { error } = await db
+      .from('watched_sections')
+      .update(accountEmailNotificationSnapshot(owner.owner.email))
+      .eq('watcher_id', userId)
+    if (error) {
+      log.error('Watchlist claim recipient update error:', error)
+      return NextResponse.json({ error: 'Failed to secure watch notifications' }, { status: 500 })
+    }
     return NextResponse.json({ watcher_id: userId })
   }
 
@@ -71,15 +83,28 @@ export async function POST(req: NextRequest) {
       if (error) log.error('Watchlist claim conflict-delete error:', error)
     }
 
-    // Re-key remaining anonymous rows to the user's auth.uid.
+    // Re-key legacy anonymous rows and replace any custom destination with the
+    // trusted account email. Legacy phone/SMS fields are disabled in place.
     const { error: updateError } = await db
       .from('watched_sections')
-      .update({ watcher_id: userId })
+      .update({
+        watcher_id: userId,
+        ...accountEmailNotificationSnapshot(owner.owner.email),
+      })
       .eq('watcher_id', fromWatcher)
 
     if (updateError) {
       log.error('Watchlist claim update error:', updateError)
       return NextResponse.json({ error: 'Failed to claim watchlist' }, { status: 500 })
+    }
+
+    const { error: recipientError } = await db
+      .from('watched_sections')
+      .update(accountEmailNotificationSnapshot(owner.owner.email))
+      .eq('watcher_id', userId)
+    if (recipientError) {
+      log.error('Watchlist claim recipient update error:', recipientError)
+      return NextResponse.json({ error: 'Failed to secure watch notifications' }, { status: 500 })
     }
 
     return NextResponse.json({ watcher_id: userId })

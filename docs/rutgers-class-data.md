@@ -112,14 +112,15 @@ handles fast open-section monitoring after data is ingested.
 
 Worker state path:
 
-1. `watched_sections` stores anonymous browser watches, optional notification
-   contact settings, opted-in statuses, and the last seen status.
+1. `watched_sections` stores authenticated account-owned watches and the last
+   seen status. Legacy contact columns remain for production compatibility, but
+   the account email is the only delivery source.
 2. The worker fetches Rutgers SOC for active source groups.
 3. The worker indexes SOC sections by `index_number`.
 4. Status changes update `teaching_assignments.open_status`,
    `open_status_text`, and `status_updated_at`.
-5. The worker sends email/SMS only when the watch opted into that channel and
-   provider credentials are configured.
+5. The worker resolves the watch owner through Supabase Auth and emails only
+   that account address when a watched section opens.
 
 ## App API Endpoints
 
@@ -138,10 +139,10 @@ Watchlist and sniper routes:
 
 | Method | Route | Purpose | Data source |
 | --- | --- | --- | --- |
-| `GET` | `/api/watchlist?watcher={uuid}` | Load anonymous browser watchlist with section status, index numbers, and alert settings. | Supabase service role, scoped by `watcher_id` |
+| `GET` | `/api/watchlist` | Load the authenticated account's watchlist with section status and index numbers. | Supabase service role, scoped to verified `auth.uid` |
 | `POST` | `/api/watchlist` | Add a course/section watch or resolve a 5-digit index number into a watch. | Supabase service role |
-| `PATCH` | `/api/watchlist` | Update alert settings or mark watched section status as seen. | Supabase service role |
-| `DELETE` | `/api/watchlist?id={watchId}&watcher={uuid}` | Remove a watch. | Supabase service role |
+| `PATCH` | `/api/watchlist` | Mark watched section status as seen. | Supabase service role, scoped to verified `auth.uid` |
+| `DELETE` | `/api/watchlist?id={watchId}` | Remove an authenticated account's watch. | Supabase service role, scoped to verified `auth.uid` |
 
 Professor and review routes that intersect with class data:
 
@@ -173,5 +174,5 @@ RMP analysis and Pro routes:
 - Write routes that touch private watchlist/review/submission state use the
   Supabase service role on the server and should not expose service keys to the
   browser.
-- Contact fields for email/SMS alerts are validated before save and should not
-  appear in logs.
+- The server rejects client-supplied notification destinations; account email
+  addresses must not appear in logs.

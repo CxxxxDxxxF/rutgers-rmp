@@ -51,8 +51,8 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 
 1. **Professor data**: RMP GraphQL → `lib/rmp.ts` fetches raw data → `/api/analyze` caches in Supabase `professor_cache` table (30-day TTL) → AI summary generated via OpenRouter (Claude Haiku) through `lib/ai.ts`.
 2. **Course data**: Rutgers SOC API → `scripts/ingest-soc.ts` → Supabase `courses`/`sections` tables → `/api/courses` serves filtered results.
-3. **Watchlist/sniper**: Browser → `lib/watchlist-client.ts` (anon Supabase client) → `watched_sections` table → `worker/sniper-worker.mjs` polls SOC every 500 ms, updates section status, sends email/SMS alerts via Resend/Twilio when provider keys are present.
-4. **Section status history**: every real change to `teaching_assignments.open_status` — from ingest, the worker, or the cron collector — fires a Postgres trigger (migration `024`) that appends to `section_status_events`. This log powers the home page "Just Opened" feed, the per-section "reopened N×" churn badge (`/api/courses/[slug]`), and future open-probability/seat-risk analytics; it cannot be reconstructed after the fact. Feed it with either the always-on worker's bulk refresh **or** the standalone cron collector (`worker/status-collector.mjs`) — never both (duplicate Rutgers requests). In history-only mode (no alerts configured) the cron collector alone is the intended setup — the always-on worker is only needed once email/SMS alerts are live.
+3. **Watchlist/sniper**: Authenticated browser → `lib/watchlist-client.ts` → authenticated `/api/watchlist` route → `watched_sections` table → `worker/sniper-worker.mjs` polls SOC every 500 ms, updates section status, and emails the watch owner's Supabase Auth account address through Resend.
+4. **Section status history**: every real change to `teaching_assignments.open_status` — from ingest, the worker, or the cron collector — fires a Postgres trigger (migration `024`) that appends to `section_status_events`. This log powers the home page "Just Opened" feed, the per-section "reopened N×" churn badge (`/api/courses/[slug]`), and future open-probability/seat-risk analytics; it cannot be reconstructed after the fact. Feed it with either the always-on worker's bulk refresh **or** the standalone cron collector (`worker/status-collector.mjs`) — never both (duplicate Rutgers requests). In history-only mode (no alerts configured) the cron collector alone is the intended setup — the always-on worker is only needed once email alerts are live.
 
 ### Key modules
 
@@ -122,7 +122,7 @@ AI_ANALYSIS_BATCH_SIZE=15        # professors per batch; 1–50
 AI_ANALYSIS_ITEM_DELAY_MS=800    # pause between professors in a batch
 ```
 
-Email/SMS alerts are real only when `RESEND_API_KEY`, `NOTIFY_EMAIL_FROM`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are all set. Without them, the worker logs a sanitized provider-missing event and keeps polling.
+Email alerts are real only when `RESEND_API_KEY` and `NOTIFY_EMAIL_FROM` are set. Without them, the worker logs a sanitized provider-missing event and keeps polling.
 
 The worker also runs a background AI analysis batch every `AI_ANALYSIS_INTERVAL_MS` (default 10 min): fetches `AI_ANALYSIS_BATCH_SIZE` professors (default 15) without `ai_analysis` and with a non-null `rmp_id` from `professor_cache` (highest `num_ratings` first), calls RMP GraphQL + OpenRouter Haiku, and upserts the result. Requires `OPENROUTER_API_KEY` in Railway. At 15/10 min the ~935-professor backlog clears in roughly a day; raise `AI_ANALYSIS_BATCH_SIZE` to drain faster (watch OpenRouter/RMP rate limits).
 

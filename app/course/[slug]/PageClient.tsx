@@ -11,6 +11,7 @@ import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import SectionTable, { CopyButton, type SectionRow } from '@/components/SectionTable'
 import { SkeletonBlock, RowListSkeleton } from '@/components/LoadingSkeleton'
 import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
+import { useAuth } from '@/hooks/useAuth'
 import { trackView } from '@/lib/recently-viewed'
 import type { ProfessorGrade } from '@/lib/professor-grade'
 
@@ -249,6 +250,7 @@ function ProfessorOptionCard({
 }
 
 function WatchCourseButton({ courseId }: { courseId: string }) {
+  const { user, loading: authLoading } = useAuth()
   const { items, loading } = useWatchlist()
   const [busy, setBusy] = useState(false)
   const courseWatch = items.find(
@@ -269,10 +271,21 @@ function WatchCourseButton({ courseId }: { courseId: string }) {
     }
   }
 
+  if (!authLoading && !user) {
+    return (
+      <Link
+        href="/login"
+        className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-all hover:border-[#CC0033]/60 hover:text-white"
+      >
+        Sign in to watch this course
+      </Link>
+    )
+  }
+
   return (
     <button
       onClick={toggle}
-      disabled={busy || loading}
+      disabled={busy || loading || authLoading || !user?.email}
       className={`inline-flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl border transition-all disabled:opacity-50 ${
         courseWatch
           ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'

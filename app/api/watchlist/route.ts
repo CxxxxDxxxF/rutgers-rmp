@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
+import {
+  accountEmailNotificationSnapshot,
+  hasClientNotificationDestination,
+  resolveWatchOwner,
+  type WatchOwner,
+} from '@/lib/watchlist-policy'
 
-// Anonymous watchlist keyed by a client-generated UUID (no auth system yet).
-// All access goes through the service role; RLS blocks anon access entirely.
-// This endpoint only reads/writes our own database — it never contacts
-// Rutgers systems and never performs any registration action.
+// Authenticated watchlist. All database access uses the service role because
+// RLS blocks public clients, but every query is scoped to the verified auth.uid.
+// The browser never chooses a notification recipient.
 
 const MAX_WATCHES_PER_WATCHER = 50
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-
-function isValidWatcherId(id: string | null): id is string {
-  return !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
-}
 
 function getServiceClient() {
   try {
@@ -22,18 +22,35 @@ function getServiceClient() {
   }
 }
 
+async function authenticateWatchOwner(
+  req: NextRequest,
+  db: NonNullable<ReturnType<typeof getServiceClient>>,
+): Promise<{ ok: true; owner: WatchOwner } | { ok: false; response: NextResponse }> {
+  const header = req.headers.get('authorization')
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null
+  if (!token) {
+    return { ok: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+  }
+  const { data: { user }, error } = await db.auth.getUser(token)
+  if (error) {
+    return { ok: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+  }
+  const result = resolveWatchOwner(user)
+  if (!result.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: result.error }, { status: result.status }),
+    }
+  }
+  return result
+}
+
 const WATCH_SELECT = `
   id,
   course_id,
   teaching_assignment_id,
   index_number,
   last_seen_status,
-  notify_email,
-  notify_phone_e164,
-  notify_email_enabled,
-  notify_sms_enabled,
-  notify_on_open,
-  notify_on_close,
   created_at,
   courses (
     course_number,
@@ -82,14 +99,6 @@ function mapRow(row: any) {
     teaching_assignment_id: row.teaching_assignment_id,
     index_number: row.index_number ?? ta?.index_number ?? null,
     last_seen_status: row.last_seen_status,
-    notification_settings: {
-      email: row.notify_email ?? null,
-      phone_e164: row.notify_phone_e164 ?? null,
-      email_enabled: row.notify_email_enabled ?? false,
-      sms_enabled: row.notify_sms_enabled ?? false,
-      notify_on_open: row.notify_on_open ?? true,
-      notify_on_close: row.notify_on_close ?? true,
-    },
     created_at: row.created_at,
     course: course
       ? {
@@ -129,27 +138,22 @@ function mapRow(row: any) {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export async function GET(req: NextRequest) {
-  const watcher = req.nextUrl.searchParams.get('watcher')
-  if (!isValidWatcherId(watcher)) {
-    return NextResponse.json({ error: 'Invalid watcher id' }, { status: 400 })
-  }
-
   try {
-    const supabase = getServiceClient()
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
-    }
-    const { data, error } = await supabase
+    const db = getServiceClient()
+    if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+    const auth = await authenticateWatchOwner(req, db)
+    if (!auth.ok) return auth.response
+
+    const { data, error } = await db
       .from('watched_sections')
       .select(WATCH_SELECT)
-      .eq('watcher_id', watcher)
+      .eq('watcher_id', auth.owner.id)
       .order('created_at', { ascending: false })
 
     if (error) {
       log.error('Watchlist fetch error:', error)
       return NextResponse.json({ error: 'Failed to load watchlist' }, { status: 500 })
     }
-
     return NextResponse.json((data ?? []).map(mapRow))
   } catch (err) {
     log.error('Watchlist GET error:', err)
@@ -159,12 +163,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   let body: {
-    watcher_id?: string
     course_id?: string
     teaching_assignment_id?: string | null
     index_number?: string | null
     semester_slug?: string | null
-    notification_settings?: NotificationSettingsInput
+    notification_settings?: unknown
   }
   try {
     body = await req.json()
@@ -172,95 +175,82 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const watcher = body.watcher_id ?? null
-  if (!isValidWatcherId(watcher)) {
-    return NextResponse.json({ error: 'Invalid watcher id' }, { status: 400 })
-  }
-  const indexNumber = sanitizeIndexNumber(body.index_number)
-  let courseId = typeof body.course_id === 'string' ? body.course_id : null
-  let teachingAssignmentId = typeof body.teaching_assignment_id === 'string'
-    ? body.teaching_assignment_id
-    : null
-  const notificationError = validateNotificationSettings(body.notification_settings)
-  if (notificationError) {
-    return NextResponse.json({ error: notificationError }, { status: 400 })
-  }
-
-  if (!courseId && !indexNumber) {
-    return NextResponse.json({ error: 'course_id required' }, { status: 400 })
-  }
-
   try {
-    const supabase = getServiceClient()
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+    const db = getServiceClient()
+    if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+    const auth = await authenticateWatchOwner(req, db)
+    if (!auth.ok) return auth.response
+
+    if (hasClientNotificationDestination(body)) {
+      return NextResponse.json(
+        { error: 'Notification recipients are managed by your RURate account' },
+        { status: 400 },
+      )
     }
 
-    const { count } = await supabase
+    const indexNumber = sanitizeIndexNumber(body.index_number)
+    let courseId = typeof body.course_id === 'string' ? body.course_id : null
+    let assignmentId = typeof body.teaching_assignment_id === 'string'
+      ? body.teaching_assignment_id
+      : null
+    if (!courseId && !indexNumber) {
+      return NextResponse.json({ error: 'course_id required' }, { status: 400 })
+    }
+
+    const { count } = await db
       .from('watched_sections')
       .select('id', { count: 'exact', head: true })
-      .eq('watcher_id', watcher)
-
+      .eq('watcher_id', auth.owner.id)
     if ((count ?? 0) >= MAX_WATCHES_PER_WATCHER) {
       return NextResponse.json(
         { error: `Watchlist limit of ${MAX_WATCHES_PER_WATCHER} reached` },
-        { status: 429 }
+        { status: 429 },
       )
     }
 
     if (!courseId && indexNumber) {
-      const resolved = await resolveSectionByIndex(supabase, indexNumber, body.semester_slug)
+      const resolved = await resolveSectionByIndex(db, indexNumber, body.semester_slug)
       if (!resolved.ok) {
         return NextResponse.json({ error: resolved.error }, { status: resolved.status })
       }
       courseId = resolved.course_id
-      teachingAssignmentId = resolved.teaching_assignment_id
+      assignmentId = resolved.teaching_assignment_id
     }
+    if (!courseId) return NextResponse.json({ error: 'course_id required' }, { status: 400 })
 
-    if (!courseId) {
-      return NextResponse.json({ error: 'course_id required' }, { status: 400 })
-    }
-
-    // Postgres UNIQUE treats NULLs as distinct, so course-level watches
-    // (teaching_assignment_id = null) need an explicit duplicate check.
-    let dupQuery = supabase
+    let duplicateQuery = db
       .from('watched_sections')
       .select('id')
-      .eq('watcher_id', watcher)
+      .eq('watcher_id', auth.owner.id)
       .eq('course_id', courseId)
-    dupQuery = teachingAssignmentId
-      ? dupQuery.eq('teaching_assignment_id', teachingAssignmentId)
-      : dupQuery.is('teaching_assignment_id', null)
-    const { data: existing } = await dupQuery.maybeSingle()
+    duplicateQuery = assignmentId
+      ? duplicateQuery.eq('teaching_assignment_id', assignmentId)
+      : duplicateQuery.is('teaching_assignment_id', null)
+    const { data: existing } = await duplicateQuery.maybeSingle()
+    if (existing) return NextResponse.json({ id: existing.id, duplicate: true })
 
-    if (existing) {
-      return NextResponse.json({ id: existing.id, duplicate: true })
-    }
-
-    // Snapshot the section's current status so a future notifier can diff it.
     let lastSeenStatus: string | null = null
-    if (teachingAssignmentId) {
-      const { data: ta } = await supabase
+    if (assignmentId) {
+      const { data: assignment } = await db
         .from('teaching_assignments')
         .select('open_status, open_status_text')
-        .eq('id', teachingAssignmentId)
+        .eq('id', assignmentId)
         .maybeSingle()
-      if (ta) {
-        lastSeenStatus =
-          ta.open_status_text ??
-          (ta.open_status === true ? 'OPEN' : ta.open_status === false ? 'CLOSED' : null)
+      if (assignment) {
+        lastSeenStatus = assignment.open_status_text ??
+          (assignment.open_status === true ? 'OPEN' : assignment.open_status === false ? 'CLOSED' : null)
       }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('watched_sections')
       .insert({
-        watcher_id: watcher,
+        watcher_id: auth.owner.id,
         course_id: courseId,
-        teaching_assignment_id: teachingAssignmentId,
+        teaching_assignment_id: assignmentId,
         index_number: indexNumber ?? body.index_number ?? null,
         last_seen_status: lastSeenStatus,
-        ...notificationUpdate(body.notification_settings),
+        ...accountEmailNotificationSnapshot(auth.owner.email),
       })
       .select('id')
       .single()
@@ -269,7 +259,6 @@ export async function POST(req: NextRequest) {
       log.error('Watchlist insert error:', error)
       return NextResponse.json({ error: 'Failed to add watch' }, { status: 500 })
     }
-
     return NextResponse.json({ id: data.id }, { status: 201 })
   } catch (err) {
     log.error('Watchlist POST error:', err)
@@ -278,29 +267,22 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const id = req.nextUrl.searchParams.get('id')
-  const watcher = req.nextUrl.searchParams.get('watcher')
-
-  if (!id || !isValidWatcherId(watcher)) {
-    return NextResponse.json({ error: 'id and watcher required' }, { status: 400 })
-  }
-
   try {
-    const supabase = getServiceClient()
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
-    }
-    const { error } = await supabase
+    const db = getServiceClient()
+    if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+    const auth = await authenticateWatchOwner(req, db)
+    if (!auth.ok) return auth.response
+    const id = req.nextUrl.searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+    const { error } = await db
       .from('watched_sections')
       .delete()
       .eq('id', id)
-      .eq('watcher_id', watcher)
-
+      .eq('watcher_id', auth.owner.id)
     if (error) {
       log.error('Watchlist delete error:', error)
       return NextResponse.json({ error: 'Failed to remove watch' }, { status: 500 })
     }
-
     return NextResponse.json({ ok: true })
   } catch (err) {
     log.error('Watchlist DELETE error:', err)
@@ -309,71 +291,39 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  let body: {
-    watcher_id?: string
-    ids?: string[]
-    last_seen_status?: string | null
-    notification_settings?: NotificationSettingsInput
-  }
+  let body: { ids?: string[]; last_seen_status?: string | null; notification_settings?: unknown }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
-
-  const watcher = body.watcher_id ?? null
-  if (!isValidWatcherId(watcher)) {
-    return NextResponse.json({ error: 'Invalid watcher id' }, { status: 400 })
-  }
-  const hasIds = Array.isArray(body.ids) && body.ids.length > 0
-  if (hasIds && body.ids!.some(id => typeof id !== 'string')) {
-    return NextResponse.json({ error: 'ids must be strings' }, { status: 400 })
-  }
-  if ((body.ids?.length ?? 0) > MAX_WATCHES_PER_WATCHER) {
-    return NextResponse.json({ error: 'Too many watch ids' }, { status: 400 })
-  }
-
-  const updatingNotifications = body.notification_settings != null
-  if (!updatingNotifications && !hasIds) {
-    return NextResponse.json({ error: 'ids required' }, { status: 400 })
-  }
-  const notificationError = validateNotificationSettings(body.notification_settings)
-  if (notificationError) {
-    return NextResponse.json({ error: notificationError }, { status: 400 })
-  }
-
-  const update = updatingNotifications
-    ? notificationUpdate(body.notification_settings)
-    : { last_seen_status: sanitizeStatus(body.last_seen_status) }
-
-  // A notification_settings payload with no recognized keys is a no-op — don't
-  // issue a blank UPDATE that would touch every matched row for nothing.
-  if (Object.keys(update).length === 0) {
-    return NextResponse.json({ ok: true })
-  }
-
   try {
-    const supabase = getServiceClient()
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+    const db = getServiceClient()
+    if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
+    const auth = await authenticateWatchOwner(req, db)
+    if (!auth.ok) return auth.response
+    if (body.notification_settings != null || hasClientNotificationDestination(body)) {
+      return NextResponse.json(
+        { error: 'Notification recipients are managed by your RURate account' },
+        { status: 400 },
+      )
     }
-
-    let query = supabase
+    const hasIds = Array.isArray(body.ids) && body.ids.length > 0
+    if (!hasIds || body.ids!.some(id => typeof id !== 'string')) {
+      return NextResponse.json({ error: 'ids required' }, { status: 400 })
+    }
+    if (body.ids!.length > MAX_WATCHES_PER_WATCHER) {
+      return NextResponse.json({ error: 'Too many watch ids' }, { status: 400 })
+    }
+    const { error } = await db
       .from('watched_sections')
-      .update(update)
-      .eq('watcher_id', watcher)
-
-    if (hasIds) {
-      query = query.in('id', body.ids!)
-    }
-
-    const { error } = await query
-
+      .update({ last_seen_status: sanitizeStatus(body.last_seen_status) })
+      .eq('watcher_id', auth.owner.id)
+      .in('id', body.ids!)
     if (error) {
       log.error('Watchlist status update error:', error)
-      return NextResponse.json({ error: 'Failed to update alerts' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to update watch status' }, { status: 500 })
     }
-
     return NextResponse.json({ ok: true })
   } catch (err) {
     log.error('Watchlist PATCH error:', err)
@@ -384,8 +334,7 @@ export async function PATCH(req: NextRequest) {
 function sanitizeStatus(status: string | null | undefined) {
   if (typeof status !== 'string') return null
   const trimmed = status.trim().toUpperCase()
-  if (!trimmed) return null
-  return trimmed.slice(0, 80)
+  return trimmed ? trimmed.slice(0, 80) : null
 }
 
 function sanitizeIndexNumber(value: string | null | undefined) {
@@ -395,14 +344,14 @@ function sanitizeIndexNumber(value: string | null | undefined) {
 }
 
 async function resolveSectionByIndex(
-  supabase: NonNullable<ReturnType<typeof getServiceClient>>,
+  db: NonNullable<ReturnType<typeof getServiceClient>>,
   indexNumber: string,
-  semesterSlug: string | null | undefined
+  semesterSlug: string | null | undefined,
 ): Promise<
   | { ok: true; course_id: string; teaching_assignment_id: string }
   | { ok: false; error: string; status: number }
 > {
-  let query = supabase
+  let query = db
     .from('teaching_assignments')
     .select(`
       id,
@@ -415,18 +364,15 @@ async function resolveSectionByIndex(
     .eq('index_number', indexNumber)
     .eq('status', 'active')
 
-  if (semesterSlug) {
-    query = query.eq('semesters.slug', semesterSlug)
-  } else {
-    query = query.eq('semesters.is_current', true)
-  }
+  query = semesterSlug
+    ? query.eq('semesters.slug', semesterSlug)
+    : query.eq('semesters.is_current', true)
 
   const { data, error } = await query.limit(2)
   if (error) {
     log.error('Watchlist index lookup error:', error)
     return { ok: false, error: 'Could not validate that index number', status: 500 }
   }
-
   if (!data || data.length === 0) {
     return {
       ok: false,
@@ -436,7 +382,6 @@ async function resolveSectionByIndex(
       status: 404,
     }
   }
-
   if (data.length > 1) {
     return {
       ok: false,
@@ -444,79 +389,9 @@ async function resolveSectionByIndex(
       status: 409,
     }
   }
-
   return {
     ok: true,
     course_id: data[0].course_id as string,
     teaching_assignment_id: data[0].id as string,
   }
-}
-
-type NotificationSettingsInput = {
-  email?: string | null
-  phone_e164?: string | null
-  email_enabled?: boolean
-  sms_enabled?: boolean
-  notify_on_open?: boolean
-  notify_on_close?: boolean
-} | null | undefined
-
-// Build a PARTIAL update: only the notification columns whose keys are actually
-// present in the payload. Treating this as a full overwrite (the old behavior)
-// meant a partial PATCH — e.g. flipping notify_on_open — silently nulled the
-// saved email/phone and disabled both channels. Validation guarantees an
-// enabled channel arrives with a valid address in the same request, so the
-// email/email_enabled interdependency stays consistent under merging.
-function notificationUpdate(settings: NotificationSettingsInput) {
-  const update: Record<string, unknown> = {}
-  if (!settings) return update
-
-  const has = (key: keyof NonNullable<NotificationSettingsInput>) =>
-    Object.prototype.hasOwnProperty.call(settings, key)
-
-  const email = sanitizeEmail(settings.email)
-  const phone = sanitizePhone(settings.phone_e164)
-
-  if (has('email')) update.notify_email = email
-  if (has('phone_e164')) update.notify_phone_e164 = phone
-  if (has('email_enabled')) update.notify_email_enabled = Boolean(settings.email_enabled && email)
-  if (has('sms_enabled')) update.notify_sms_enabled = Boolean(settings.sms_enabled && phone)
-  if (has('notify_on_open')) update.notify_on_open = settings.notify_on_open !== false
-  if (has('notify_on_close')) update.notify_on_close = settings.notify_on_close !== false
-
-  return update
-}
-
-function validateNotificationSettings(settings: NotificationSettingsInput) {
-  if (!settings) return null
-  if (settings.email_enabled && !sanitizeEmail(settings.email)) {
-    return 'Enter a valid email address or turn off email alerts'
-  }
-  if (settings.sms_enabled && !sanitizePhone(settings.phone_e164)) {
-    return 'Enter a valid phone number or turn off SMS alerts'
-  }
-  return null
-}
-
-function sanitizeEmail(email: string | null | undefined) {
-  if (typeof email !== 'string') return null
-  const trimmed = email.trim().toLowerCase()
-  if (!trimmed) return null
-  if (trimmed.length > 254 || !EMAIL_RE.test(trimmed)) return null
-  return trimmed
-}
-
-function sanitizePhone(phone: string | null | undefined) {
-  if (typeof phone !== 'string') return null
-  const trimmed = phone.trim()
-  if (!trimmed) return null
-
-  const digits = trimmed.replace(/\D/g, '')
-  const e164 = trimmed.startsWith('+')
-    ? `+${digits}`
-    : digits.length === 10
-      ? `+1${digits}`
-      : `+${digits}`
-
-  return /^\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null
 }

@@ -55,7 +55,7 @@ The current design is implemented as a Railway worker:
 | Error handling | adaptive backoff up to `15000ms` |
 | Diff key | 5-digit Rutgers index number |
 | State store | Supabase `watched_sections` and `teaching_assignments` |
-| Alerts | Email through Resend, SMS through Twilio when configured |
+| Alerts | Email through Resend to the authenticated account address |
 
 The worker only performs read/diff/update/notify work. It does not call WebReg.
 
@@ -70,8 +70,8 @@ Primary student workflow:
 4. Compare professor rating, difficulty, student grade signals, and native RU
    Rate reviews.
 5. Start a snipe from an index number or a course section.
-6. Get an email/SMS alert when the watched section changes to an opted-in
-   status.
+6. Get an email at the authenticated account address when the watched section
+   opens.
 7. Open WebReg manually and register with the index number.
 
 Secondary workflows:
@@ -93,7 +93,7 @@ Track these without logging private contact details:
 | Source groups per loop | Number of SOC payloads fetched |
 | Status changes detected | Core sniper result |
 | Notification attempts | Delivery volume |
-| Provider missing events | Whether email/SMS setup is incomplete |
+| Provider missing events | Whether email setup is incomplete |
 | Provider send errors | Reliability of alert delivery |
 
 ## Safety Boundaries

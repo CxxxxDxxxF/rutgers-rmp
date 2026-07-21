@@ -41,8 +41,8 @@ global feed.
 
 ### 🎯 Course Sniper
 Watch any section by index number. A dedicated always-on worker checks Rutgers seat data
-around the clock, flips section status the moment it changes, and fires **email and SMS
-alerts** the second your seat opens — with the WebReg index number ready to paste. The site
+around the clock, flips section status the moment it changes, and emails the authenticated
+account the second a seat opens — with the WebReg index number ready to paste. The site
 never auto-registers; you always click submit yourself.
 
 ### 📊 Compare & Rank
@@ -69,7 +69,7 @@ live seat counts, and school-by-school browsing across SAS, SOE, RBS, SEBS, and 
 
 - **Never auto-registers** and never submits WebReg actions — RU Rate is registration *prep*.
 - **Never asks for a NetID or password.** There is nothing to leak.
-- Contact info for alerts is stored for delivery only and never appears in logs.
+- Account email addresses used for alerts never appear in logs.
 - Rutgers endpoints are polled respectfully (single lightweight status feed, adaptive backoff).
 
 ## Business model
@@ -97,7 +97,7 @@ node --check worker/sniper-worker.mjs   # worker syntax check
 Environment: copy `.env.local.example` → `.env.local`. Read-only mode needs
 `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`; full features add
 `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_SECRET`, `VOTE_FINGERPRINT_SALT`, and
-(for alerts) Resend/Twilio keys. AI summaries are optional and need
+(for alerts) Resend keys. AI summaries are optional and need
 `OPENROUTER_API_KEY`.
 
 - **Hosting**: Railway project `rurate-production` — `rurate-web` (site) and
