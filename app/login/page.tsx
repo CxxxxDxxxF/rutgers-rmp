@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import AppHeader from '@/components/AppHeader'
 import { supabase } from '@/lib/supabase'
+import { normalizeEmail, validatePassword, mapAuthError, MIN_PASSWORD_LENGTH } from '@/lib/auth-errors'
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
@@ -19,33 +20,33 @@ export default function LoginPage() {
       setError('Accounts are temporarily unavailable. Please try again later.')
       return
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.')
+    const pwError = validatePassword(password)
+    if (pwError) {
+      setError(pwError)
       return
     }
+    // Normalize so case/whitespace variants map to one identity — prevents a
+    // sign-up under "Me@X.com" that a later "me@x.com " sign-in can't match.
+    const cleanEmail = normalizeEmail(email)
     setLoading(true)
     setError(null)
 
     if (mode === 'signin') {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+      const { error: err } = await supabase.auth.signInWithPassword({ email: cleanEmail, password })
       if (err) {
-        setError(err.message === 'Invalid login credentials'
-          ? 'Wrong email or password. New here? Switch to Sign up.'
-          : err.message)
+        setError(mapAuthError(err.message))
         setLoading(false)
       } else {
         window.location.href = '/'
       }
     } else {
       const { data, error: err } = await supabase.auth.signUp({
-        email,
+        email: cleanEmail,
         password,
         options: { emailRedirectTo: window.location.origin + '/login' },
       })
       if (err) {
-        setError(err.message.includes('already registered') || err.message.includes('already been registered')
-          ? 'That email already has an account — switch to Sign in.'
-          : err.message)
+        setError(mapAuthError(err.message))
         setLoading(false)
       } else if (data.session) {
         // Email confirmation is disabled → the account is live immediately.
@@ -107,8 +108,13 @@ export default function LoginPage() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Password"
                 required
+                minLength={MIN_PASSWORD_LENGTH}
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm text-white outline-none focus:border-[#CC0033]"
               />
+
+              {mode === 'signup' && !error && (
+                <p className="text-[11px] text-zinc-500">At least {MIN_PASSWORD_LENGTH} characters.</p>
+              )}
 
               {error && <p className="text-sm text-red-400">{error}</p>}
 
