@@ -8,39 +8,67 @@ This is intentional — signup does not run any app-side insert that could fail.
 
 ## Root cause of the first-user signup failure (Jul 2026)
 
-The first real external user could not create an account. What the evidence
-**proves**:
+**Confirmed cause: `NEXT_PUBLIC_*` env vars were missing at Docker build time,
+so the production browser bundle had a null Supabase client and signup never
+left the browser.**
 
-- `auth.users` had **zero rows** — signup had never succeeded for anyone.
-- No trigger exists on `auth.users`, and there is no `profiles` table, so the
-  "Database error saving new user" trigger class is ruled out.
-- A failed *confirmation email* still leaves an **unconfirmed** row. Zero rows
-  therefore proves GoTrue rejected the request **before** persisting the user.
+Evidence, in the order it was gathered:
 
-What the evidence does **not** prove: *which* pre-creation cause it is. Zero
-rows is consistent with several, and the **Auth logs are authoritative** — read
-them to confirm before concluding:
+- `auth.users` had **zero rows** — signup had never succeeded for anyone. This
+  proves the request failed *before* a user was created (a failed confirmation
+  email still leaves an unconfirmed row). No trigger on `auth.users` and no
+  `profiles` table, so the "Database error saving new user" class is ruled out.
+- The project **Auth logs showed no `/signup` or `/token` traffic at all** —
+  only dashboard admin calls. This is the decisive clue: if the browser had
+  reached Supabase and been rejected (e.g. an email-send rollback), the request
+  would appear in the logs. It never arrives. The request is **never sent.**
+- `lib/supabase.ts` builds the client only `if (url && anonKey)`, else `null`.
+  These read `process.env.NEXT_PUBLIC_SUPABASE_URL` / `..._ANON_KEY`.
+- Next.js **inlines `NEXT_PUBLIC_*` into the client bundle at build time.**
+  `Dockerfile.web` ran `npm run build` with **no `NEXT_PUBLIC_*` build args**,
+  so the browser bundle shipped with them `undefined` → `supabase = null` in the
+  browser → `supabase.auth.signUp()` silently no-ops.
+- Server-side API routes (`/api/courses`, `/api/professors`, …) read the
+  **runtime** env, which *is* set, so course/professor data loads normally —
+  masking the fact that all *client-side* Supabase use (auth, watchlist client)
+  was dead. Locally, `.env.local` is present at build, so it worked for the
+  developer. Classic "works for me / dead in prod" split.
 
-- **"Confirm email" ON with no working sender** (leading hypothesis): GoTrue
-  tries to send the confirmation mail, the built-in Supabase sender fails or is
-  rate-limited, and the signup is rolled back.
-- **New-user signup disabled** ("Allow new users to sign up" off).
-- **A Before-User-Created auth hook** rejecting the request.
-- **Auth rate limiting.**
-- **Invalid request parameters.**
-- **Wrong project / environment configuration** (ruled out here — this DB
-  serves all the app's live data, so the browser reaches this GoTrue).
+This is a **build/config bug**, not an Auth-provider or email issue. The earlier
+"Confirm email with no SMTP" hypothesis was **disproven** by the empty Auth logs
+(a rollback would have logged a request).
 
-All of these are **provider/configuration** issues, not code, database, or
-frontend bugs. Confirm the specific one in **Authentication → Logs** (or the
-`auth` service logs) before and after the fix.
+### The fix
 
-## The fix (launch configuration)
+`Dockerfile.web` now declares the client vars as build args and sets them as
+`ENV` before `npm run build`:
 
-Instant signup, no email step — chosen for launch (no email infrastructure yet):
+```dockerfile
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+```
+
+Railway supplies the service variables of the same name as build args once they
+are declared as `ARG`. **A fresh rebuild/redeploy of `rurate-web` is required**
+(a runtime-only variable change does not rebuild the bundle). After redeploy,
+the browser bundle carries the real project URL + anon key and `signUp()`
+reaches Supabase.
+
+Verify the project ref in the baked bundle matches this project —
+`lnqauobmiocrmuvjkjet` → `https://lnqauobmiocrmuvjkjet.supabase.co`.
+
+## Auth settings for launch (instant signup)
+
+This is a **separate** decision from the root-cause fix above. Even with the
+bundle fixed, the app was set to require email confirmation, which needs working
+SMTP. For launch we use instant signup, no email step (no email infra yet):
 
 1. Supabase dashboard → **Authentication → Sign In / Providers → Email**
-   - **Confirm email: OFF** (this is the setting that was blocking signup).
+   - **Confirm email: OFF**.
    - **Enable Email provider: ON**.
 2. Supabase dashboard → **Authentication → Sign In / Providers** (or **Settings**)
    - **Allow new users to sign up: ON**.
