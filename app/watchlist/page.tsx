@@ -460,7 +460,7 @@ function SniperActivityFeed({ activity, items, now }: { activity: WatchActivity;
 
 // ─── WatchCard ────────────────────────────────────────────────────────────────
 
-function WatchCard({ watch, isNew, churn }: {
+function WatchCard({ watch, isNew, churn, now }: {
   watch: WatchedSection
   isNew?: boolean
   churn?: { reopen_count: number; last_opened_at: string | null }
