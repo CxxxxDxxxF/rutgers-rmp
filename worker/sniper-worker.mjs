@@ -7,6 +7,7 @@ import {
   parseSocSourceUrl,
   parseInterval,
 } from './lib/soc-status.mjs'
+import { parseBooleanFlag } from './lib/config.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -44,7 +45,7 @@ const SNIPER_BULK_REFRESH_MS = parseInterval(process.env.SNIPER_BULK_REFRESH_MS,
 // running both duplicates Rutgers requests. Set this to 'true' when the cron
 // collector owns status ingestion so this worker only runs the per-watch alert
 // path. See docs/sniper-worker.md.
-const SNIPER_BULK_REFRESH_DISABLED = process.env.SNIPER_BULK_REFRESH_DISABLED === 'true'
+const SNIPER_BULK_REFRESH_DISABLED = parseBooleanFlag(process.env.SNIPER_BULK_REFRESH_DISABLED)
 // The catalog is ingested across every Rutgers campus, so the bulk sweep unions
 // the open lists from each — an NB-only list would wrongly mark NK/CM sections
 // CLOSED.
