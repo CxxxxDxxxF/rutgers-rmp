@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   accountEmailNotificationSnapshot,
+  hasClientOwnerIdentifier,
   hasClientNotificationDestination,
   resolveWatchOwner,
 } from './watchlist-policy'
@@ -33,6 +34,13 @@ test('custom notification destinations are rejected', () => {
   assert.equal(hasClientNotificationDestination({ notification_settings: {} }), true)
   assert.equal(hasClientNotificationDestination({ notify_email: 'other@example.com' }), true)
   assert.equal(hasClientNotificationDestination({ index_number: '12345', semester_slug: 'f2026' }), false)
+})
+
+test('custom owner identifiers are rejected', () => {
+  assert.equal(hasClientOwnerIdentifier({ watcher_id: 'user-2' }), true)
+  assert.equal(hasClientOwnerIdentifier({ owner_id: 'user-2' }), true)
+  assert.equal(hasClientOwnerIdentifier({ user_id: 'user-2' }), true)
+  assert.equal(hasClientOwnerIdentifier({ course_id: 'course-1' }), false)
 })
 
 test('notification snapshot enables account email only', () => {

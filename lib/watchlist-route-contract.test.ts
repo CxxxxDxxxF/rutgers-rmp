@@ -4,12 +4,14 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 const routeSource = readFileSync(join(process.cwd(), 'app/api/watchlist/route.ts'), 'utf8')
+const claimRouteSource = readFileSync(join(process.cwd(), 'app/api/watchlist/claim/route.ts'), 'utf8')
 
 test('watch creation derives owner and recipient from authenticated user', () => {
   assert.match(routeSource, /authenticateWatchOwner\(req, db\)/)
   assert.match(routeSource, /watcher_id: auth\.owner\.id/)
   assert.match(routeSource, /accountEmailNotificationSnapshot\(auth\.owner\.email\)/)
   assert.doesNotMatch(routeSource, /body\.watcher_id/)
+  assert.match(routeSource, /hasClientOwnerIdentifier\(body\)/)
 })
 
 test('watch mutations remain scoped to the authenticated owner', () => {
@@ -22,4 +24,10 @@ test('watch mutations remain scoped to the authenticated owner', () => {
 test('legacy custom destinations are rejected by the route', () => {
   assert.match(routeSource, /hasClientNotificationDestination\(body\)/)
   assert.match(routeSource, /Notification recipients are managed by your RURate account/)
+})
+
+test('legacy client-supplied owner claims are disabled', () => {
+  assert.doesNotMatch(claimRouteSource, /from_watcher/)
+  assert.doesNotMatch(claimRouteSource, /watcher_id:/)
+  assert.match(claimRouteSource, /status: 410/)
 })

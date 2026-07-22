@@ -26,6 +26,13 @@ export function hasClientNotificationDestination(body: unknown): boolean {
   return Object.prototype.hasOwnProperty.call(record, 'notification_settings')
 }
 
+export function hasClientOwnerIdentifier(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false
+  const record = body as Record<string, unknown>
+  return ['watcher_id', 'watcher', 'owner_id', 'user_id', 'userId']
+    .some(key => Object.prototype.hasOwnProperty.call(record, key))
+}
+
 export function accountEmailNotificationSnapshot(email: string) {
   return {
     notify_email: email,

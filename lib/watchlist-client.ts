@@ -1,26 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 
-const LEGACY_ID_KEY = 'ru-rate-watcher-id'
 const CHANGE_EVENT = 'ru-rate-watchlist-change'
-
-function getLegacyWatcherId(): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    return localStorage.getItem(LEGACY_ID_KEY)
-  } catch {
-    return null
-  }
-}
-
-function setLegacyWatcherId(id: string) {
-  try {
-    localStorage.setItem(LEGACY_ID_KEY, id)
-  } catch { /* local storage is optional */ }
-}
 
 async function authHeaders(contentType = false): Promise<Record<string, string> | null> {
   if (!supabase) return null
@@ -33,35 +17,6 @@ async function authHeaders(contentType = false): Promise<Record<string, string> 
   }
 }
 
-async function claimLegacyWatchlist(userId: string) {
-  const legacyId = getLegacyWatcherId()
-  if (!legacyId || legacyId === userId) return
-  const headers = await authHeaders(true)
-  if (!headers) return
-  try {
-    const response = await fetch('/api/watchlist/claim', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ from_watcher: legacyId }),
-    })
-    if (response.ok) {
-      setLegacyWatcherId(userId)
-      notifyChange()
-    }
-  } catch { /* legacy migration is non-fatal */ }
-}
-
-/** Migrate any pre-auth browser watches once after sign-in. */
-export function useWatchlistSync() {
-  const { user, loading } = useAuth()
-  const claimedRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (loading || !user || claimedRef.current === user.id) return
-    claimedRef.current = user.id
-    void claimLegacyWatchlist(user.id)
-  }, [user, loading])
-}
 
 export interface WatchedSection {
   id: string

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 import {
   accountEmailNotificationSnapshot,
+  hasClientOwnerIdentifier,
   hasClientNotificationDestination,
   resolveWatchOwner,
   type WatchOwner,
@@ -143,6 +144,7 @@ export async function GET(req: NextRequest) {
     if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
     const auth = await authenticateWatchOwner(req, db)
     if (!auth.ok) return auth.response
+    if (hasOwnerQueryOverride(req)) return ownerOverrideResponse()
 
     const { data, error } = await db
       .from('watched_sections')
@@ -180,6 +182,8 @@ export async function POST(req: NextRequest) {
     if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
     const auth = await authenticateWatchOwner(req, db)
     if (!auth.ok) return auth.response
+
+    if (hasClientOwnerIdentifier(body)) return ownerOverrideResponse()
 
     if (hasClientNotificationDestination(body)) {
       return NextResponse.json(
@@ -272,6 +276,7 @@ export async function DELETE(req: NextRequest) {
     if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
     const auth = await authenticateWatchOwner(req, db)
     if (!auth.ok) return auth.response
+    if (hasOwnerQueryOverride(req)) return ownerOverrideResponse()
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
     const { error } = await db
@@ -302,6 +307,7 @@ export async function PATCH(req: NextRequest) {
     if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
     const auth = await authenticateWatchOwner(req, db)
     if (!auth.ok) return auth.response
+    if (hasClientOwnerIdentifier(body)) return ownerOverrideResponse()
     if (body.notification_settings != null || hasClientNotificationDestination(body)) {
       return NextResponse.json(
         { error: 'Notification recipients are managed by your RURate account' },
@@ -329,6 +335,18 @@ export async function PATCH(req: NextRequest) {
     log.error('Watchlist PATCH error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+function ownerOverrideResponse() {
+  return NextResponse.json(
+    { error: 'Watch ownership is managed by your RURate account' },
+    { status: 400 },
+  )
+}
+
+function hasOwnerQueryOverride(req: NextRequest) {
+  return ['watcher', 'watcher_id', 'owner_id', 'user_id']
+    .some(key => req.nextUrl.searchParams.has(key))
 }
 
 function sanitizeStatus(status: string | null | undefined) {
