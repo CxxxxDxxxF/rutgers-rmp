@@ -255,11 +255,12 @@ Expected `status: "ok"` when the database is reachable and a status writer is
 running; `"degraded"` means no collector/worker is writing (the history feed is
 going cold); a `503` means the database is unreachable.
 
-Invalid watchlist email should be rejected:
+An authenticated client-supplied watch owner or recipient should be rejected:
 
 ```bash
 curl -sS -X POST https://rurate-web-production.up.railway.app/api/watchlist \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <test-account-access-token>' \
   --data '{"watcher_id":"00000000-0000-4000-8000-000000000265","index_number":"26253","notification_settings":{"email":"bad","email_enabled":true,"notify_on_open":true}}'
 ```
 
@@ -274,7 +275,7 @@ curl -sS -X POST https://rurate-web-production.up.railway.app/api/reviews \
 Expected errors:
 
 ```text
-Enter a valid email address or turn off email alerts
+Watch ownership is managed by your RURate account
 Ratings must be whole numbers from 1 to 5
 ```
 

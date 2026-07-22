@@ -62,7 +62,7 @@ Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS v4 · Supabase �
 | `app/api/analyze/route.ts` | Professor cache read/write + AI summary trigger |
 | `app/api/courses/route.ts` | Course search with dept/query/credits/level/semester filters |
 | `app/api/professors/route.ts` | Professor browse — reads the `professor_directory` view (every teaching professor, ratings/AI joined when present); filters: `rated`, `analyzed`, `verdict`, `min_ratings` |
-| `app/api/watchlist/` | Watchlist CRUD (+ `claim/` re-keys anonymous watches to a signed-in user) |
+| `app/api/watchlist/` | Authenticated watchlist CRUD; the legacy `claim/` mutation is disabled |
 | `app/api/courses/[slug]/route.ts` | Course detail: sections by semester, professor joins, per-section `watch_count` demand signal + `reopen_count`/`last_opened_at` churn signal (14-day CLOSED→OPEN count from `section_status_events`) |
 | `app/api/compare/route.ts` | Side-by-side professor comparison (cache-only; never calls RMP live) |
 | `app/api/schedule/route.ts` | Paste-a-schedule instructor ranking (verdict → grade → rating) |
