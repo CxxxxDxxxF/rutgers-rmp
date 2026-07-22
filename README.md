@@ -62,7 +62,7 @@ live seat counts, and school-by-school browsing across SAS, SOE, RBS, SEBS, and 
 | **Web app** | Next.js 16 / React 19 site with animated, filterable browse pages for courses, professors, departments, and reviews |
 | **Data engine** | Continuously ingests the Rutgers Schedule of Classes (courses, sections, instructors) into Supabase/Postgres |
 | **Professor matcher** | Conservatively links Rutgers instructors to their RateMyProfessors profiles — no false merges |
-| **AI analyst** | Background worker generates professor write-ups and TAKE/DEPENDS/AVOID verdicts via Claude |
+| **AI analyst** | Background worker + cron collector generate professor write-ups and TAKE/DEPENDS/AVOID verdicts via OpenRouter (Gemini Flash Lite, with Claude Haiku on the always-on worker) |
 | **Sniper worker** | Always-on Railway service: refreshes open/closed status site-wide every few minutes and polls watched sections in near-real-time for alerts |
 
 ## Trust & safety by design

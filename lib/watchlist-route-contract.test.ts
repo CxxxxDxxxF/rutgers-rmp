@@ -31,3 +31,27 @@ test('legacy client-supplied owner claims are disabled', () => {
   assert.doesNotMatch(claimRouteSource, /watcher_id:/)
   assert.match(claimRouteSource, /status: 410/)
 })
+
+test('watch creation enforces the section-level contract at the boundary', () => {
+  // Course-only payloads are classified and rejected before any insert.
+  assert.match(routeSource, /resolveWatchTargetKind\(body\)/)
+  assert.match(routeSource, /target\.kind === 'reject'/)
+  // Both accepted paths resolve to a concrete section server-side.
+  assert.match(routeSource, /resolveSectionByAssignment\(db, target\.teachingAssignmentId/)
+  assert.match(routeSource, /resolveSectionByIndex\(db, target\.indexNumber/)
+})
+
+test('a client-supplied teaching assignment is validated against the stored row', () => {
+  // Mismatched course/index, inactive sections, index-less sections, and
+  // wrong-semester sections are all rejected in resolveSectionByAssignment.
+  assert.match(routeSource, /does not belong to the given course/)
+  assert.match(routeSource, /Section and index number do not match/)
+  assert.match(routeSource, /no longer active/)
+  assert.match(routeSource, /has no index number to track/)
+  assert.match(routeSource, /not in the (selected|current registration) semester/)
+})
+
+test('the stored index number is authoritative, never the raw client value', () => {
+  assert.match(routeSource, /index_number: resolvedIndex/)
+  assert.doesNotMatch(routeSource, /index_number: indexNumber \?\? body\.index_number/)
+})

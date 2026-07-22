@@ -24,9 +24,11 @@ names. Production should use the RU Rate names above.
 | --- | --- |
 | App overview, local setup, checks | `README.md` |
 | Railway deploys, service names, smoke checks | `docs/deployment.md` |
-| Course sniper worker, alert env vars, latency | `docs/sniper-worker.md` |
+| Course sniper worker + cron collectors, alert env vars, latency | `docs/sniper-worker.md` |
 | Rutgers SOC ingest, class-data routes, API map | `docs/rutgers-class-data.md` |
 | Sniper product research and safety boundaries | `docs/course-sniper-research.md` |
+| Signup / Supabase Auth wiring and the Jul 2026 fix | `docs/signup.md` |
+| Controlled production Sniper validation | `docs/production-validation-runbook.md` |
 
 ## Important Code Areas
 
@@ -40,10 +42,13 @@ names. Production should use the RU Rate names above.
 | Rutgers SOC ingest | `scripts/ingest-soc.ts` |
 | Data audit | `scripts/audit-data.ts` |
 | Migration helper | `scripts/apply-migration.ts` |
-| Sniper worker | `worker/sniper-worker.mjs` |
+| Sniper worker (always-on) | `worker/sniper-worker.mjs` |
+| Status collector (cron `*/5`) | `worker/status-collector.mjs` |
+| AI verdict collector (cron `*/10`) | `worker/ai-analysis-collector.mjs` |
+| Shared worker helpers + tests | `worker/lib/` |
 | Database migrations | `supabase/migrations/` |
 | Web container | `Dockerfile.web`, `railway.json` |
-| Worker container | `Dockerfile.worker`, `railway.worker.json` |
+| Worker container (shared by all three background services) | `Dockerfile.worker`, `railway.worker.json`, `railway.collector.json`, `railway.ai-collector.json` |
 
 ## Working Rules
 
@@ -159,12 +164,19 @@ Web service:
 - Dockerfile: `Dockerfile.web`
 - Healthcheck: `/`
 
-Worker service:
+Worker service (always-on):
 
 - Service: `rurate-sniper-worker`
 - Dockerfile: `Dockerfile.worker`
 - Config: `railway.worker.json`
-- Start command: `npm run worker:sniper`
+- Start command: `npm run worker:sniper` (from the `Dockerfile.worker` CMD; `startCommand` is null in `railway.worker.json`)
+
+Cron collector services (share `Dockerfile.worker`; each ships its own `railway.*.json` copied to `railway.json` at upload):
+
+- `rurate-status-collector` — `railway.collector.json`, `npm run worker:collect`, cron `*/5`
+- `rurate-ai-collector` — `railway.ai-collector.json`, `npm run worker:ai`, cron `*/10`
+
+Full runbooks for all three background services are in `docs/deployment.md` and `docs/sniper-worker.md`.
 
 After any detached Railway deploy, poll the newest deployment until it reaches
 `SUCCESS` or a terminal failure. Do not report a queued deployment as shipped.
@@ -188,9 +200,10 @@ SNIPER_POLL_INTERVAL_MS=500
 SNIPER_WATCHLIST_REFRESH_MS=5000
 SNIPER_NO_WATCHES_INTERVAL_MS=1000
 SNIPER_MAX_BACKOFF_MS=15000
-SNIPER_DEFAULT_YEAR=2025
+SNIPER_DEFAULT_YEAR=2026
 SNIPER_DEFAULT_TERM=9
 SNIPER_DEFAULT_CAMPUS=NB
+SNIPER_BULK_CAMPUSES=NB,NK,CM
 ```
 
 Email delivery is only real when provider variables are configured:

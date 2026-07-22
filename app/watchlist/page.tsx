@@ -371,7 +371,9 @@ function WatchCard({ watch, isNew, churn, now }: {
                   )}
                 </>
               ) : (
-                <p className="text-xs text-zinc-600">Watching whole course — pick a section for section-level alerts.</p>
+                <p className="text-xs text-amber-500/80">
+                  Not being tracked — Course Sniper needs a specific section. Remove this and pick a closed section on the course page to get alerts.
+                </p>
               )}
             </div>
           </div>
