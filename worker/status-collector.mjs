@@ -5,8 +5,8 @@
 // Railway cron service (schedule it every ~5 min) instead of an always-on
 // worker. One lightweight openSections.json request per campus, a diff against
 // the stored status, and a batched update — which fires the migration 024
-// trigger and fills section_status_events. No paid API keys, no Resend/Twilio/
-// OpenRouter, no 24/7 process: it only needs the Supabase env vars the app
+// trigger and fills section_status_events. No paid API keys, alert-provider
+// credentials, OpenRouter access, or 24/7 process: it only needs the Supabase env vars the app
 // already uses.
 //
 // This is an ALTERNATIVE to the always-on sniper worker's bulk refresh, not a

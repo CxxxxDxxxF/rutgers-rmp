@@ -47,12 +47,11 @@ export default function PrivacyPage() {
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold text-zinc-200 mb-1">Alert contact details</h3>
+                <h3 className="font-semibold text-zinc-200 mb-1">Course-sniper email alerts</h3>
                 <p>
-                  If you enable email alerts we store your email. If you enable SMS alerts we store
-                  your phone number. These are used solely to deliver seat-open notifications via
-                  Resend (email) and Twilio (SMS). We do not sell or share contact details with
-                  third parties.
+                  Course Sniper uses the email address associated with your authenticated account
+                  to deliver seat-open notifications through Resend. You cannot set a separate
+                  alert recipient. We do not sell or share your email address with third parties.
                 </p>
               </div>
               <div>
@@ -108,7 +107,7 @@ export default function PrivacyPage() {
             <ul className="list-disc list-inside space-y-1 text-zinc-300">
               <li>Account data: retained until you delete your account</li>
               <li>Watchlist entries: deleted when you remove them or delete your account</li>
-              <li>Alert contact details: deleted when you delete your account</li>
+              <li>Account email and watchlist alert data: deleted when you delete your account</li>
               <li>Subscription records: retained for up to 7 years for tax/legal compliance after cancellation</li>
               <li>Vote fingerprints: retained indefinitely in hashed form (no personal data recoverable)</li>
               <li>Server access logs: up to 30 days (Railway policy)</li>
@@ -147,7 +146,6 @@ export default function PrivacyPage() {
               <li><strong className="text-zinc-200">Supabase</strong> — database and authentication (supabase.com/privacy)</li>
               <li><strong className="text-zinc-200">Stripe</strong> — payment processing (stripe.com/privacy)</li>
               <li><strong className="text-zinc-200">Resend</strong> — transactional email (resend.com/legal/privacy-policy)</li>
-              <li><strong className="text-zinc-200">Twilio</strong> — SMS alerts (twilio.com/legal/privacy)</li>
               <li><strong className="text-zinc-200">Railway</strong> — hosting and infrastructure (railway.com/legal/privacy)</li>
               <li><strong className="text-zinc-200">RateMyProfessors / Chegg</strong> — professor rating data (chegg.com/privacy)</li>
             </ul>

@@ -5,12 +5,10 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV_ITEMS, isNavItemActive } from '@/lib/nav'
 import { supabase } from '@/lib/supabase'
-import { useWatchlistSync } from '@/lib/watchlist-client'
 
 export default function AppHeader() {
   const pathname = usePathname()
   const { user, loading } = useAuth()
-  useWatchlistSync()
 
   async function handleSignOut() {
     if (!supabase) return

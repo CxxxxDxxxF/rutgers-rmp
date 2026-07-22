@@ -7,6 +7,7 @@ import {
   parseSocSourceUrl,
   parseInterval,
 } from './lib/soc-status.mjs'
+import { emailOnlyNotificationPolicy } from './lib/notification-policy.mjs'
 import { parseBooleanFlag } from './lib/config.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -21,7 +22,7 @@ const DEFAULT_TERM = process.env.SNIPER_DEFAULT_TERM ?? '9'
 const DEFAULT_CAMPUS = process.env.SNIPER_DEFAULT_CAMPUS ?? 'NB'
 const SOC_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_SOC_FETCH_TIMEOUT_MS, 10000, 1000)
 // Every await in the main loop must be bounded: one unbounded network call
-// (DB, email, SMS, AI) that never settles freezes the poll loop silently —
+// (DB, email, AI) that never settles freezes the poll loop silently —
 // production hung exactly this way (zero CPU, no logs, no exit, no restart).
 const DB_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_DB_TIMEOUT_MS, 15000, 1000)
 const PROVIDER_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_PROVIDER_TIMEOUT_MS, 15000, 1000)
@@ -30,9 +31,6 @@ const WATCHDOG_STALL_MS = parseInterval(process.env.SNIPER_WATCHDOG_STALL_MS, 5 
 const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.RAILWAY_PUBLIC_DOMAIN
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const NOTIFY_EMAIL_FROM = process.env.NOTIFY_EMAIL_FROM
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN
-const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 // Default to a 10-minute cadence so the analysis backlog drains in hours.
 const AI_ANALYSIS_INTERVAL_MS = parseInterval(process.env.AI_ANALYSIS_INTERVAL_MS, 10 * 60 * 1000, 60 * 1000)
@@ -91,6 +89,7 @@ let analysisRunning = false
 let lastBulkRefresh = 0
 let bulkRefreshRunning = false
 let lastLoopTick = Date.now()
+const ownerEmailCache = new Map()
 
 // Self-heal from anything that slips past the per-call timeouts (e.g. a body
 // stream that stalls after headers): if the main loop hasn't ticked in
@@ -123,7 +122,6 @@ async function main() {
     default_term: DEFAULT_TERM,
     default_campus: DEFAULT_CAMPUS,
     email_enabled: Boolean(RESEND_API_KEY && NOTIFY_EMAIL_FROM),
-    sms_enabled: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER),
     bulk_refresh_disabled: SNIPER_BULK_REFRESH_DISABLED,
   }))
 
@@ -201,14 +199,10 @@ async function loadActiveWatches() {
     .from('watched_sections')
     .select(`
       id,
+      watcher_id,
       index_number,
       teaching_assignment_id,
-      notify_email,
-      notify_phone_e164,
-      notify_email_enabled,
-      notify_sms_enabled,
       notify_on_open,
-      notify_on_close,
       last_notified_status,
       last_notified_assignment_status_at,
       courses (
@@ -236,6 +230,16 @@ async function loadActiveWatches() {
 
   if (error) throw new Error(`Failed to load watched sections: ${error.message}`)
 
+  const ownerEmails = new Map()
+  const ownerIds = [...new Set((data ?? []).map(row => row.watcher_id).filter(Boolean))]
+  for (let index = 0; index < ownerIds.length; index += 20) {
+    const batch = ownerIds.slice(index, index + 20)
+    await Promise.all(batch.map(async ownerId => {
+      const email = await accountEmailFor(ownerId)
+      if (email) ownerEmails.set(ownerId, email)
+    }))
+  }
+
   const active = []
   for (const row of data ?? []) {
     const course = one(row.courses)
@@ -255,12 +259,7 @@ async function loadActiveWatches() {
       sectionNumber: assignment.section_number ?? null,
       previousOpenStatus: assignment.open_status ?? null,
       previousOpenStatusText: assignment.open_status_text ?? null,
-      notifyEmail: row.notify_email ?? null,
-      notifyPhone: row.notify_phone_e164 ?? null,
-      notifyEmailEnabled: row.notify_email_enabled === true,
-      notifySmsEnabled: row.notify_sms_enabled === true,
-      notifyOnOpen: row.notify_on_open !== false,
-      notifyOnClose: row.notify_on_close !== false,
+      ...emailOnlyNotificationPolicy(row, ownerEmails.get(row.watcher_id) ?? null),
       lastNotifiedStatus: row.last_notified_status ?? null,
       lastNotifiedAssignmentStatusAt: row.last_notified_assignment_status_at ?? null,
       source,
@@ -274,6 +273,15 @@ async function loadActiveWatches() {
   }))
 
   return active
+}
+
+async function accountEmailFor(userId) {
+  const cached = ownerEmailCache.get(userId)
+  if (cached && Date.now() - cached.loadedAt < WATCHLIST_REFRESH_MS * 120) return cached.email
+  const { data, error } = await supabase.auth.admin.getUserById(userId)
+  const email = !error && data.user?.email ? data.user.email.trim().toLowerCase() : null
+  ownerEmailCache.set(userId, { email, loadedAt: Date.now() })
+  return email
 }
 
 async function pollOnce(activeWatches) {
@@ -555,18 +563,6 @@ async function sendStatusNotifications(watch, openStatus, openStatusText, detect
       }))
     }
   }
-  if (watch.notifySmsEnabled && watch.notifyPhone) {
-    if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER) {
-      channels.push(sendSmsNotification(watch, status))
-    } else {
-      console.log(JSON.stringify({
-        event: 'notification_provider_missing',
-        channel: 'sms',
-        watch_id: watch.watchId,
-      }))
-    }
-  }
-
   if (channels.length === 0) {
     return { attempted: 0, sent: 0, notifiedStatus: null }
   }
@@ -641,36 +637,6 @@ async function sendEmailNotification(watch, status, statusAt) {
 
   if (!response.ok) {
     throw new Error(`Resend failed: HTTP ${response.status}`)
-  }
-}
-
-async function sendSmsNotification(watch, status) {
-  const subject = `${watch.courseNumber ?? 'Course'}${watch.sectionNumber ? ` ${watch.sectionNumber}` : ''} is ${status}`
-  const courseUrl = courseLink(watch)
-  const body = [
-    `RU Rate: ${subject}`,
-    watch.indexNumber ? `Index ${watch.indexNumber}` : '',
-    courseUrl ?? 'https://webreg.rutgers.edu/',
-  ].filter(Boolean).join('\n').slice(0, 320)
-
-  const params = new URLSearchParams({
-    To: watch.notifyPhone,
-    From: TWILIO_FROM_NUMBER,
-    Body: body,
-  })
-
-  const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64')
-  const response = await fetchWithTimeout(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${auth}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: params,
-  }, PROVIDER_FETCH_TIMEOUT_MS)
-
-  if (!response.ok) {
-    throw new Error(`Twilio failed: HTTP ${response.status}`)
   }
 }
 

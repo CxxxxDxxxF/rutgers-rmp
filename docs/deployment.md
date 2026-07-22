@@ -26,18 +26,16 @@ analyzed with `google/gemini-2.5-flash-lite`). `rurate-ai-collector` stays on a
 
 4. **Sending domain** — buy/point a domain, verify it in Resend, set
    `RESEND_API_KEY` + `NOTIFY_EMAIL_FROM` on `rurate-sniper-worker`.
-5. **SMS (optional)** — set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-   `TWILIO_FROM_NUMBER` on `rurate-sniper-worker`.
-6. **Switch status writers** — once the always-on worker's bulk refresh is
+5. **Switch status writers** — once the always-on worker's bulk refresh is
    feeding `section_status_events`, disable the `rurate-status-collector` cron
    (never run both; duplicate Rutgers requests). Runbook in
    [`sniper-worker.md`](sniper-worker.md).
-7. **Verify an alert end-to-end** — watch a closed section, flip it in a test,
-   confirm email/SMS delivery and no PII in logs.
+6. **Verify an alert end-to-end** — watch a closed section, flip it in a test,
+   confirm delivery to the authenticated account email and no PII in logs.
 
 ### Seasonal
 
-8. **Semester rollover** — ingest the new term (`npm run ingest -- --dry-run …`
+7. **Semester rollover** — ingest the new term (`npm run ingest -- --dry-run …`
    first), add the semester migration if needed, and update
    `SNIPER_DEFAULT_YEAR` / `SNIPER_DEFAULT_TERM` on the worker.
 
@@ -91,7 +89,7 @@ because the Railway CLI reads `railway.json` from the upload root.
 
 **Operating modes.** The always-on `rurate-sniper-worker` does fast per-watch
 polling *and* a bulk status sweep *and* the AI batch. In **history-only mode**
-(no email/SMS alerts configured) it is not needed — instead run the two cron
+(no email alerts configured) it is not needed — instead run the two cron
 collectors, which cover the status sweep and the AI backlog for near-zero cost.
 Run the sniper worker **or** the status collector, never both (they'd duplicate
 Rutgers requests). Bring the worker back once alerts go live. The two cron
@@ -149,9 +147,6 @@ Provider variables required before promising outbound alerts:
 ```text
 RESEND_API_KEY
 NOTIFY_EMAIL_FROM
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_FROM_NUMBER
 ```
 
 Do not print or paste secret values into logs, issues, docs, or chat.
@@ -260,11 +255,12 @@ Expected `status: "ok"` when the database is reachable and a status writer is
 running; `"degraded"` means no collector/worker is writing (the history feed is
 going cold); a `503` means the database is unreachable.
 
-Invalid watchlist email should be rejected:
+An authenticated client-supplied watch owner or recipient should be rejected:
 
 ```bash
 curl -sS -X POST https://rurate-web-production.up.railway.app/api/watchlist \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <test-account-access-token>' \
   --data '{"watcher_id":"00000000-0000-4000-8000-000000000265","index_number":"26253","notification_settings":{"email":"bad","email_enabled":true,"notify_on_open":true}}'
 ```
 
@@ -279,7 +275,7 @@ curl -sS -X POST https://rurate-web-production.up.railway.app/api/reviews \
 Expected errors:
 
 ```text
-Enter a valid email address or turn off email alerts
+Watch ownership is managed by your RURate account
 Ratings must be whole numbers from 1 to 5
 ```
 

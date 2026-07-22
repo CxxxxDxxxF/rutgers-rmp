@@ -9,7 +9,7 @@ WebReg actions, or enable real notification providers without explicit approval.
 Codex may inspect code, run local checks, inspect Railway logs when authorized,
 and prepare evidence. A user must perform or explicitly approve account
 creation, email confirmation, login, production watch creation, and any action
-that can send email or SMS. Do not record passwords, auth tokens, cookies, or
+that can send email. Do not record passwords, auth tokens, cookies, or
 full private payloads.
 
 ## Preconditions
@@ -37,8 +37,8 @@ full private payloads.
    transition direction, observed timestamp, notification attempt count, and
    notification record ID. Never manufacture a CLOSED/OPEN transition in
    production.
-6. If a real OPEN transition occurs, obtain approval before enabling the email or
-   SMS channel. Verify provider delivery status in Resend/Twilio and confirm no
+6. If a real OPEN transition occurs, obtain approval before enabling email
+   delivery. Verify provider delivery status in Resend and confirm no
    duplicate notification is created on subsequent polls.
 7. Remove one watch. Verify the row is removed or inactive as designed, then
    confirm subsequent worker refreshes no longer evaluate it.
@@ -72,9 +72,9 @@ delivery as pending rather than forcing a production result.
 | Course and section identity | TypeScript/API tests are indirect | Add fixture tests for `(index_number, semester_id)` resolution. |
 | Course sorting | `lib/course-sort.test.ts` | Covered. |
 | Course API behavior | No route-level test | Add mocked pagination/filter response tests. |
-| Watch creation, duplicate prevention, deletion | No route-level test | Add mocked API contract tests for create, duplicate, PATCH, and DELETE. |
+| Watch ownership and client override rejection | `lib/watchlist-policy.test.ts`, `lib/watchlist-route-contract.test.ts` | Add mocked integration tests for create, duplicate, PATCH, and DELETE. |
 | Worker watch discovery/removal | No isolated worker test | Extract a pure active-watch reconciliation helper and test add/remove without I/O. |
-| `SNIPER_BULK_REFRESH_DISABLED` parsing | Runtime expression only | Add a pure config helper test for `true`, `false`, and missing values. |
+| `SNIPER_BULK_REFRESH_DISABLED` parsing | `worker/lib/config.test.mjs` | Covered for `true`, `false`, and missing values. |
 | Status transition detection | `worker/lib/soc-status.test.mjs` covers labels only | Add transition fixtures: CLOSED→OPEN, repeat OPEN, and OPEN→CLOSED→OPEN. |
 | UNKNOWN/error handling | Label helper coverage only | Add a poll fixture proving failed source data cannot close sections. |
 | Duplicate notification prevention | No isolated worker test | Add a pure notification eligibility/dedup test; concurrency needs an integration fixture. |

@@ -1,85 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 
-const ID_KEY = 'ru-rate-watcher-id'
 const CHANGE_EVENT = 'ru-rate-watchlist-change'
 
-export function getWatcherId(): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    let id = localStorage.getItem(ID_KEY)
-    if (!id) {
-      id = crypto.randomUUID()
-      localStorage.setItem(ID_KEY, id)
-    }
-    return id
-  } catch {
-    return null
+async function authHeaders(contentType = false): Promise<Record<string, string> | null> {
+  if (!supabase) return null
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) return null
+  return {
+    ...(contentType ? { 'Content-Type': 'application/json' } : {}),
+    Authorization: `Bearer ${token}`,
   }
 }
 
-function setWatcherId(id: string) {
-  try {
-    localStorage.setItem(ID_KEY, id)
-  } catch { /* ignore */ }
-}
-
-function resetWatcherId() {
-  setWatcherId(crypto.randomUUID())
-  notifyChange()
-}
-
-async function claimWatchlist(userId: string) {
-  const currentId = getWatcherId()
-  if (!currentId) return
-  if (currentId === userId) return // already keyed to this user
-
-  try {
-    if (!supabase) return
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token
-    if (!token) return
-
-    const res = await fetch('/api/watchlist/claim', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ from_watcher: currentId }),
-    })
-
-    if (res.ok) {
-      setWatcherId(userId)
-      notifyChange()
-    }
-  } catch { /* non-fatal — watchlist still works as anonymous */ }
-}
-
-/**
- * Mount once (e.g. in AppHeader) to automatically sync the watchlist with
- * the signed-in user's account. On sign-in it migrates anonymous rows to
- * auth.uid; on sign-out it resets to a fresh anonymous UUID.
- */
-export function useWatchlistSync() {
-  const { user, loading } = useAuth()
-  const claimedRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (loading) return
-
-    if (user && claimedRef.current !== user.id) {
-      claimedRef.current = user.id
-      claimWatchlist(user.id)
-    } else if (!user && claimedRef.current !== null) {
-      claimedRef.current = null
-      resetWatcherId()
-    }
-  }, [user, loading])
-}
 
 export interface WatchedSection {
   id: string
@@ -87,14 +24,6 @@ export interface WatchedSection {
   teaching_assignment_id: string | null
   index_number: string | null
   last_seen_status: string | null
-  notification_settings: {
-    email: string | null
-    phone_e164: string | null
-    email_enabled: boolean
-    sms_enabled: boolean
-    notify_on_open: boolean
-    notify_on_close: boolean
-  }
   created_at: string
   course: {
     course_number: string
@@ -130,11 +59,11 @@ function notifyChange() {
 }
 
 export async function fetchWatchlist(): Promise<WatchedSection[]> {
-  const watcher = getWatcherId()
-  if (!watcher) return []
-  const res = await fetch(`/api/watchlist?watcher=${encodeURIComponent(watcher)}`)
-  if (!res.ok) throw new Error('Failed to load watchlist')
-  const data = await res.json()
+  const headers = await authHeaders()
+  if (!headers) return []
+  const response = await fetch('/api/watchlist', { headers })
+  if (!response.ok) throw new Error('Failed to load watchlist')
+  const data = await response.json()
   return Array.isArray(data) ? data : []
 }
 
@@ -142,44 +71,38 @@ export async function addWatch(params: {
   courseId: string
   teachingAssignmentId?: string | null
   indexNumber?: string | null
-  notificationSettings?: NotificationSettingsInput
 }): Promise<boolean> {
-  const watcher = getWatcherId()
-  if (!watcher) return false
-  const res = await fetch('/api/watchlist', {
+  const headers = await authHeaders(true)
+  if (!headers) return false
+  const response = await fetch('/api/watchlist', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
-      watcher_id: watcher,
       course_id: params.courseId,
       teaching_assignment_id: params.teachingAssignmentId ?? null,
       index_number: params.indexNumber ?? null,
-      notification_settings: params.notificationSettings,
     }),
   })
-  if (res.ok) notifyChange()
-  return res.ok
+  if (response.ok) notifyChange()
+  return response.ok
 }
 
 export async function addWatchByIndex(params: {
   indexNumber: string
   semesterSlug?: string | null
-  notificationSettings?: NotificationSettingsInput
 }): Promise<{ ok: boolean; duplicate?: boolean; error?: string }> {
-  const watcher = getWatcherId()
-  if (!watcher) return { ok: false, error: 'Watchlist storage is blocked in this browser' }
-  const res = await fetch('/api/watchlist', {
+  const headers = await authHeaders(true)
+  if (!headers) return { ok: false, error: 'Sign in to create a Course Sniper watch' }
+  const response = await fetch('/api/watchlist', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
-      watcher_id: watcher,
       index_number: params.indexNumber,
       semester_slug: params.semesterSlug ?? null,
-      notification_settings: params.notificationSettings,
     }),
   })
-  const data = await res.json().catch(() => ({}))
-  if (res.ok) {
+  const data = await response.json().catch(() => ({}))
+  if (response.ok) {
     notifyChange()
     return { ok: true, duplicate: Boolean(data.duplicate) }
   }
@@ -190,81 +113,26 @@ export async function addWatchByIndex(params: {
 }
 
 export async function removeWatch(watchId: string): Promise<boolean> {
-  const watcher = getWatcherId()
-  if (!watcher) return false
-  const res = await fetch(
-    `/api/watchlist?id=${encodeURIComponent(watchId)}&watcher=${encodeURIComponent(watcher)}`,
-    { method: 'DELETE' }
-  )
-  if (res.ok) notifyChange()
-  return res.ok
+  const headers = await authHeaders()
+  if (!headers) return false
+  const response = await fetch(`/api/watchlist?id=${encodeURIComponent(watchId)}`, {
+    method: 'DELETE',
+    headers,
+  })
+  if (response.ok) notifyChange()
+  return response.ok
 }
 
 export async function markWatchStatusSeen(watchIds: string[], status: string | null): Promise<boolean> {
-  const watcher = getWatcherId()
-  if (!watcher || watchIds.length === 0) return false
-  const res = await fetch('/api/watchlist', {
+  const headers = await authHeaders(true)
+  if (!headers || watchIds.length === 0) return false
+  const response = await fetch('/api/watchlist', {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      watcher_id: watcher,
-      ids: watchIds,
-      last_seen_status: status,
-    }),
+    headers,
+    body: JSON.stringify({ ids: watchIds, last_seen_status: status }),
   })
-  if (res.ok) notifyChange()
-  return res.ok
-}
-
-export interface NotificationSettingsInput {
-  email?: string | null
-  phone_e164?: string | null
-  email_enabled?: boolean
-  sms_enabled?: boolean
-  notify_on_open?: boolean
-  notify_on_close?: boolean
-}
-
-export async function updateWatchNotifications(settings: NotificationSettingsInput, watchIds?: string[]): Promise<boolean> {
-  const watcher = getWatcherId()
-  if (!watcher) return false
-  const res = await fetch('/api/watchlist', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      watcher_id: watcher,
-      ids: watchIds,
-      notification_settings: settings,
-    }),
-  })
-  if (res.ok) notifyChange()
-  return res.ok
-}
-
-export async function updateWatchNotificationsDetailed(
-  settings: NotificationSettingsInput,
-  watchIds?: string[]
-): Promise<{ ok: boolean; error?: string }> {
-  const watcher = getWatcherId()
-  if (!watcher) return { ok: false, error: 'Watchlist storage is blocked in this browser' }
-  const res = await fetch('/api/watchlist', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      watcher_id: watcher,
-      ids: watchIds,
-      notification_settings: settings,
-    }),
-  })
-  const data = await res.json().catch(() => ({}))
-  if (res.ok) {
-    notifyChange()
-    return { ok: true }
-  }
-  return {
-    ok: false,
-    error: typeof data.error === 'string' ? data.error : 'Failed to save alert settings',
-  }
+  if (response.ok) notifyChange()
+  return response.ok
 }
 
 export interface WatchActivityEvent {
@@ -282,11 +150,11 @@ export interface WatchActivity {
 
 export async function fetchWatchActivity(): Promise<WatchActivity> {
   const empty: WatchActivity = { events: [], stats: {} }
-  const watcher = getWatcherId()
-  if (!watcher) return empty
-  const res = await fetch(`/api/watchlist/activity?watcher=${encodeURIComponent(watcher)}`)
-  if (!res.ok) return empty
-  const data = await res.json().catch(() => empty)
+  const headers = await authHeaders()
+  if (!headers) return empty
+  const response = await fetch('/api/watchlist/activity', { headers })
+  if (!response.ok) return empty
+  const data = await response.json().catch(() => empty)
   return {
     events: Array.isArray(data.events) ? data.events : [],
     stats: data.stats && typeof data.stats === 'object' ? data.stats : {},
@@ -296,7 +164,8 @@ export async function fetchWatchActivity(): Promise<WatchActivity> {
 export function currentSectionStatus(watch: WatchedSection): string | null {
   const section = watch.section
   if (!section) return null
-  return section.open_status_text ?? (section.open_status === true ? 'OPEN' : section.open_status === false ? 'CLOSED' : null)
+  return section.open_status_text ??
+    (section.open_status === true ? 'OPEN' : section.open_status === false ? 'CLOSED' : null)
 }
 
 export function isNewlyOpen(watch: WatchedSection): boolean {
@@ -308,28 +177,31 @@ function normalizeStatus(status: string | null | undefined) {
   return status?.trim().toUpperCase() || null
 }
 
-/**
- * Live watchlist with shared refresh: any add/remove anywhere in the app
- * re-syncs every mounted consumer.
- */
 export function useWatchlist() {
+  const { user, loading: authLoading } = useAuth()
   const [items, setItems] = useState<WatchedSection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
+    if (!user) {
+      setItems([])
+      setError(null)
+      setLoading(authLoading)
+      return
+    }
     try {
       setItems(await fetchWatchlist())
       setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load watchlist')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to load watchlist')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user, authLoading])
 
   useEffect(() => {
-    reload()
+    void reload()
     window.addEventListener(CHANGE_EVENT, reload)
     return () => window.removeEventListener(CHANGE_EVENT, reload)
   }, [reload])

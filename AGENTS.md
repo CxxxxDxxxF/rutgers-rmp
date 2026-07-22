@@ -193,14 +193,11 @@ SNIPER_DEFAULT_TERM=9
 SNIPER_DEFAULT_CAMPUS=NB
 ```
 
-Email and SMS delivery are only real when provider variables are configured:
+Email delivery is only real when provider variables are configured:
 
 ```text
 RESEND_API_KEY
 NOTIFY_EMAIL_FROM
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_FROM_NUMBER
 ```
 
 If provider variables are missing, the worker should keep polling and log a

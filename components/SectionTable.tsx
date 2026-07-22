@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Badge from './Badge'
 import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
+import { useAuth } from '@/hooks/useAuth'
 
 export interface SectionRow {
   id: string
@@ -130,10 +131,16 @@ function WatchToggle({
   courseId,
   section,
   watchedId,
+  authenticated,
+  authLoading,
+  accountHasEmail,
 }: {
   courseId: string
   section: SectionRow
   watchedId: string | null
+  authenticated: boolean
+  authLoading: boolean
+  accountHasEmail: boolean
 }) {
   const [busy, setBusy] = useState(false)
 
@@ -155,10 +162,22 @@ function WatchToggle({
     }
   }
 
+  if (!authLoading && !authenticated) {
+    return (
+      <Link
+        href="/login"
+        title="Sign in to watch this section"
+        className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] font-semibold text-zinc-400 transition-colors hover:border-zinc-500 hover:text-white"
+      >
+        Sign in to watch
+      </Link>
+    )
+  }
+
   return (
     <button
       onClick={toggle}
-      disabled={busy}
+      disabled={busy || authLoading || !accountHasEmail}
       title={watchedId ? 'Remove from watchlist' : 'Watch this section'}
       className={`text-[11px] font-semibold px-2 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
         watchedId
@@ -178,6 +197,7 @@ export default function SectionTable({
   sections: SectionRow[]
   courseId?: string
 }) {
+  const { user, loading: authLoading } = useAuth()
   const { items: watchItems } = useWatchlist()
   const [openFirst, setOpenFirst] = useState(false)
 
@@ -294,6 +314,9 @@ export default function SectionTable({
                       courseId={courseId}
                       section={s}
                       watchedId={watchedByAssignment.get(s.id) ?? null}
+                      authenticated={Boolean(user)}
+                      authLoading={authLoading}
+                      accountHasEmail={Boolean(user?.email)}
                     />
                   </td>
                 )}
@@ -319,6 +342,9 @@ export default function SectionTable({
                   courseId={courseId}
                   section={s}
                   watchedId={watchedByAssignment.get(s.id) ?? null}
+                  authenticated={Boolean(user)}
+                  authLoading={authLoading}
+                  accountHasEmail={Boolean(user?.email)}
                 />
               )}
             </div>

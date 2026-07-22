@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
+import { resolveWatchOwner } from '@/lib/watchlist-policy'
 
 // Status-change activity for a watcher's snipes. section_status_events is
 // RLS-locked (no anon access), so this reads via the service client and only
@@ -11,16 +12,7 @@ const FEED_WINDOW_DAYS = 7
 const REOPEN_WINDOW_DAYS = 14
 const FEED_LIMIT = 50
 
-function isValidWatcherId(id: string | null): id is string {
-  return !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
-}
-
 export async function GET(req: NextRequest) {
-  const watcher = req.nextUrl.searchParams.get('watcher')
-  if (!isValidWatcherId(watcher)) {
-    return NextResponse.json({ error: 'Invalid watcher id' }, { status: 400 })
-  }
-
   try {
     let supabase
     try {
@@ -29,10 +21,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
     }
 
+    const header = req.headers.get('authorization')
+    const token = header?.startsWith('Bearer ') ? header.slice(7) : null
+    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const owner = resolveWatchOwner(user)
+    if (!owner.ok) return NextResponse.json({ error: owner.error }, { status: owner.status })
+
     const { data: watches, error: watchErr } = await supabase
       .from('watched_sections')
       .select('teaching_assignment_id')
-      .eq('watcher_id', watcher)
+      .eq('watcher_id', owner.owner.id)
 
     if (watchErr) throw watchErr
 

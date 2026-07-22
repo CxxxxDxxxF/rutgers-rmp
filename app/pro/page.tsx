@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase'
 const CHECKOUT_PLAN = 'pro'
 
 const FEATURES = [
-  'Priority open-seat alerts with email/SMS support',
+  'Priority open-seat alerts sent to your account email',
   'Section watchlists by semester with open/closed history',
   'Professor fit summaries for Rutgers New Brunswick',
   'Schedule ranking by teacher quality, difficulty, and seat risk',
