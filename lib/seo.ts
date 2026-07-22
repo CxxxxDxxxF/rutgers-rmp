@@ -1,18 +1,7 @@
 import type { Metadata } from 'next'
+import { absoluteUrl } from './site-url'
 
-const FALLBACK_SITE_URL = 'https://rurate-web-production.up.railway.app'
-
-export function resolveSiteUrl(value = process.env.NEXT_PUBLIC_APP_URL) {
-  const trimmed = value?.trim().replace(/\/+$/, '')
-  return trimmed && /^https?:\/\//.test(trimmed) ? trimmed : FALLBACK_SITE_URL
-}
-
-export const SITE_URL = resolveSiteUrl()
-
-export function absoluteUrl(path = '/') {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${SITE_URL}${normalizedPath}`
-}
+export { absoluteUrl, PRODUCTION_SITE_URL, resolveSiteUrl, SITE_URL } from './site-url'
 
 export function createRouteMetadata({
   title,

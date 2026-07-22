@@ -9,6 +9,7 @@ import {
 } from './lib/soc-status.mjs'
 import { emailOnlyNotificationPolicy } from './lib/notification-policy.mjs'
 import { parseBooleanFlag } from './lib/config.mjs'
+import { resolveAppBaseUrl } from './lib/site-url.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -28,7 +29,7 @@ const DB_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_DB_TIMEOUT_MS, 1500
 const PROVIDER_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_PROVIDER_TIMEOUT_MS, 15000, 1000)
 const AI_FETCH_TIMEOUT_MS = parseInterval(process.env.SNIPER_AI_TIMEOUT_MS, 120000, 10000)
 const WATCHDOG_STALL_MS = parseInterval(process.env.SNIPER_WATCHDOG_STALL_MS, 5 * 60 * 1000, 60 * 1000)
-const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.RAILWAY_PUBLIC_DOMAIN
+const APP_BASE_URL = resolveAppBaseUrl(process.env.NEXT_PUBLIC_APP_URL)
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const NOTIFY_EMAIL_FROM = process.env.NOTIFY_EMAIL_FROM
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
@@ -868,7 +869,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'HTTP-Referer': APP_BASE_URL ?? 'https://rurate-web-production.up.railway.app',
+      'HTTP-Referer': APP_BASE_URL,
       'X-Title': 'RU Rate',
     },
     body: JSON.stringify({

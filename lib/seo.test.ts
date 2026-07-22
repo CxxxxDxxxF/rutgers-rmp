@@ -6,16 +6,17 @@ import { absoluteUrl, createRouteMetadata, resolveSiteUrl } from './seo'
 test('resolveSiteUrl uses a valid configured app URL without trailing slash', () => {
   assert.equal(resolveSiteUrl('https://example.edu/'), 'https://example.edu')
   assert.equal(resolveSiteUrl('http://localhost:3000'), 'http://localhost:3000')
+  assert.equal(resolveSiteUrl('https://example.edu/path'), 'https://example.edu')
 })
 
 test('resolveSiteUrl falls back when the configured URL is missing or invalid', () => {
-  assert.equal(resolveSiteUrl(''), 'https://rurate-web-production.up.railway.app')
-  assert.equal(resolveSiteUrl('not-a-url'), 'https://rurate-web-production.up.railway.app')
+  assert.equal(resolveSiteUrl(''), 'https://ru-rate.com')
+  assert.equal(resolveSiteUrl('not-a-url'), 'https://ru-rate.com')
 })
 
 test('absoluteUrl normalizes route paths against the site URL', () => {
-  assert.equal(absoluteUrl('courses'), 'https://rurate-web-production.up.railway.app/courses')
-  assert.equal(absoluteUrl('/courses'), 'https://rurate-web-production.up.railway.app/courses')
+  assert.equal(absoluteUrl('courses'), 'https://ru-rate.com/courses')
+  assert.equal(absoluteUrl('/courses'), 'https://ru-rate.com/courses')
 })
 
 test('createRouteMetadata includes canonical, Open Graph, and Twitter fields', () => {
@@ -27,7 +28,7 @@ test('createRouteMetadata includes canonical, Open Graph, and Twitter fields', (
 
   assert.equal(metadata.title, 'Find Rutgers Courses | RU Rate')
   assert.equal(metadata.description, 'Search Rutgers courses.')
-  assert.equal(metadata.alternates?.canonical, 'https://rurate-web-production.up.railway.app/courses')
+  assert.equal(metadata.alternates?.canonical, 'https://ru-rate.com/courses')
   assert.equal(metadata.openGraph?.title, 'Find Rutgers Courses | RU Rate')
   assert.equal(metadata.twitter?.title, 'Find Rutgers Courses | RU Rate')
 })

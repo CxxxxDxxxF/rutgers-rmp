@@ -12,10 +12,14 @@ export const metadata: Metadata = {
   title: 'RU Rate — Rutgers Registration Command Center',
   description: 'Pick better Rutgers classes. Professor ratings, AI analysis, real course sections, and a registration watchlist for Rutgers University students.',
   keywords: ['Rutgers', 'professor', 'ratings', 'reviews', 'RMP', 'Rate My Professor', 'courses', 'registration', 'WebReg', 'schedule of classes'],
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     title: 'RU Rate — Rutgers Registration Command Center',
     description: 'Pick better Rutgers classes. Professor ratings, course sections, and registration tools.',
     type: 'website',
+    url: '/',
   },
   twitter: {
     card: 'summary',

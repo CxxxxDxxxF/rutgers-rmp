@@ -1,4 +1,5 @@
 import type { Rating, AIAnalysis } from './supabase'
+import { SITE_URL } from './site-url'
 
 export async function analyzeProfessor(
   name: string,
@@ -49,7 +50,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://rurate-web-production.up.railway.app',
+      'HTTP-Referer': SITE_URL,
       'X-Title': 'RU Rate',
     },
     body: JSON.stringify({

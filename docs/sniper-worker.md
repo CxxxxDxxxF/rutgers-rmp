@@ -49,7 +49,7 @@ SUPABASE_SERVICE_ROLE_KEY
 Recommended for links inside alert messages:
 
 ```text
-NEXT_PUBLIC_APP_URL=https://rurate-web-production.up.railway.app
+NEXT_PUBLIC_APP_URL=https://ru-rate.com
 ```
 
 Polling and source defaults:
