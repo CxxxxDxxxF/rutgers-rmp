@@ -10,6 +10,11 @@ import {
 import { emailOnlyNotificationPolicy } from './lib/notification-policy.mjs'
 import { parseBooleanFlag } from './lib/config.mjs'
 import { resolveAppBaseUrl } from './lib/site-url.mjs'
+import {
+  planNotification,
+  nextRetryAfterFailure,
+  retryPhase,
+} from './lib/notification-eligibility.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -50,6 +55,29 @@ const SNIPER_BULK_REFRESH_DISABLED = parseBooleanFlag(process.env.SNIPER_BULK_RE
 // CLOSED.
 const SNIPER_BULK_CAMPUSES = (process.env.SNIPER_BULK_CAMPUSES ?? 'NB,NK,CM')
   .split(',').map(c => c.trim().toUpperCase()).filter(Boolean)
+// A detected CLOSED→OPEN must never be dropped by a transient email failure, and
+// must never be permanently abandoned. A failed send retries rapidly with
+// exponential backoff for NOTIFY_RAPID_ATTEMPTS, then keeps retrying at the slow
+// NOTIFY_SLOW_RETRY_MS cadence for as long as the section stays OPEN, the
+// transition is undelivered, and the watch is active. Only a Resend 2xx marks it
+// delivered. Durability lives in the DB (last_notified_*), so a worker restart
+// re-arms any still-pending transition from those fields — see planNotification.
+const NOTIFY_RAPID_ATTEMPTS = Math.max(1, parseInt(process.env.SNIPER_NOTIFY_RAPID_ATTEMPTS ?? '6', 10) || 6)
+const NOTIFY_BACKOFF_BASE_MS = parseInterval(process.env.SNIPER_NOTIFY_BACKOFF_BASE_MS, 2000, 500)
+const NOTIFY_BACKOFF_MAX_MS = parseInterval(process.env.SNIPER_NOTIFY_BACKOFF_MAX_MS, 60000, 1000)
+// Slow-phase cadence once rapid retries are exhausted (default 5 min, min 1 min).
+const NOTIFY_SLOW_RETRY_MS = parseInterval(process.env.SNIPER_NOTIFY_SLOW_RETRY_MS, 5 * 60 * 1000, 60 * 1000)
+// Recheck cadence for a transition that cannot be sent yet because the recipient
+// account email or the Resend provider config is missing — retried indefinitely
+// (a config gap, not a send failure) but throttled so logs don't spam.
+const NOTIFY_CONFIG_RECHECK_MS = parseInterval(process.env.SNIPER_NOTIFY_CONFIG_RECHECK_MS, 30000, 5000)
+const NOTIFY_CONFIG = {
+  baseMs: NOTIFY_BACKOFF_BASE_MS,
+  rapidMaxMs: NOTIFY_BACKOFF_MAX_MS,
+  rapidAttempts: NOTIFY_RAPID_ATTEMPTS,
+  slowMs: NOTIFY_SLOW_RETRY_MS,
+  configRecheckMs: NOTIFY_CONFIG_RECHECK_MS,
+}
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error(JSON.stringify({
@@ -91,6 +119,12 @@ let lastBulkRefresh = 0
 let bulkRefreshRunning = false
 let lastLoopTick = Date.now()
 const ownerEmailCache = new Map()
+// Per-watch notification retry state, keyed by watchId: { attempts, nextAttemptAt }.
+// Module-level so it survives watchlist reloads (which rebuild the `watches`
+// array every few seconds) — otherwise backoff/attempt counts would reset
+// constantly and defeat the bounded-retry guarantee. Cleared on delivery, on a
+// superseding transition, or when the status is no longer notifiable.
+const notifyState = new Map()
 
 // Self-heal from anything that slips past the per-call timeouts (e.g. a body
 // stream that stalls after headers): if the main loop hasn't ticked in
@@ -218,6 +252,7 @@ async function loadActiveWatches() {
         section_number,
         open_status,
         open_status_text,
+        status_updated_at,
         source_url,
         semesters (
           year,
@@ -258,13 +293,22 @@ async function loadActiveWatches() {
       courseName: course?.name ?? null,
       courseSlug: course?.slug ?? null,
       sectionNumber: assignment.section_number ?? null,
+      semesterCode: semester?.code ?? null,
       previousOpenStatus: assignment.open_status ?? null,
       previousOpenStatusText: assignment.open_status_text ?? null,
+      statusUpdatedAt: assignment.status_updated_at ?? null,
       ...emailOnlyNotificationPolicy(row, ownerEmails.get(row.watcher_id) ?? null),
       lastNotifiedStatus: row.last_notified_status ?? null,
       lastNotifiedAssignmentStatusAt: row.last_notified_assignment_status_at ?? null,
       source,
     })
+  }
+
+  // Drop retry state for watches that no longer exist so the map can't grow
+  // unbounded across reloads.
+  const activeIds = new Set(active.map(w => w.watchId))
+  for (const watchId of notifyState.keys()) {
+    if (!activeIds.has(watchId)) notifyState.delete(watchId)
   }
 
   console.log(JSON.stringify({
@@ -327,30 +371,28 @@ async function pollOnce(activeWatches) {
     const nextOpenStatus = typeof section.openStatus === 'boolean' ? section.openStatus : null
     const nextOpenStatusText = section.openStatusText ?? (nextOpenStatus === true ? 'OPEN' : nextOpenStatus === false ? 'CLOSED' : null)
     const changed = watch.previousOpenStatus !== nextOpenStatus || normalize(watch.previousOpenStatusText) !== normalize(nextOpenStatusText)
-    if (!changed) continue
 
-    const detectedAt = new Date()
-    await updateAssignmentStatus(watch.assignmentId, nextOpenStatus, nextOpenStatusText, detectedAt)
-    statusChanges++
-
-    // Update in-memory state before notifying so a notification failure
-    // doesn't cause the same change to be re-detected on the next poll.
-    watch.previousOpenStatus = nextOpenStatus
-    watch.previousOpenStatusText = nextOpenStatusText
-
-    const notificationResult = await sendStatusNotifications(
-      watch,
-      nextOpenStatus,
-      nextOpenStatusText,
-      detectedAt
-    )
-    notificationsAttempted += notificationResult.attempted
-    notificationsSent += notificationResult.sent
-
-    if (notificationResult.notifiedStatus) {
-      watch.lastNotifiedStatus = notificationResult.notifiedStatus
-      watch.lastNotifiedAssignmentStatusAt = detectedAt.toISOString()
+    if (changed) {
+      const detectedAt = new Date()
+      await updateAssignmentStatus(watch.assignmentId, nextOpenStatus, nextOpenStatusText, detectedAt)
+      statusChanges++
+      // Advance the catalog status immediately (so it isn't re-written every
+      // poll) and stamp the transition time — that timestamp is the identity of
+      // this flip for notification dedup. A new flip supersedes any pending
+      // retry for the previous status.
+      watch.previousOpenStatus = nextOpenStatus
+      watch.previousOpenStatusText = nextOpenStatusText
+      watch.statusUpdatedAt = detectedAt.toISOString()
+      notifyState.delete(watch.watchId)
     }
+
+    // Notification is DECOUPLED from `changed`: attempt (or retry) whenever the
+    // current status is a notifiable transition that hasn't been successfully
+    // delivered yet. Because the DB status write no longer implies "notified",
+    // a failed send is retried on a later poll instead of being lost.
+    const outcome = await maybeNotify(watch, nextOpenStatus, nextOpenStatusText)
+    notificationsAttempted += outcome.attempted
+    notificationsSent += outcome.sent
   }
 
   return {
@@ -528,95 +570,107 @@ async function runBulkStatusRefresh() {
   }))
 }
 
-async function sendStatusNotifications(watch, openStatus, openStatusText, detectedAt) {
+// Attempt (or retry) delivery for the current status of one watch. Returns
+// { attempted, sent }. A watch is marked notified ONLY after Resend accepts the
+// message (2xx). Every non-success — provider missing, unresolved recipient,
+// network error, Resend 4xx/5xx — leaves the transition eligible for a bounded
+// retry, so a transient failure can never permanently drop an alert.
+async function maybeNotify(watch, openStatus, openStatusText) {
   const status = statusLabel(openStatus, openStatusText)
-  const statusAt = detectedAt.toISOString()
-  const shouldNotify =
-    (openStatus === true && watch.notifyOnOpen) ||
-    (openStatus === false && watch.notifyOnClose)
+  const statusAt = watch.statusUpdatedAt
 
-  if (!shouldNotify || status === 'UNKNOWN') {
-    return { attempted: 0, sent: 0, notifiedStatus: null }
-  }
+  // Pure decision. `retry` (in-memory) only schedules timing; the durable DB
+  // fields (last_notified_*) are the source of truth for "already delivered",
+  // so a restart that empties notifyState still behaves correctly.
+  const priorAttempts = notifyState.get(watch.watchId)?.attempts ?? 0
+  const decision = planNotification({
+    openStatus,
+    status,
+    statusAt,
+    notifyOnOpen: watch.notifyOnOpen,
+    notifyOnClose: watch.notifyOnClose,
+    recipientReady: Boolean(watch.notifyEmailEnabled && watch.notifyEmail),
+    providerConfigured: Boolean(RESEND_API_KEY && NOTIFY_EMAIL_FROM),
+    lastNotifiedStatus: watch.lastNotifiedStatus,
+    lastNotifiedStatusAt: watch.lastNotifiedAssignmentStatusAt,
+    retry: notifyState.get(watch.watchId),
+    now: Date.now(),
+    config: NOTIFY_CONFIG,
+  })
 
-  // Secondary dedup only. The primary guarantee against duplicate alerts is in
-  // pollOnce: a detected change updates watch.previousOpenStatus in memory
-  // immediately, so the same transition is never re-processed and this function
-  // isn't called twice for it. This guard is a belt-and-suspenders check for the
-  // exact-same detection (same status at the same detected timestamp); it does
-  // NOT fire across distinct real transitions, which we always want to notify.
-  if (
-    normalize(watch.lastNotifiedStatus) === normalize(status) &&
-    watch.lastNotifiedAssignmentStatusAt === statusAt
-  ) {
-    return { attempted: 0, sent: 0, notifiedStatus: null }
-  }
-
-  const channels = []
-  if (watch.notifyEmailEnabled && watch.notifyEmail) {
-    if (RESEND_API_KEY && NOTIFY_EMAIL_FROM) {
-      channels.push(sendEmailNotification(watch, status, statusAt))
-    } else {
-      console.log(JSON.stringify({
-        event: 'notification_provider_missing',
-        channel: 'email',
-        watch_id: watch.watchId,
-      }))
+  if (decision.action !== 'send') {
+    if (decision.retry) notifyState.set(watch.watchId, decision.retry)
+    else notifyState.delete(watch.watchId)
+    if (decision.action === 'defer-recipient') {
+      console.log(JSON.stringify({ event: 'notification_recipient_unresolved', watch_id: watch.watchId }))
+    } else if (decision.action === 'defer-provider') {
+      console.log(JSON.stringify({ event: 'notification_provider_missing', channel: 'email', watch_id: watch.watchId }))
     }
-  }
-  if (channels.length === 0) {
-    return { attempted: 0, sent: 0, notifiedStatus: null }
-  }
-
-  const results = await Promise.allSettled(channels)
-  const sent = results.filter(result => result.status === 'fulfilled').length
-
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      console.error(JSON.stringify({
-        event: 'notification_send_error',
-        watch_id: watch.watchId,
-        message: errorMessage(result.reason),
-      }))
-    }
+    return { attempted: 0, sent: 0 }
   }
 
   try {
-    await markWatchNotified(watch.watchId, status, statusAt, channels.length, sent)
+    await sendEmailNotification(watch, status, statusAt) // throws on non-2xx / network
+    // Provider accepted the message — the ONLY path that marks a watch notified,
+    // and it persists to the DB so the delivery survives a restart.
+    notifyState.delete(watch.watchId)
+    watch.lastNotifiedStatus = status
+    watch.lastNotifiedAssignmentStatusAt = statusAt
+    try {
+      await markWatchNotified(watch.watchId, status, statusAt, priorAttempts + 1, 1)
+    } catch (err) {
+      console.error(JSON.stringify({ event: 'mark_notified_error', watch_id: watch.watchId, message: errorMessage(err) }))
+    }
+    console.log(JSON.stringify({
+      event: 'section_status_detected',
+      assignment_id: watch.assignmentId,
+      index_number: watch.indexNumber,
+      course_number: watch.courseNumber,
+      section_number: watch.sectionNumber,
+      status,
+      detected_at: statusAt,
+      notification_attempts: priorAttempts + 1,
+      notification_successes: 1,
+    }))
+    return { attempted: 1, sent: 1 }
   } catch (err) {
+    const next = nextRetryAfterFailure(priorAttempts, Date.now(), NOTIFY_CONFIG)
+    notifyState.set(watch.watchId, next)
+    // Log the crossover into slow-retry mode exactly once so a degraded provider
+    // is visible without spamming, while retries continue indefinitely.
+    if (next.phase === 'slow' && retryPhase(priorAttempts, NOTIFY_RAPID_ATTEMPTS) === 'rapid') {
+      console.error(JSON.stringify({
+        event: 'notification_slow_retry',
+        watch_id: watch.watchId,
+        attempts: next.attempts,
+        next_retry_ms: NOTIFY_SLOW_RETRY_MS,
+      }))
+    }
     console.error(JSON.stringify({
-      event: 'mark_notified_error',
+      event: 'notification_send_error',
       watch_id: watch.watchId,
+      attempt: next.attempts,
+      phase: next.phase,
       message: errorMessage(err),
     }))
+    return { attempted: 1, sent: 0 }
   }
-
-  console.log(JSON.stringify({
-    event: 'section_status_detected',
-    assignment_id: watch.assignmentId,
-    index_number: watch.indexNumber,
-    course_number: watch.courseNumber,
-    section_number: watch.sectionNumber,
-    status,
-    detected_at: statusAt,
-    notification_attempts: channels.length,
-    notification_successes: sent,
-  }))
-
-  return { attempted: channels.length, sent, notifiedStatus: status }
 }
 
 async function sendEmailNotification(watch, status, statusAt) {
-  const indexNumber = watch.indexNumber ? `Index: ${watch.indexNumber}\n` : ''
   const courseUrl = courseLink(watch)
   const subject = `${watch.courseNumber ?? 'Course'}${watch.sectionNumber ? ` section ${watch.sectionNumber}` : ''} is ${status}`
+  // WebReg requires selecting a term and entering the index by hand — there is
+  // no supported query preload — so surface the index and semester prominently
+  // and link the canonical WebReg entry (webreg.rutgers.edu 302-redirects here).
   const text = [
     subject,
     '',
     watch.courseName ?? '',
-    indexNumber.trim(),
+    watch.semesterCode ? `Semester: ${watch.semesterCode}` : '',
+    watch.indexNumber ? `Register with index: ${watch.indexNumber}` : '',
     courseUrl ? `RU Rate: ${courseUrl}` : '',
-    'WebReg: https://webreg.rutgers.edu/',
+    'WebReg: https://sims.rutgers.edu/webreg/',
     '',
     `Detected: ${statusAt}`,
     'RU Rate only sends alerts. Confirm in WebReg and register yourself.',

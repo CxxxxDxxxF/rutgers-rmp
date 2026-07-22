@@ -6,6 +6,7 @@ import {
   hasClientOwnerIdentifier,
   hasClientNotificationDestination,
   resolveWatchOwner,
+  resolveWatchTargetKind,
   type WatchOwner,
 } from '@/lib/watchlist-policy'
 
@@ -192,13 +193,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const indexNumber = sanitizeIndexNumber(body.index_number)
-    let courseId = typeof body.course_id === 'string' ? body.course_id : null
-    let assignmentId = typeof body.teaching_assignment_id === 'string'
-      ? body.teaching_assignment_id
-      : null
-    if (!courseId && !indexNumber) {
-      return NextResponse.json({ error: 'course_id required' }, { status: 400 })
+    // Section-level Sniper contract: a watch must resolve to a specific, pollable
+    // Rutgers section (teaching assignment + 5-digit index). Course-only payloads
+    // are rejected — the worker only polls sections, so a course-level row would
+    // be silently unmonitorable and never alert. "Track any section in this
+    // course" is a separate, explicitly-designed future capability.
+    const target = resolveWatchTargetKind(body)
+    if (target.kind === 'reject') {
+      return NextResponse.json({ error: target.error }, { status: target.status })
     }
 
     const { count } = await db
@@ -212,15 +214,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!courseId && indexNumber) {
-      const resolved = await resolveSectionByIndex(db, indexNumber, body.semester_slug)
-      if (!resolved.ok) {
-        return NextResponse.json({ error: resolved.error }, { status: resolved.status })
-      }
-      courseId = resolved.course_id
-      assignmentId = resolved.teaching_assignment_id
+    // The DB layer authoritatively derives (course, section, index) from the
+    // stored row and rejects a mismatch, an inactive section, a section with no
+    // index, or one outside the supported semester.
+    let resolved: Awaited<ReturnType<typeof resolveSectionByAssignment>>
+    if (target.kind === 'assignment') {
+      resolved = await resolveSectionByAssignment(db, target.teachingAssignmentId, {
+        courseId: target.courseId,
+        indexNumber: target.indexNumber,
+        semesterSlug: body.semester_slug,
+      })
+    } else {
+      resolved = await resolveSectionByIndex(db, target.indexNumber, body.semester_slug)
     }
-    if (!courseId) return NextResponse.json({ error: 'course_id required' }, { status: 400 })
+    if (!resolved.ok) {
+      return NextResponse.json({ error: resolved.error }, { status: resolved.status })
+    }
+    const courseId = resolved.course_id
+    const assignmentId = resolved.teaching_assignment_id
+    const resolvedIndex = resolved.index_number
 
     let duplicateQuery = db
       .from('watched_sections')
@@ -252,7 +264,7 @@ export async function POST(req: NextRequest) {
         watcher_id: auth.owner.id,
         course_id: courseId,
         teaching_assignment_id: assignmentId,
-        index_number: indexNumber ?? body.index_number ?? null,
+        index_number: resolvedIndex,
         last_seen_status: lastSeenStatus,
         ...accountEmailNotificationSnapshot(auth.owner.email),
       })
@@ -355,25 +367,80 @@ function sanitizeStatus(status: string | null | undefined) {
   return trimmed ? trimmed.slice(0, 80) : null
 }
 
-function sanitizeIndexNumber(value: string | null | undefined) {
-  if (typeof value !== 'string') return null
-  const digits = value.replace(/\D/g, '')
-  return /^\d{5}$/.test(digits) ? digits : null
+type SectionResolution =
+  | { ok: true; course_id: string; teaching_assignment_id: string; index_number: string }
+  | { ok: false; error: string; status: number }
+
+// Validate a client-supplied teaching assignment id and derive the canonical
+// (course, section, index) from the stored row — never trusting the client's
+// course_id / index_number. A mismatch, an inactive section, a section with no
+// index, or a section outside the supported semester is rejected so the worker
+// can always poll what it stores.
+async function resolveSectionByAssignment(
+  db: NonNullable<ReturnType<typeof getServiceClient>>,
+  assignmentId: string,
+  opts: { courseId: string | null; indexNumber: string | null; semesterSlug: string | null | undefined },
+): Promise<SectionResolution> {
+  const { data, error } = await db
+    .from('teaching_assignments')
+    .select(`
+      id,
+      course_id,
+      index_number,
+      status,
+      semesters!inner (
+        slug,
+        is_current
+      )
+    `)
+    .eq('id', assignmentId)
+    .maybeSingle()
+
+  if (error) {
+    log.error('Watchlist assignment lookup error:', error)
+    return { ok: false, error: 'Could not validate that section', status: 500 }
+  }
+  if (!data) return { ok: false, error: 'That section no longer exists', status: 404 }
+  if (data.status !== 'active') return { ok: false, error: 'That section is no longer active', status: 409 }
+  if (!data.index_number) {
+    return { ok: false, error: 'That section has no index number to track yet', status: 422 }
+  }
+
+  const semester = one<{ slug?: string; is_current?: boolean }>(data.semesters)
+  if (opts.semesterSlug) {
+    if (semester?.slug !== opts.semesterSlug) {
+      return { ok: false, error: 'That section is not in the selected semester', status: 409 }
+    }
+  } else if (!semester?.is_current) {
+    return { ok: false, error: 'That section is not in the current registration semester', status: 409 }
+  }
+
+  if (opts.courseId && opts.courseId !== data.course_id) {
+    return { ok: false, error: 'That section does not belong to the given course', status: 400 }
+  }
+  if (opts.indexNumber && String(opts.indexNumber) !== String(data.index_number)) {
+    return { ok: false, error: 'Section and index number do not match', status: 400 }
+  }
+
+  return {
+    ok: true,
+    course_id: data.course_id as string,
+    teaching_assignment_id: data.id as string,
+    index_number: String(data.index_number),
+  }
 }
 
 async function resolveSectionByIndex(
   db: NonNullable<ReturnType<typeof getServiceClient>>,
   indexNumber: string,
   semesterSlug: string | null | undefined,
-): Promise<
-  | { ok: true; course_id: string; teaching_assignment_id: string }
-  | { ok: false; error: string; status: number }
-> {
+): Promise<SectionResolution> {
   let query = db
     .from('teaching_assignments')
     .select(`
       id,
       course_id,
+      index_number,
       semesters!inner (
         slug,
         is_current
@@ -411,5 +478,6 @@ async function resolveSectionByIndex(
     ok: true,
     course_id: data[0].course_id as string,
     teaching_assignment_id: data[0].id as string,
+    index_number: String(data[0].index_number),
   }
 }

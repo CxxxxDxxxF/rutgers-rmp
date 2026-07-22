@@ -10,7 +10,6 @@ import CompareButton from '@/components/CompareButton'
 import ProfessorGradeBadge from '@/components/ProfessorGradeBadge'
 import SectionTable, { CopyButton, type SectionRow } from '@/components/SectionTable'
 import { SkeletonBlock, RowListSkeleton } from '@/components/LoadingSkeleton'
-import { addWatch, removeWatch, useWatchlist } from '@/lib/watchlist-client'
 import { useAuth } from '@/hooks/useAuth'
 import { trackView } from '@/lib/recently-viewed'
 import type { ProfessorGrade } from '@/lib/professor-grade'
@@ -249,51 +248,37 @@ function ProfessorOptionCard({
   )
 }
 
-function WatchCourseButton({ courseId }: { courseId: string }) {
+// Course Sniper tracks an exact Rutgers section (index number), not a whole
+// course — that specific index is what the open-seat alert and the WebReg
+// handoff depend on. This directs the student to pick a section below instead of
+// creating a course-level watch the worker can never poll. "Track any section in
+// this course" is a separate, future capability with its own alerting rules.
+function TrackSectionHint() {
   const { user, loading: authLoading } = useAuth()
-  const { items, loading } = useWatchlist()
-  const [busy, setBusy] = useState(false)
-  const courseWatch = items.find(
-    w => w.course_id === courseId && w.teaching_assignment_id === null
-  )
-
-  async function toggle() {
-    if (busy) return
-    setBusy(true)
-    try {
-      if (courseWatch) {
-        await removeWatch(courseWatch.id)
-      } else {
-        await addWatch({ courseId })
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (!authLoading && !user) {
-    return (
-      <Link
-        href="/login"
-        className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-all hover:border-[#CC0033]/60 hover:text-white"
-      >
-        Sign in to watch this course
-      </Link>
-    )
-  }
+  const signedOut = !authLoading && !user
 
   return (
-    <button
-      onClick={toggle}
-      disabled={busy || loading || authLoading || !user?.email}
-      className={`inline-flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl border transition-all disabled:opacity-50 ${
-        courseWatch
-          ? 'bg-[#CC0033]/15 border-[#CC0033]/50 text-[#ff4d6d]'
-          : 'bg-[var(--card)] border-[var(--border)] text-zinc-200 hover:border-[#CC0033]/60 hover:text-white'
-      }`}
-    >
-      {courseWatch ? '★ Watching this course' : '☆ Watch this course'}
-    </button>
+    <div className="inline-flex flex-col gap-1.5">
+      <a
+        href="#sections"
+        className="inline-flex items-center gap-2 self-start rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-all hover:border-[#CC0033]/60 hover:text-white"
+      >
+        🎯 Track a section for open-seat alerts →
+      </a>
+      <p className="max-w-xs text-xs text-zinc-500">
+        {signedOut ? (
+          <>
+            Course Sniper watches an exact section.{' '}
+            <Link href="/login" className="text-zinc-300 underline underline-offset-2 hover:text-white">
+              Sign in
+            </Link>
+            , then choose a closed section below to track.
+          </>
+        ) : (
+          'Choose a closed section below to track — you’ll get an email the moment a seat opens.'
+        )}
+      </p>
+    </div>
   )
 }
 
@@ -585,7 +570,7 @@ function CourseContent({ slug }: { slug: string }) {
               )}
 
               <div className="mt-4">
-                <WatchCourseButton courseId={course.id} />
+                <TrackSectionHint />
               </div>
 
               <div className="mt-5 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
@@ -652,7 +637,7 @@ function CourseContent({ slug }: { slug: string }) {
 
         {/* Sections by semester */}
         {semesters.length > 0 && (
-          <div className="space-y-6">
+          <div id="sections" className="space-y-6 scroll-mt-24">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
                 Sections
