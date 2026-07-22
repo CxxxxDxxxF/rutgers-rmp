@@ -4,7 +4,7 @@
 One site to find the right course, pick the right professor, watch the seat, and register the
 moment it opens — built specifically for Rutgers–New Brunswick.
 
-🌐 **Live**: https://rurate-web-production.up.railway.app
+🌐 **Live**: https://ru-rate.com
 
 ---
 

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Package name: `rmp-web` (kept for local history; production services use RU Rate names)
 - Production: Railway project `rurate-production`, services `rurate-web` and `rurate-sniper-worker`
-- Public URL: `https://rurate-web-production.up.railway.app`
+- Public URL: `https://ru-rate.com`
 
 ## Commands
 

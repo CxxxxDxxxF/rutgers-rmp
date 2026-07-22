@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
 import { checkoutPriceIdForPlan, isCheckoutConfigured, parseCheckoutPlan } from '@/lib/stripe-plans'
+import { SITE_URL } from '@/lib/site-url'
 
 const CHECKOUT_PLAN = 'pro'
 
@@ -63,8 +64,8 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/pro?success=1`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/pro`,
+      success_url: `${SITE_URL}/pro?success=1`,
+      cancel_url: `${SITE_URL}/pro`,
       customer_email: user.email,
       metadata: { user_id: user.id },
       subscription_data: {

@@ -153,7 +153,7 @@ export async function GET(req: NextRequest) {
             marginTop: 16,
           }}
         >
-          <span style={{ fontSize: 16, color: '#3f3f46' }}>rurate-web-production.up.railway.app</span>
+          <span style={{ fontSize: 16, color: '#3f3f46' }}>ru-rate.com</span>
           <span style={{ fontSize: 16, color: '#3f3f46' }}>Rutgers University · New Brunswick</span>
         </div>
       </div>

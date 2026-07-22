@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServiceClient } from '@/lib/supabase-server'
 import { log } from '@/lib/logger'
+import { SITE_URL } from '@/lib/site-url'
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
       apiVersion: '2026-05-27.dahlia',
     })
 
-    const returnUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/account`
+    const returnUrl = `${SITE_URL}/account`
     const session = await stripe.billingPortal.sessions.create({
       customer: sub.stripe_customer_id,
       return_url: returnUrl,

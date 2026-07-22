@@ -213,7 +213,7 @@ export async function GET(req: NextRequest) {
             paddingTop: 18,
           }}
         >
-          <span style={{ fontSize: 14, color: '#3f3f46' }}>rurate-web-production.up.railway.app</span>
+          <span style={{ fontSize: 14, color: '#3f3f46' }}>ru-rate.com</span>
           <span style={{ fontSize: 14, color: '#3f3f46' }}>Rutgers New Brunswick</span>
         </div>
       </div>

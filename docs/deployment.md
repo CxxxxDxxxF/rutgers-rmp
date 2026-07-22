@@ -50,7 +50,8 @@ analyzed with `google/gemini-2.5-flash-lite`). `rurate-ai-collector` stays on a
 | Testing environment | `staging` |
 | Web service | `rurate-web` |
 | Worker service | `rurate-sniper-worker` |
-| Production URL | `https://rurate-web-production.up.railway.app` |
+| Canonical production URL | `https://ru-rate.com` |
+| Railway service URL | `https://rurate-web-production.up.railway.app` (retained for diagnostics and rollback) |
 | Staging URL | `https://rurate-web-staging.up.railway.app` |
 
 The local package name is still `rmp-web`; that is a development artifact. Use
@@ -126,7 +127,7 @@ OPENROUTER_API_KEY
 Worker variables:
 
 ```text
-NEXT_PUBLIC_APP_URL=https://rurate-web-production.up.railway.app
+NEXT_PUBLIC_APP_URL=https://ru-rate.com
 SNIPER_POLL_INTERVAL_MS=500
 SNIPER_WATCHLIST_REFRESH_MS=5000
 SNIPER_NO_WATCHES_INTERVAL_MS=1000
@@ -187,7 +188,7 @@ After deploying, verify:
 
 ```bash
 railway deployment list --service rurate-web --environment production --limit 1 --json
-curl -sS -o /dev/null -w "%{http_code}\n" https://rurate-web-production.up.railway.app/
+curl -sS -o /dev/null -w "%{http_code}\n" https://ru-rate.com/
 ```
 
 Expected:
@@ -242,13 +243,13 @@ Look for `sniper_worker_start` with the expected poll/backoff settings.
 Run these after a web deploy:
 
 ```bash
-curl -sS -o /dev/null -w "%{http_code}\n" https://rurate-web-production.up.railway.app/
+curl -sS -o /dev/null -w "%{http_code}\n" https://ru-rate.com/
 ```
 
 Operational health (also suitable for a free uptime monitor):
 
 ```bash
-curl -sS https://rurate-web-production.up.railway.app/api/health
+curl -sS https://ru-rate.com/api/health
 ```
 
 Expected `status: "ok"` when the database is reachable and a status writer is
@@ -258,7 +259,7 @@ going cold); a `503` means the database is unreachable.
 An authenticated client-supplied watch owner or recipient should be rejected:
 
 ```bash
-curl -sS -X POST https://rurate-web-production.up.railway.app/api/watchlist \
+curl -sS -X POST https://ru-rate.com/api/watchlist \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer <test-account-access-token>' \
   --data '{"watcher_id":"00000000-0000-4000-8000-000000000265","index_number":"26253","notification_settings":{"email":"bad","email_enabled":true,"notify_on_open":true}}'
@@ -267,7 +268,7 @@ curl -sS -X POST https://rurate-web-production.up.railway.app/api/watchlist \
 Invalid review rating should be rejected:
 
 ```bash
-curl -sS -X POST https://rurate-web-production.up.railway.app/api/reviews \
+curl -sS -X POST https://ru-rate.com/api/reviews \
   -H 'Content-Type: application/json' \
   --data '{"rmp_id":"test","quality_rating":99,"difficulty_rating":1,"comment":"This comment is long enough for validation."}'
 ```

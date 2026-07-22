@@ -19,11 +19,12 @@
 // ==========================================================================
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveAppBaseUrl } from './lib/site-url.mjs'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
-const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.RAILWAY_PUBLIC_DOMAIN
+const APP_BASE_URL = resolveAppBaseUrl(process.env.NEXT_PUBLIC_APP_URL)
 // Professors to process per run. At 25 with an 800ms pause between items a run
 // takes ~75s; a ~10-min cron drains a ~900-professor backlog in roughly a day.
 const BATCH_SIZE = Math.min(100, Math.max(1, parseInt(process.env.AI_BATCH_SIZE ?? '25', 10) || 25))
@@ -231,7 +232,7 @@ Be direct and honest. Rutgers students want real talk, not sugarcoating. Use stu
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'HTTP-Referer': APP_BASE_URL ?? 'https://rurate-web-production.up.railway.app',
+      'HTTP-Referer': APP_BASE_URL,
       'X-Title': 'RU Rate',
     },
     body: JSON.stringify({
