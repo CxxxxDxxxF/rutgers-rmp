@@ -942,9 +942,9 @@ function QuickSnipeBox() {
             semesterSlug: semesterSlug || undefined,
             notificationSettings: settings,
           })
-          return { idx, ok: r.ok, duplicate: r.duplicate ?? false }
+          return { idx, ok: r.ok, duplicate: r.duplicate ?? false, error: r.error ?? null }
         } catch {
-          return { idx, ok: false, duplicate: false }
+          return { idx, ok: false, duplicate: false, error: 'Network error — check your connection' }
         }
       }))
       writeQuickPrefs({ email, phone, emailEnabled, smsEnabled })
@@ -965,7 +965,10 @@ function QuickSnipeBox() {
         setIndexes(keep)
         setTimeout(() => setSuccess(null), 6000)
       } else {
-        setError(`Couldn't snipe ${failed.join(', ')} — check the numbers against the current semester.`)
+        // Surface the API's actual reason (e.g. "No active section found…",
+        // "Database unavailable") — the generic guess hid real outages.
+        const reason = results.find(r => !r.ok && r.error)?.error
+        setError(`Couldn't snipe ${failed.join(', ')} — ${reason ?? 'check the numbers against the current semester.'}`)
       }
     } finally {
       setSaving(false)

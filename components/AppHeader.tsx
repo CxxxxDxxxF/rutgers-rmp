@@ -6,13 +6,16 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { useWatchlistSync } from '@/lib/watchlist-client'
 
+// Order: discovery (Courses, Professors) → decision tools (Compare, Ranker)
+// → utilities (Sniper) → secondary browsing (Departments). Single source of
+// truth — desktop and mobile nav both render from this array.
 const NAV = [
   { href: '/courses', label: 'Courses' },
-  { href: '/departments', label: 'Departments' },
   { href: '/professors', label: 'Professors' },
-  { href: '/watchlist', label: 'Sniper' },
   { href: '/compare', label: 'Compare' },
   { href: '/schedule', label: 'Ranker' },
+  { href: '/watchlist', label: 'Sniper' },
+  { href: '/departments', label: 'Departments' },
 ]
 
 export default function AppHeader() {
@@ -38,36 +41,30 @@ export default function AppHeader() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center h-14 gap-3">
 
-          {/* Wordmark */}
-          <Link href="/" className="shrink-0 flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center"
+          {/* Brand lockup — icon + wordmark read as one clickable unit */}
+          <Link
+            href="/"
+            aria-label="RU Rate home"
+            className="shrink-0 flex items-center gap-3"
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 items-center justify-center rounded-lg sm:h-9 sm:w-9"
               style={{
                 background: 'linear-gradient(135deg, #CC0033 0%, #990026 100%)',
-                boxShadow: '0 0 14px rgba(204,0,51,0.35)',
+                boxShadow: '0 2px 6px rgba(204,0,51,0.25)',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                <text
-                  x="8" y="13"
-                  textAnchor="middle"
-                  fill="white"
-                  fontSize="13"
-                  fontWeight="900"
-                  fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-                >
-                  R
-                </text>
-              </svg>
-            </div>
-            <span className="font-black tracking-tight text-base leading-none">
+              <span className="text-base font-black leading-none text-white sm:text-lg">R</span>
+            </span>
+            <span className="text-lg font-black leading-none tracking-tight">
               <span style={{ color: '#CC0033' }}>RU</span>
-              <span className="text-white"> Rate</span>
+              <span className="ml-1 text-white">Rate</span>
             </span>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center ml-3">
+          {/* Desktop nav — centered in the space between lockup and actions */}
+          <nav className="hidden lg:flex flex-1 items-center justify-center gap-0.5">
             {NAV.map(({ href, label }) => {
               const active = pathname === href || pathname.startsWith(`${href}/`)
               return (
@@ -91,7 +88,7 @@ export default function AppHeader() {
           </nav>
 
           {/* Right side */}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto lg:ml-0 flex shrink-0 items-center gap-2">
             <Link
               href="/pro"
               className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
@@ -107,7 +104,7 @@ export default function AppHeader() {
 
             {!loading && (
               user ? (
-                <div className="hidden md:flex items-center gap-2 pl-2 border-l border-white/[0.07]">
+                <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-white/[0.07]">
                   <Link
                     href="/account"
                     className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors max-w-[100px] truncate"
@@ -125,7 +122,7 @@ export default function AppHeader() {
               ) : (
                 <Link
                   href="/login"
-                  className="hidden md:block text-xs font-medium text-zinc-400 hover:text-white transition-colors"
+                  className="hidden lg:block text-xs font-medium text-zinc-400 hover:text-white transition-colors"
                 >
                   Sign in
                 </Link>
@@ -134,8 +131,8 @@ export default function AppHeader() {
           </div>
         </div>
 
-        {/* Mobile nav */}
-        <nav className="md:hidden flex gap-0.5 pb-2.5 -mx-1 px-1 overflow-x-auto">
+        {/* Mobile / tablet nav — same NAV order as desktop */}
+        <nav className="lg:hidden flex gap-0.5 pb-2.5 -mx-1 px-1 overflow-x-auto">
           {NAV.map(({ href, label }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`)
             const short = label === 'Departments' ? 'Depts' : label === 'Professors' ? 'Profs' : label
