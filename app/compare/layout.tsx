@@ -1,8 +1,8 @@
 import { createRouteMetadata } from '@/lib/seo'
 
 export const metadata = createRouteMetadata({
-  title: 'Compare Rutgers Professors | RU Rate',
-  description: 'Compare Rutgers professors side by side with ratings, difficulty, courses taught, student grade signals, and AI summaries.',
+  title: 'Compare — Coming Soon | RU Rate',
+  description: 'RU Rate is rebuilding its Rutgers professor comparison experience.',
   path: '/compare',
 })
 
