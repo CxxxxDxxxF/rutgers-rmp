@@ -1,7 +1,7 @@
 // Single source of truth for the primary navigation. Order is by product
-// importance: discovery paths first (Courses, Professors), decision tools
-// next (Compare, Ranker), then the specialized Sniper utility, with
-// Departments last as a secondary browsing method. Every surface that renders
+// importance: Course Sniper first, then discovery paths (Courses, Professors),
+// the Ranker decision tool, and Departments as a secondary browsing method.
+// Every surface that renders
 // main navigation (desktop header, mobile strip, homepage tool grid) must
 // derive from this list rather than hardcoding its own copy.
 
@@ -13,11 +13,10 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  { href: '/watchlist', label: 'Course Sniper', shortLabel: 'Sniper' },
   { href: '/courses', label: 'Courses' },
   { href: '/professors', label: 'Professors', shortLabel: 'Profs' },
-  { href: '/compare', label: 'Compare' },
   { href: '/schedule', label: 'Ranker' },
-  { href: '/watchlist', label: 'Sniper' },
   { href: '/departments', label: 'Departments', shortLabel: 'Depts' },
 ]
 
