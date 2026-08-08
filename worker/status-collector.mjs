@@ -76,11 +76,25 @@ async function main() {
     url.searchParams.set('year', String(year))
     url.searchParams.set('term', term)
     url.searchParams.set('campus', campus)
-    const response = await fetchWithTimeout(url, {
-      headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'RU-Rate-status-collector/1.0' },
-    }, SOC_FETCH_TIMEOUT_MS)
-    if (!response.ok) throw new Error(`openSections ${campus} HTTP ${response.status}`)
-    const openIndexes = await response.json()
+    let openIndexes
+    try {
+      const response = await fetchWithTimeout(url, {
+        headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'RU-Rate-status-collector/1.0' },
+      }, SOC_FETCH_TIMEOUT_MS)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      openIndexes = await response.json()
+    } catch (error) {
+      // A partial campus union would incorrectly close every section from the
+      // unavailable campus. Skip this cron run without making Railway treat a
+      // transient Rutgers SOC outage as a crashed deployment.
+      console.log(JSON.stringify({
+        event: 'collector_skip',
+        reason: 'soc_unavailable',
+        campus,
+        message: errorMessage(error),
+      }))
+      return
+    }
     if (Array.isArray(openIndexes)) {
       for (const idx of openIndexes) openSet.add(String(idx))
     }
