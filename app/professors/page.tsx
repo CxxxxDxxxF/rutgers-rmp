@@ -133,7 +133,7 @@ function ProfessorsContent() {
   const router = useRouter()
 
   useEffect(() => {
-    document.title = 'Browse Professors | RU Rate'
+    document.title = 'Professors | RU Rate'
     return () => { document.title = 'RU Rate — Rutgers Registration Command Center' }
   }, [])
 

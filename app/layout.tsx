@@ -16,6 +16,11 @@ export const metadata: Metadata = {
   alternates: {
     canonical: '/',
   },
+  icons: {
+    icon: [{ url: '/icon.png?v=20260808', type: 'image/png', sizes: '64x64' }],
+    shortcut: '/icon.png?v=20260808',
+    apple: [{ url: '/apple-icon.png?v=20260808', type: 'image/png', sizes: '180x180' }],
+  },
   openGraph: {
     title: 'RU Rate — Rutgers Registration Command Center',
     description: 'Pick better Rutgers classes. Professor ratings, course sections, and registration tools.',
