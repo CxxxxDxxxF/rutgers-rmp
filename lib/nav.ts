@@ -1,6 +1,7 @@
 // Single source of truth for the primary navigation. Order is by product
 // importance: Course Sniper first, then discovery paths (Courses, Professors),
 // the Ranker decision tool, and Departments as a secondary browsing method.
+// Compare remains last while its workflow awaits a focused redesign.
 // Every surface that renders
 // main navigation (desktop header, mobile strip, homepage tool grid) must
 // derive from this list rather than hardcoding its own copy.
@@ -18,6 +19,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/professors', label: 'Professors', shortLabel: 'Profs' },
   { href: '/schedule', label: 'Ranker' },
   { href: '/departments', label: 'Departments', shortLabel: 'Depts' },
+  { href: '/compare', label: 'Compare' },
 ]
 
 /** True when `pathname` should light up the nav item at `href`. */

@@ -5,14 +5,14 @@ import { NAV_ITEMS, isNavItemActive } from './nav'
 test('primary navigation is ordered by product importance', () => {
   assert.deepEqual(
     NAV_ITEMS.map(i => i.label),
-    ['Course Sniper', 'Courses', 'Professors', 'Ranker', 'Departments'],
+    ['Course Sniper', 'Courses', 'Professors', 'Ranker', 'Departments', 'Compare'],
   )
 })
 
 test('navigation routes are preserved', () => {
   assert.deepEqual(
     NAV_ITEMS.map(i => i.href),
-    ['/watchlist', '/courses', '/professors', '/schedule', '/departments'],
+    ['/watchlist', '/courses', '/professors', '/schedule', '/departments', '/compare'],
   )
 })
 
