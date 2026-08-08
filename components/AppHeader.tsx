@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV_ITEMS, isNavItemActive } from '@/lib/nav'
@@ -28,22 +29,16 @@ export default function AppHeader() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center h-14 gap-3">
 
-          {/* Brand lockup — icon + wordmark as one clickable unit */}
-          <Link href="/" aria-label="RU Rate home" className="shrink-0 flex items-center gap-3">
-            <span
-              aria-hidden="true"
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-[10px] flex items-center justify-center shrink-0 text-white font-black text-lg sm:text-xl leading-none select-none"
-              style={{
-                background: 'linear-gradient(135deg, #CC0033 0%, #990026 100%)',
-                boxShadow: '0 1px 4px rgba(204,0,51,0.25)',
-              }}
-            >
-              R
-            </span>
-            <span className="font-black tracking-tighter text-lg leading-none whitespace-nowrap">
-              <span style={{ color: '#CC0033' }}>RU</span>
-              <span className="text-white"> Rate</span>
-            </span>
+          {/* Brand lockup */}
+          <Link href="/" aria-label="RU Rate home" className="shrink-0">
+            <Image
+              src="/brand/ru-rate-lockup.png"
+              alt="RU Rate"
+              width={154}
+              height={40}
+              priority
+              className="h-8 w-auto sm:h-9"
+            />
           </Link>
 
           {/* Desktop nav */}
