@@ -93,6 +93,7 @@ async function main() {
         campus,
         message: errorMessage(error),
       }))
+      await updateSocHealth(false, 'soc_unavailable')
       return
     }
     if (Array.isArray(openIndexes)) {
@@ -151,6 +152,25 @@ async function main() {
     excluded_watched: watchedAssignmentIds.size,
     ms: Date.now() - startedAt,
   }))
+  await updateSocHealth(true, null)
+}
+
+async function updateSocHealth(healthy, detail) {
+  const checkedAt = new Date().toISOString()
+  const row = {
+    service: 'rutgers_soc',
+    healthy,
+    checked_at: checkedAt,
+    detail,
+    ...(healthy ? { last_success_at: checkedAt } : {}),
+  }
+  const { error } = await supabase.from('system_health').upsert(row, { onConflict: 'service' })
+  if (error) {
+    console.warn(JSON.stringify({
+      event: 'collector_health_write_failed',
+      message: error.message,
+    }))
+  }
 }
 
 async function loadWatchedAssignmentIds() {

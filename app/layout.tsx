@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Script from 'next/script'
 import { Space_Grotesk } from 'next/font/google'
 import CompareTray from '@/components/CompareTray'
+import SystemStatusBanner from '@/components/SystemStatusBanner'
 import { SITE_URL } from '@/lib/seo'
 import './globals.css'
 
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             NEXT_PUBLIC_* build args. See lib/public-env.ts / docs/signup.md. */}
         <Script src="/api/public-env" strategy="beforeInteractive" />
         {children}
+        <SystemStatusBanner />
         <CompareTray />
       </body>
     </html>
