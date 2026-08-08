@@ -1,8 +1,8 @@
 import { createRouteMetadata } from '@/lib/seo'
 
 export const metadata = createRouteMetadata({
-  title: 'Rutgers Schedule Professor Checker | RU Rate',
-  description: 'Paste a Rutgers schedule and quickly check professor ratings, difficulty, reviews, and fit before registration.',
+  title: 'Ranker — Coming Soon | RU Rate',
+  description: 'RU Rate is rebuilding its Rutgers schedule ranking experience.',
   path: '/schedule',
 })
 
